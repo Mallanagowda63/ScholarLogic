@@ -40,20 +40,46 @@ app.use((_req, res, next) => {
   next();
 });
 
-// CORS Security: Strict Whitelist Configuration
-const allowedOrigins = [env.FRONTEND_URL, 'http://localhost:5173', 'http://localhost:3000'].filter(Boolean);
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      if (!origin || allowedOrigins.includes(origin) || process.env.NODE_ENV === 'development') {
-        callback(null, true);
-      } else {
-        callback(new Error('Blocked by CORS security policy'));
-      }
-    },
-    credentials: true,
-  })
-);
+// CORS Security: Flexible Whitelist & Dynamic Origin Configuration
+const rawOrigins = [
+  env.FRONTEND_URL,
+  process.env.CORS_ORIGIN,
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://localhost:5000',
+  'http://127.0.0.1:5173',
+].filter(Boolean);
+
+const allowedOrigins = rawOrigins.flatMap((o) => (o ? o.split(',').map((s) => s.trim()) : []));
+
+const corsOptions: cors.CorsOptions = {
+  origin: (origin, callback) => {
+    // Allow requests with no origin (e.g. mobile apps, curl, server-to-server)
+    if (!origin) return callback(null, true);
+
+    const isExplicitlyAllowed = allowedOrigins.some(
+      (allowed) => allowed === origin || allowed === '*'
+    );
+    const isVercelDomain = /\.vercel\.app$/.test(origin);
+    const isRenderDomain = /\.onrender\.com$/.test(origin);
+    const isDev = process.env.NODE_ENV !== 'production';
+
+    if (isExplicitlyAllowed || isVercelDomain || isRenderDomain || isDev) {
+      callback(null, true);
+    } else {
+      // Pass false to disallow CORS headers cleanly without throwing a 500 server error
+      callback(null, false);
+    }
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
+  optionsSuccessStatus: 200,
+};
+
+// Enable CORS and Preflight OPTIONS Requests Across All Routes
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 // Granular API Rate Limiters (API Security Control)
 const authLimiter = rateLimit({
@@ -62,6 +88,7 @@ const authLimiter = rateLimit({
   message: { success: false, code: 'TOO_MANY_REQUESTS', message: 'Too many authentication attempts. Please try again in 15 minutes.' },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => req.method === 'OPTIONS',
 });
 
 const aiLimiter = rateLimit({
@@ -70,6 +97,7 @@ const aiLimiter = rateLimit({
   message: { success: false, code: 'AI_RATE_LIMIT', message: 'Too many AI analysis requests. Please try again in 15 minutes.' },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => req.method === 'OPTIONS',
 });
 
 const examSubmitLimiter = rateLimit({
@@ -78,6 +106,7 @@ const examSubmitLimiter = rateLimit({
   message: { success: false, code: 'EXAM_RATE_LIMIT', message: 'Too many submission requests. Please wait.' },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => req.method === 'OPTIONS',
 });
 
 // Apply Granular Rate Limiters

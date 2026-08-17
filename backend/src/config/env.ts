@@ -16,7 +16,7 @@ export const env = {
 
   // Google Gemini AI Secrets (Backend Only)
   GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
-  GEMINI_MODEL: process.env.GEMINI_MODEL || 'gemini-2.0-flash',
+  GEMINI_MODEL: process.env.GEMINI_MODEL || 'gemini-3.6-flash',
 
   JWT_SECRET: process.env.JWT_SECRET || 'your_generated_secret_1',
   JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET || 'your_generated_secret_2',
