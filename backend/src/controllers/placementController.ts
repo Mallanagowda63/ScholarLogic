@@ -494,9 +494,8 @@ export const getStudentApplications = async (req: AuthRequest, res: Response): P
   if (student) {
     queryIds.push(student._id);
     queryIds.push(student._id.toString());
-    if (student.studentId) {
-      queryIds.push(student.studentId);
-    }
+    // Note: student.studentId (e.g. "SL-2026-00001") is a display ID, not an ObjectId.
+    // Application.studentId is an ObjectId ref, so including it makes the whole query throw a CastError.
   }
 
   const applications = await Application.find({

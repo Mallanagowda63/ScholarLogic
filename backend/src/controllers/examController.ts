@@ -442,8 +442,11 @@ export const submitExam = async (req: AuthRequest, res: Response): Promise<void>
       unansweredCount += 1;
     } else {
       let isCorrect = false;
-      if (q.type === 'MCQ' || q.type === 'TRUE_FALSE') {
+      if (q.type === 'MCQ') {
         isCorrect = String(studentAns) === String(q.correctAnswer);
+      } else if (q.type === 'TRUE_FALSE') {
+        // Runner submits booleans (false) while stored answers may be 'False'/'false'/false
+        isCorrect = String(studentAns).toLowerCase() === String(q.correctAnswer).toLowerCase();
       } else if (q.type === 'MULTIPLE_SELECT') {
         const stdArr = Array.isArray(studentAns) ? studentAns.map(String).sort() : [];
         const corrArr = Array.isArray(q.correctAnswer) ? q.correctAnswer.map(String).sort() : [];

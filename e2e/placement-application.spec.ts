@@ -20,5 +20,8 @@ test.describe('Placement Portal & Job Application E2E Flow', () => {
     await page.click('a[href="/student/applications"]');
     await page.waitForURL(/\/student\/applications/);
     await expect(page.locator('h1')).toContainText(/Applications/i);
+
+    // The seeded application must actually load (catches API errors that leave the list empty)
+    await expect(page.locator('h3', { hasText: 'Python Full Stack Engineer' })).toBeVisible();
   });
 });
