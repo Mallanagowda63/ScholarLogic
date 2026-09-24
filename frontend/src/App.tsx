@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { RoleGuard } from './components/RoleGuard';
+import { GuestRoute } from './components/GuestRoute';
 
 // Layouts
 import { PublicLayout } from './layouts/PublicLayout';
@@ -16,6 +17,8 @@ import { Home } from './pages/public/Home';
 import { Login } from './pages/public/Login';
 import { Register } from './pages/public/Register';
 import { VerifyCertificate } from './pages/public/VerifyCertificate';
+import { PlacementDrive } from './pages/public/PlacementDrive';
+import { About } from './pages/public/About';
 
 // Student Pages
 import { StudentDashboard } from './pages/student/StudentDashboard';
@@ -30,6 +33,7 @@ import { StudentJobs } from './pages/student/StudentJobs';
 import { StudentApplications } from './pages/student/StudentApplications';
 import { StudentProfile } from './pages/student/StudentProfile';
 import { Certificates } from './pages/student/Certificates';
+import { VoiceMockInterview } from './pages/student/VoiceMockInterview';
 
 // Admin Pages
 import { AdminDashboard } from './pages/admin/AdminDashboard';
@@ -51,6 +55,8 @@ import { TrainerAnnouncements } from './pages/trainer/TrainerAnnouncements';
 import { TrainerMessages } from './pages/trainer/TrainerMessages';
 import { TrainerAnalytics } from './pages/trainer/TrainerAnalytics';
 import { TrainerProfile } from './pages/trainer/TrainerProfile';
+import { TrainerGradingPanel } from './pages/trainer/TrainerGradingPanel';
+import { QuestionBankImporter } from './pages/trainer/QuestionBankImporter';
 
 // Upgraded Placement Intelligence Platform Pages
 import { PlacementDashboard } from './pages/placement/PlacementDashboard';
@@ -68,10 +74,14 @@ export const App: React.FC = () => {
           <Routes>
             {/* Public Marketing Routes */}
             <Route element={<PublicLayout />}>
-              <Route path="/" element={<Home />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Register />} />
+              <Route element={<GuestRoute />}>
+                <Route path="/" element={<Home />} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/register" element={<Register />} />
+              </Route>
               <Route path="/courses" element={<StudentCourses />} />
+              <Route path="/placement" element={<PlacementDrive />} />
+              <Route path="/about" element={<About />} />
               <Route path="/verify/:certificateId" element={<VerifyCertificate />} />
             </Route>
 
@@ -93,6 +103,7 @@ export const App: React.FC = () => {
                 <Route path="/student/resume" element={<ResumeBuilder />} />
                 <Route path="/student/jobs" element={<StudentJobs />} />
                 <Route path="/student/applications" element={<StudentApplications />} />
+                <Route path="/student/mock-interview" element={<VoiceMockInterview />} />
                 <Route path="/student/profile" element={<StudentProfile />} />
                 <Route path="/student/certificates" element={<Certificates />} />
               </Route>
@@ -107,8 +118,10 @@ export const App: React.FC = () => {
                 <Route path="/trainer/students" element={<TrainerStudents />} />
                 <Route path="/trainer/students/:id" element={<StudentDetailView />} />
                 <Route path="/trainer/assignments" element={<TrainerAssignments />} />
+                <Route path="/trainer/grading" element={<TrainerGradingPanel />} />
                 <Route path="/trainer/exams" element={<TrainerAssessments />} />
                 <Route path="/trainer/question-bank" element={<TrainerQuestionBank />} />
+                <Route path="/trainer/question-bank/import" element={<QuestionBankImporter />} />
                 <Route path="/trainer/exams/:examId/results" element={<TrainerExamResults />} />
                 <Route path="/trainer/attendance" element={<TrainerAttendance />} />
                 <Route path="/trainer/calendar" element={<TrainerCalendar />} />

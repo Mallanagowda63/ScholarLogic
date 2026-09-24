@@ -18,6 +18,7 @@ import { Message } from '../models/Message';
 import { Session } from '../models/Session';
 import { Notification } from '../models/Notification';
 import { supabaseStorageService } from '../services/storage/SupabaseStorageService';
+import { zohoMeetingService } from '../services/zohoMeetingService';
 import { AppError } from '../middleware/errorHandler';
 
 // Helper to fetch course IDs assigned to trainer
@@ -212,7 +213,7 @@ export const uploadLessonMedia = async (req: AuthRequest, res: Response): Promis
 
   res.json({
     success: true,
-    message: `${type === 'VIDEO' ? 'Video' : 'Notes'} uploaded successfully to Supabase Storage`,
+    message: `${type === 'VIDEO' ? 'Video' : 'Notes'} uploaded successfully`,
     data: {
       lesson,
       storageResult: uploadResult,
@@ -496,5 +497,111 @@ export const getTrainerCalendar = async (req: AuthRequest, res: Response): Promi
       exams,
       assignments,
     },
+  });
+};
+
+export const getCourseVideoAnalytics = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { courseId } = req.params;
+
+  const lessons = await Lesson.find({ courseId }).select('_id title durationMinutes');
+  const totalStudents = await Student.countDocuments();
+  const videoProgressRecords = await VideoProgress.find({ courseId }).populate('lessonId', 'title');
+
+  const lessonAnalytics = lessons.map((l) => {
+    const records = videoProgressRecords.filter((r) => r.lessonId && (r.lessonId as any)._id.toString() === l._id.toString());
+    const starts = records.length;
+    const completions = records.filter((r) => r.completed).length;
+    const avgProgress = starts > 0 ? Math.round(records.reduce((acc, r) => acc + (r.progressPercentage || 0), 0) / starts) : 0;
+    const avgDropOff = starts > 0 ? Math.round(records.reduce((acc, r) => acc + (r.dropOffTime || 0), 0) / starts) : 0;
+
+    return {
+      lessonId: l._id,
+      title: l.title,
+      durationMinutes: l.durationMinutes,
+      starts,
+      completions,
+      completionRate: totalStudents > 0 ? Math.round((completions / totalStudents) * 100) : 0,
+      avgProgress,
+      avgDropOff,
+    };
+  });
+
+  res.json({
+    success: true,
+    data: {
+      courseId,
+      totalStudents,
+      totalVideoStarts: videoProgressRecords.length,
+      totalCompletions: videoProgressRecords.filter((r) => r.completed).length,
+      lessonAnalytics,
+    },
+  });
+};
+
+export const validateZohoRecordingUrl = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { recordingUrl } = req.body;
+
+  if (!recordingUrl) {
+    throw new AppError('Recording URL is required', 400, 'MISSING_RECORDING_URL');
+  }
+
+  try {
+    const metadata = await zohoMeetingService.getRecordingMetadata(recordingUrl);
+
+    res.json({
+      success: true,
+      data: metadata,
+    });
+  } catch (err: any) {
+    throw new AppError(err.message || 'Invalid Zoho recording URL', 400, 'INVALID_ZOHO_URL');
+  }
+};
+
+export const addZohoRecordingLesson = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { moduleId } = req.params;
+  const { courseId, recordingUrl, title, durationMinutes, order } = req.body;
+
+  if (!recordingUrl || !moduleId) {
+    throw new AppError('Module ID and Zoho Recording URL are required', 400, 'MISSING_FIELDS');
+  }
+
+  const module = await Module.findById(moduleId);
+  if (!module) throw new AppError('Module not found', 404, 'NOT_FOUND');
+
+  // Verify server-side authorization: trainer can only modify assigned courses
+  const trainerUserId = req.user!.userId;
+  const course = await Course.findById(courseId || module.courseId);
+  if (!course) throw new AppError('Course not found', 404, 'NOT_FOUND');
+
+  if (
+    req.user!.role === 'TRAINER' &&
+    !course.createdById?.equals(trainerUserId) &&
+    !course.assignedTrainerIds?.some((id) => id.equals(trainerUserId))
+  ) {
+    throw new AppError('Tenant/Course Access Denied: You are not authorized to modify this course', 403, 'TENANT_ACCESS_DENIED');
+  }
+
+  const metadata = await zohoMeetingService.getRecordingMetadata(recordingUrl);
+
+  const lesson = await Lesson.create({
+    moduleId,
+    courseId: course._id,
+    title: title || metadata.title || `Zoho Meeting Recording (${metadata.recordingId})`,
+    type: 'VIDEO',
+    videoSource: 'ZOHO_MEETING',
+    externalProvider: 'ZOHO',
+    externalRecordingId: metadata.recordingId,
+    externalRecordingUrl: metadata.originalUrl,
+    externalOrganizationId: metadata.organizationId || '',
+    videoUrl: metadata.embedUrl || metadata.originalUrl,
+    durationMinutes: durationMinutes || metadata.durationMinutes || 30,
+    order: order || 1,
+    isPublished: true,
+  });
+
+  res.status(201).json({
+    success: true,
+    message: 'Zoho Meeting Recording lesson associated successfully',
+    data: { lesson, metadata },
   });
 };

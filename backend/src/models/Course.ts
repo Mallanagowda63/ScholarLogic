@@ -4,6 +4,7 @@ export type CourseStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
 
 export interface ICourse extends Document {
   _id: mongoose.Types.ObjectId;
+  tenantId?: mongoose.Types.ObjectId;
   title: string;
   slug: string;
   description: string;
@@ -21,6 +22,7 @@ export interface ICourse extends Document {
 
 const CourseSchema = new Schema<ICourse>(
   {
+    tenantId: { type: Schema.Types.ObjectId, ref: 'Tenant', index: true },
     title: { type: String, required: true, trim: true },
     slug: { type: String, required: true, unique: true, lowercase: true, trim: true },
     description: { type: String, required: true },

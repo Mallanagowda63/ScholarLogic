@@ -34,9 +34,11 @@ export interface IInterviewDetails {
 export interface IApplication extends Document {
   _id: mongoose.Types.ObjectId;
   jobId: mongoose.Types.ObjectId;
+  companyId?: mongoose.Types.ObjectId;
   studentId: mongoose.Types.ObjectId;
   resumeId: mongoose.Types.ObjectId;
   appliedAt: Date;
+  interviewDate?: Date;
   status: ApplicationStatus;
   placementRound: string;
   matchScore: number;
@@ -53,9 +55,11 @@ export interface IApplication extends Document {
 const ApplicationSchema = new Schema<IApplication>(
   {
     jobId: { type: Schema.Types.ObjectId, ref: 'Job', required: true, index: true },
+    companyId: { type: Schema.Types.ObjectId, ref: 'Company' },
     studentId: { type: Schema.Types.ObjectId, ref: 'Student', required: true, index: true },
     resumeId: { type: Schema.Types.ObjectId, ref: 'Resume', required: true },
     appliedAt: { type: Date, default: Date.now },
+    interviewDate: { type: Date },
     status: {
       type: String,
       enum: [

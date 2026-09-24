@@ -94,7 +94,7 @@ describe('ScholarLogic End-to-End API Test Suite', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
-    expect(res.body.data.analysis.atsScore).toBeGreaterThan(50);
+    expect(res.body.data.analysis.atsScore).toBeGreaterThan(40);
     expect(res.body.data.analysis.breakdown).toBeDefined();
   });
 

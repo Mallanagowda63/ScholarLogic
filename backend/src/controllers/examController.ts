@@ -572,3 +572,114 @@ export const getExamResultsForTrainer = async (req: AuthRequest, res: Response):
     },
   });
 };
+
+export const logProctoringEvent = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { attemptId } = req.params;
+  const { eventType, metadata } = req.body;
+
+  const attempt = await ExamAttempt.findById(attemptId);
+  if (!attempt) throw new AppError('Attempt not found', 404, 'NOT_FOUND');
+
+  const { ProctoringLog } = await import('../models/ProctoringLog');
+
+  const log = await ProctoringLog.create({
+    examId: attempt.examId,
+    attemptId: attempt._id,
+    studentId: attempt.studentId,
+    eventType,
+    metadata: metadata || {},
+  });
+
+  attempt.violationsCount = (attempt.violationsCount || 0) + 1;
+  attempt.violations.push({
+    type: eventType as any,
+    timestamp: new Date(),
+    metadata,
+  });
+  await attempt.save();
+
+  res.status(201).json({
+    success: true,
+    message: 'Proctoring violation logged',
+    data: {
+      log,
+      violationsCount: attempt.violationsCount,
+    },
+  });
+};
+
+export const getProctoringLogs = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { attemptId } = req.params;
+
+  const { ProctoringLog } = await import('../models/ProctoringLog');
+  const logs = await ProctoringLog.find({ attemptId }).sort({ timestamp: -1 });
+
+  res.json({
+    success: true,
+    data: { logs },
+  });
+};
+
+export const evaluateCodingQuestion = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { language = 'javascript', sourceCode, testCases = [] } = req.body;
+
+  if (!sourceCode) throw new AppError('Source code is required for evaluation', 400, 'MISSING_FIELDS');
+
+  const { codeExecutionService } = await import('../services/codeExecutionService');
+  const evaluationResult = await codeExecutionService.evaluateCode(language, sourceCode, testCases);
+
+  res.json({
+    success: true,
+    data: evaluationResult,
+  });
+};
+
+export const importQuestions = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { questions = [] } = req.body;
+
+  if (!Array.isArray(questions) || questions.length === 0) {
+    throw new AppError('Questions array is required', 400, 'INVALID_INPUT');
+  }
+
+  const validTypes = ['MCQ', 'TRUE_FALSE', 'MULTIPLE_SELECT', 'SHORT_ANSWER', 'CODING'];
+  const inserted: any[] = [];
+  const errors: any[] = [];
+
+  for (let i = 0; i < questions.length; i++) {
+    const q = questions[i];
+    if (!q.questionText || !validTypes.includes(q.type)) {
+      errors.push({ index: i, questionText: q.questionText || 'Empty', error: 'Invalid type or empty text' });
+      continue;
+    }
+
+    try {
+      const created = await Question.create({
+        questionText: q.questionText,
+        type: q.type,
+        options: q.options || [],
+        correctAnswer: q.correctAnswer,
+        marks: q.marks || 5,
+        negativeMarks: q.negativeMarks || 0,
+        difficulty: q.difficulty || 'MEDIUM',
+        topicTag: q.topicTag || 'General',
+        tags: q.tags || [],
+        status: 'ACTIVE',
+        createdById: req.user!.userId,
+      });
+      inserted.push(created);
+    } catch (err: any) {
+      errors.push({ index: i, questionText: q.questionText, error: err.message });
+    }
+  }
+
+  res.json({
+    success: true,
+    message: `Imported ${inserted.length} questions successfully`,
+    data: {
+      insertedCount: inserted.length,
+      errorCount: errors.length,
+      inserted,
+      errors,
+    },
+  });
+};

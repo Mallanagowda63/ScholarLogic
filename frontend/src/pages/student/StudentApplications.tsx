@@ -253,10 +253,19 @@ export const StudentApplications: React.FC = () => {
 
               {/* Scheduled Interview Details if Shortlisted */}
               {(selectedApp.status === 'SHORTLISTED' || selectedApp.status === 'TECH_INTERVIEW' || selectedApp.status === 'HR_INTERVIEW') && (
-                <div className="p-4 rounded-2xl bg-brand-50/70 dark:bg-brand-950/40 border border-brand-200 dark:border-brand-900 space-y-2">
-                  <h4 className="font-extrabold text-xs text-brand-900 dark:text-brand-200 flex items-center gap-1.5">
-                    <Video className="h-4 w-4 text-brand-600" /> Scheduled Technical Interview
-                  </h4>
+                <div className="p-4 rounded-2xl bg-brand-50/70 dark:bg-brand-950/40 border border-brand-200 dark:border-brand-900 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-extrabold text-xs text-brand-900 dark:text-brand-200 flex items-center gap-1.5">
+                      <Video className="h-4 w-4 text-brand-600" /> Scheduled Technical Interview
+                    </h4>
+                    <a
+                      href={`/api/placements/applications/${selectedApp._id}/ics`}
+                      download
+                      className="px-3 py-1 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-[10px] font-bold shadow flex items-center gap-1"
+                    >
+                      <Calendar className="h-3 w-3" /> Add to Calendar (.ics)
+                    </a>
+                  </div>
                   <p className="text-[11px] text-brand-700 dark:text-brand-300">Technical Round 1 scheduled for Tomorrow at 2:00 PM IST via Google Meet.</p>
                 </div>
               )}

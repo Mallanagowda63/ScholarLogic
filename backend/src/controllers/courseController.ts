@@ -181,6 +181,28 @@ export const updateVideoProgress = async (req: AuthRequest, res: Response): Prom
     { new: true, upsert: true }
   );
 
+  // Auto-Check 100% Course Completion for Certificate Generation (Idempotent)
+  if (completed && courseId) {
+    try {
+      const { Certificate, generateCertificateId } = await import('../models/Certificate');
+      const existingCert = await Certificate.findOne({ studentId: student._id, courseId });
+      if (!existingCert) {
+        const certId = generateCertificateId();
+        await Certificate.create({
+          certificateId: certId,
+          studentId: student._id,
+          courseId,
+          issueDate: new Date(),
+          verificationUrl: `/verify/${certId}`,
+          certificatePdfUrl: `/api/certificates/${certId}/pdf`,
+        });
+        console.log(`🎓 Auto-issued certificate ${certId} for student ${student.studentId}`);
+      }
+    } catch (certErr) {
+      console.warn('⚠️ Certificate auto-issuance error:', certErr);
+    }
+  }
+
   res.json({
     success: true,
     data: { progress },

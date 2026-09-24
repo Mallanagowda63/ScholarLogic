@@ -1,5 +1,10 @@
 import { Router } from 'express';
-import { getNotifications, markNotificationAsRead } from '../controllers/notificationController';
+import {
+  getNotifications,
+  markNotificationAsRead,
+  markAllNotificationsAsRead,
+  streamNotifications,
+} from '../controllers/notificationController';
 import { authenticateUser } from '../middleware/auth';
 import { asyncHandler } from '../utils/asyncHandler';
 
@@ -8,6 +13,8 @@ const router = Router();
 router.use(authenticateUser);
 
 router.get('/', asyncHandler(getNotifications));
+router.get('/stream', asyncHandler(streamNotifications));
+router.put('/read-all', asyncHandler(markAllNotificationsAsRead));
 router.put('/:id/read', asyncHandler(markNotificationAsRead));
 
 export default router;

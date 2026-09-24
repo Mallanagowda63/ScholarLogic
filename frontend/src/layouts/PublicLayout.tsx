@@ -1,7 +1,7 @@
 import React from 'react';
 import { Outlet } from 'react-router-dom';
 import { Navbar } from '../components/Navbar';
-import { GraduationCap, Heart, ShieldCheck, Mail, Phone, MapPin } from 'lucide-react';
+import { Heart, Mail, Phone, MapPin } from 'lucide-react';
 
 export const PublicLayout: React.FC = () => {
   return (
@@ -17,12 +17,7 @@ export const PublicLayout: React.FC = () => {
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
             <div>
-              <div className="flex items-center gap-2">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-600 text-white font-bold">
-                  <GraduationCap className="h-5 w-5" />
-                </div>
-                <span className="text-lg font-extrabold text-slate-900 dark:text-white">ScholarLogic</span>
-              </div>
+              <img src="/logo.png" alt="ScholarLogic — Experience The Commitment" className="h-9 w-auto dark:brightness-0 dark:invert" />
               <p className="mt-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
                 ScholarLogic Career & Learning Hub empowers students with integrated LMS learning, online assessment certification, AI resume engineering, and enterprise placement opportunities.
               </p>
@@ -39,12 +34,14 @@ export const PublicLayout: React.FC = () => {
             </div>
 
             <div>
-              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white mb-3">Seed Courses</h4>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white mb-3">Popular Programs</h4>
               <ul className="space-y-2 text-xs text-slate-600 dark:text-slate-400">
                 <li>Python Full Stack Development</li>
-                <li>AWS Cloud Architecture</li>
-                <li>DevOps Engineering</li>
+                <li>Java Full Stack Development</li>
+                <li>Cloud Computing (AWS)</li>
                 <li>Data Analytics & Power BI</li>
+                <li>Digital Marketing</li>
+                <li>DevOps Engineering</li>
               </ul>
             </div>
 

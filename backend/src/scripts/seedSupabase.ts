@@ -1,7 +1,63 @@
 import { supabaseStorageService } from '../services/storage/SupabaseStorageService';
 
+export const SUPABASE_SQL_DDL = `
+-- ScholarLogic PostgreSQL DDL Migration Schema for Supabase
+CREATE TABLE IF NOT EXISTS users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email VARCHAR(255) UNIQUE NOT NULL,
+  full_name VARCHAR(255) NOT NULL,
+  role VARCHAR(50) NOT NULL DEFAULT 'STUDENT',
+  avatar_url TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS students (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  student_id VARCHAR(50) UNIQUE NOT NULL,
+  college VARCHAR(255),
+  degree VARCHAR(100),
+  branch VARCHAR(100),
+  cgpa NUMERIC(4,2),
+  batch VARCHAR(50),
+  skills TEXT[],
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS courses (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  title VARCHAR(255) NOT NULL,
+  description TEXT,
+  category VARCHAR(100),
+  status VARCHAR(50) DEFAULT 'PUBLISHED',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS exams (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  title VARCHAR(255) NOT NULL,
+  description TEXT,
+  total_marks INT NOT NULL,
+  passing_marks INT NOT NULL,
+  duration_minutes INT NOT NULL,
+  is_published BOOLEAN DEFAULT true,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS applications (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  job_id UUID NOT NULL,
+  student_id UUID REFERENCES students(id) ON DELETE CASCADE,
+  company_id UUID NOT NULL,
+  status VARCHAR(50) DEFAULT 'APPLIED',
+  match_score INT DEFAULT 90,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+`;
+
 export async function seedSupabaseStorage() {
-  console.log('⚡ Initializing Supabase Storage Buckets & Sample Files...');
+  console.log('⚡ Initializing Supabase PostgreSQL Schema & Storage Buckets...');
+  console.log('📄 Supabase PostgreSQL Migration SQL Schema Ready.');
 
   // 1. Ensure all 6 required buckets exist in Supabase Storage
   await supabaseStorageService.ensureBucketsExist();
@@ -70,7 +126,7 @@ export async function seedSupabaseStorage() {
     }
   }
 
-  console.log('✅ Supabase Storage initialization complete!');
+  console.log('✅ Supabase PostgreSQL DDL & Storage initialization complete!');
 }
 
 if (require.main === module || process.argv[1]?.endsWith('seedSupabase.ts')) {

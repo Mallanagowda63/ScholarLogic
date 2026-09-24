@@ -107,12 +107,20 @@ export const TrainerAssignments: React.FC = () => {
           <p className="text-xs text-slate-500">Create coursework, review student code & documents, and grade submissions</p>
         </div>
 
-        <button
-          onClick={() => setShowCreateModal(true)}
-          className="px-4 py-2.5 rounded-xl bg-brand-600 text-white font-bold text-xs hover:bg-brand-700 transition-colors flex items-center gap-2 shadow-md"
-        >
-          <PlusCircle className="h-4 w-4" /> + Create Assignment
-        </button>
+        <div className="flex items-center gap-3">
+          <a
+            href="/trainer/grading"
+            className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800 font-bold text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors shadow-sm flex items-center gap-2"
+          >
+            <FileText className="h-4 w-4" /> Open Inline PDF & ZIP Grading Panel
+          </a>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="px-4 py-2.5 rounded-xl bg-brand-600 text-white font-bold text-xs hover:bg-brand-700 transition-colors flex items-center gap-2 shadow-md"
+          >
+            <PlusCircle className="h-4 w-4" /> + Create Assignment
+          </button>
+        </div>
       </div>
 
       {loading ? (

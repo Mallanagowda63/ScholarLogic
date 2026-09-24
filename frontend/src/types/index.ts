@@ -57,6 +57,11 @@ export interface Lesson {
   type: 'VIDEO' | 'NOTES' | 'ASSIGNMENT' | 'QUIZ';
   order: number;
   videoUrl?: string;
+  videoSource?: 'UPLOAD' | 'ZOHO_MEETING';
+  externalProvider?: 'ZOHO';
+  externalRecordingId?: string;
+  externalRecordingUrl?: string;
+  externalOrganizationId?: string;
   durationMinutes?: number;
   notesFileUrl?: string;
   notesFileType?: string;

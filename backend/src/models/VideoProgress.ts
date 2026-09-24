@@ -6,6 +6,9 @@ export interface IVideoProgress extends Document {
   lessonId: mongoose.Types.ObjectId;
   courseId: mongoose.Types.ObjectId;
   progressPercentage: number;
+  watchedDuration: number;
+  totalDuration: number;
+  dropOffTime: number;
   completed: boolean;
   lastWatchedAt: Date;
   createdAt: Date;
@@ -18,6 +21,9 @@ const VideoProgressSchema = new Schema<IVideoProgress>(
     lessonId: { type: Schema.Types.ObjectId, ref: 'Lesson', required: true, index: true },
     courseId: { type: Schema.Types.ObjectId, ref: 'Course', required: true },
     progressPercentage: { type: Number, default: 0, min: 0, max: 100 },
+    watchedDuration: { type: Number, default: 0 },
+    totalDuration: { type: Number, default: 0 },
+    dropOffTime: { type: Number, default: 0 },
     completed: { type: Boolean, default: false },
     lastWatchedAt: { type: Date, default: Date.now },
   },

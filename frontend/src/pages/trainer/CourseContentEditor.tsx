@@ -34,6 +34,15 @@ export const CourseContentEditor: React.FC = () => {
   const [uploadSuccess, setUploadSuccess] = useState('');
   const [loading, setLoading] = useState(true);
 
+  // Zoho & Upload Video Source states
+  const [videoSource, setVideoSource] = useState<'UPLOAD' | 'ZOHO_MEETING'>('UPLOAD');
+  const [useCustomModule, setUseCustomModule] = useState(false);
+  const [customModuleName, setCustomModuleName] = useState('');
+  const [zohoUrl, setZohoUrl] = useState('');
+  const [zohoValidating, setZohoValidating] = useState(false);
+  const [zohoMetadata, setZohoMetadata] = useState<any>(null);
+  const [zohoError, setZohoError] = useState('');
+
   useEffect(() => {
     api.get('/trainer/courses')
       .then((res: any) => {
@@ -73,11 +82,23 @@ export const CourseContentEditor: React.FC = () => {
     setUploadProgress(20);
     setUploadSuccess('');
 
+    let moduleIdToUse = targetModuleId;
+    if (useCustomModule || !moduleIdToUse) {
+      if (!customModuleName.trim()) {
+        setUploading(false);
+        return alert('Please write a target module name');
+      }
+      const modRes: any = await api.post(`/trainer/courses/${selectedCourseId}/modules`, {
+        title: customModuleName.trim(),
+      });
+      moduleIdToUse = modRes.data.module._id;
+    }
+
     let lessonIdToUse = targetLessonId;
 
     // Create lesson if needed
-    if (!lessonIdToUse && targetModuleId) {
-      const newLessRes: any = await api.post(`/trainer/modules/${targetModuleId}/lessons`, {
+    if (!lessonIdToUse || mediaTitle) {
+      const newLessRes: any = await api.post(`/trainer/modules/${moduleIdToUse}/lessons`, {
         courseId: selectedCourseId,
         title: mediaTitle || selectedFile.name,
         type,
@@ -108,6 +129,8 @@ export const CourseContentEditor: React.FC = () => {
         setShowNotesModal(false);
         setSelectedFile(null);
         setMediaTitle('');
+        setCustomModuleName('');
+        setUseCustomModule(false);
         fetchCourseHierarchy(selectedCourseId);
       } catch (err: any) {
         alert(err.message || 'Upload failed');
@@ -117,6 +140,62 @@ export const CourseContentEditor: React.FC = () => {
       }
     };
     reader.readAsDataURL(selectedFile);
+  };
+
+  const handleValidateZohoUrl = async () => {
+    if (!zohoUrl.trim()) return alert('Please enter a Zoho Meeting recording URL');
+    setZohoValidating(true);
+    setZohoError('');
+    setZohoMetadata(null);
+    try {
+      const res: any = await api.post('/trainer/zoho/validate-recording', { recordingUrl: zohoUrl });
+      if (res.success && res.data) {
+        setZohoMetadata(res.data);
+      }
+    } catch (err: any) {
+      setZohoError(err.message || 'Invalid Zoho Meeting Recording URL');
+    } finally {
+      setZohoValidating(false);
+    }
+  };
+
+  const handleAddZohoSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!zohoUrl.trim()) return alert('Please paste a Zoho Meeting recording URL');
+
+    setUploading(true);
+    try {
+      let moduleIdToUse = targetModuleId;
+      if (useCustomModule || !moduleIdToUse) {
+        if (!customModuleName.trim()) {
+          setUploading(false);
+          return alert('Please write a target module name');
+        }
+        const modRes: any = await api.post(`/trainer/courses/${selectedCourseId}/modules`, {
+          title: customModuleName.trim(),
+        });
+        moduleIdToUse = modRes.data.module._id;
+      }
+
+      await api.post(`/trainer/modules/${moduleIdToUse}/lessons/zoho-recording`, {
+        courseId: selectedCourseId,
+        recordingUrl: zohoUrl,
+        title: mediaTitle || (zohoMetadata ? zohoMetadata.title : 'Zoho Meeting Recording'),
+      });
+
+      setUploadSuccess('✓ Zoho Meeting Recording associated successfully with Lesson!');
+      setShowVideoModal(false);
+      setZohoUrl('');
+      setZohoMetadata(null);
+      setMediaTitle('');
+      setCustomModuleName('');
+      setUseCustomModule(false);
+      fetchCourseHierarchy(selectedCourseId);
+    } catch (err: any) {
+      alert(err.message || 'Failed to add Zoho Meeting recording');
+    } finally {
+      setUploading(false);
+    }
   };
 
   // Flattened video and notes lists
@@ -304,92 +383,278 @@ export const CourseContentEditor: React.FC = () => {
         </div>
       )}
 
-      {/* Modal 1: Upload Lesson Video (Requirement 5) */}
+      {/* Modal 1: Upload Lesson Video / Zoho Meeting Recording */}
       {showVideoModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
           <div className="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900 p-6 space-y-4">
-            <h3 className="font-bold text-base text-white">UPLOAD LESSON VIDEO</h3>
-            <form onSubmit={(e) => handleUploadMediaSubmit(e, 'VIDEO')} className="space-y-4 text-xs">
-              <div>
-                <label className="block text-slate-300 font-semibold mb-1">Target Course</label>
-                <select
-                  value={selectedCourseId}
-                  onChange={(e) => setSelectedCourseId(e.target.value)}
-                  className="w-full rounded-xl border border-slate-800 bg-slate-800 p-2.5 text-white font-bold"
-                >
-                  {courses.map((c) => (
-                    <option key={c._id} value={c._id}>{c.title}</option>
-                  ))}
-                </select>
-              </div>
+            <h3 className="font-bold text-base text-white">ADD LESSON VIDEO RECORDING</h3>
 
-              <div>
-                <label className="block text-slate-300 font-semibold mb-1">Target Module</label>
-                <select
-                  value={targetModuleId}
-                  onChange={(e) => setTargetModuleId(e.target.value)}
-                  className="w-full rounded-xl border border-slate-800 bg-slate-800 p-2.5 text-white font-bold"
-                >
-                  {modules.map((m) => (
-                    <option key={m._id} value={m._id}>{m.title}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-slate-300 font-semibold mb-1">Choose Video File (MP4 / WebM)</label>
-                <input
-                  type="file"
-                  required
-                  accept="video/mp4,video/webm"
-                  onChange={(e) => {
-                    if (e.target.files && e.target.files[0]) setSelectedFile(e.target.files[0]);
-                  }}
-                  className="w-full rounded-xl border border-slate-800 bg-slate-800 p-2.5 text-slate-300"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-300 font-semibold mb-1">Publication Status</label>
-                <select
-                  value={uploadStatus}
-                  onChange={(e: any) => setUploadStatus(e.target.value)}
-                  className="w-full rounded-xl border border-slate-800 bg-slate-800 p-2.5 text-white font-bold"
-                >
-                  <option value="PUBLISHED">PUBLISHED (Automatically Live in Student LMS)</option>
-                  <option value="DRAFT">DRAFT (Hidden from Students)</option>
-                </select>
-              </div>
-
-              {uploading && (
-                <div className="space-y-1">
-                  <div className="flex justify-between text-[10px] font-bold text-brand-400">
-                    <span>Uploading to Supabase Storage bucket [course-videos]...</span>
-                    <span>{uploadProgress}%</span>
-                  </div>
-                  <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-brand-500 transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
-                  </div>
-                </div>
-              )}
-
-              <div className="flex items-center gap-3 pt-2">
+            {/* Video Source Radio Options */}
+            <div className="space-y-1">
+              <label className="block text-slate-300 font-semibold text-xs mb-1">Video Source</label>
+              <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-slate-800 border border-slate-700">
                 <button
                   type="button"
-                  onClick={() => setShowVideoModal(false)}
-                  className="flex-1 py-2.5 rounded-xl border border-slate-800 bg-slate-800 text-slate-300 font-bold"
+                  onClick={() => setVideoSource('UPLOAD')}
+                  className={`py-2 rounded-lg font-bold text-xs transition-colors flex items-center justify-center gap-1.5 ${
+                    videoSource === 'UPLOAD' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'
+                  }`}
                 >
-                  Cancel
+                  <Upload className="h-3.5 w-3.5" /> Upload File
                 </button>
                 <button
-                  type="submit"
-                  disabled={uploading}
-                  className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 disabled:opacity-50"
+                  type="button"
+                  onClick={() => setVideoSource('ZOHO_MEETING')}
+                  className={`py-2 rounded-lg font-bold text-xs transition-colors flex items-center justify-center gap-1.5 ${
+                    videoSource === 'ZOHO_MEETING' ? 'bg-brand-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'
+                  }`}
                 >
-                  {uploading ? 'Uploading...' : 'Upload Video'}
+                  <Video className="h-3.5 w-3.5" /> Zoho Meeting
                 </button>
               </div>
-            </form>
+            </div>
+
+            {videoSource === 'UPLOAD' ? (
+              <form onSubmit={(e) => handleUploadMediaSubmit(e, 'VIDEO')} className="space-y-4 text-xs">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Target Course</label>
+                  <select
+                    value={selectedCourseId}
+                    onChange={(e) => {
+                      setSelectedCourseId(e.target.value);
+                      fetchCourseHierarchy(e.target.value);
+                    }}
+                    className="w-full rounded-xl border border-slate-800 bg-slate-800 p-2.5 text-white font-bold"
+                  >
+                    {courses.map((c) => (
+                      <option key={c._id} value={c._id}>{c.title}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-slate-300 font-semibold">Target Module</label>
+                    <button
+                      type="button"
+                      onClick={() => setUseCustomModule(!useCustomModule)}
+                      className="text-brand-400 hover:underline text-[11px] font-bold"
+                    >
+                      {useCustomModule ? 'Select existing module' : '+ Write custom module name'}
+                    </button>
+                  </div>
+
+                  {useCustomModule || modules.length === 0 ? (
+                    <input
+                      type="text"
+                      required
+                      placeholder="Write target module name here (e.g. Module 3: Advanced Topics)..."
+                      value={customModuleName}
+                      onChange={(e) => setCustomModuleName(e.target.value)}
+                      className="w-full rounded-xl border border-slate-700 bg-slate-800 p-2.5 text-white font-bold placeholder:text-slate-500"
+                    />
+                  ) : (
+                    <select
+                      value={targetModuleId}
+                      onChange={(e) => setTargetModuleId(e.target.value)}
+                      className="w-full rounded-xl border border-slate-800 bg-slate-800 p-2.5 text-white font-bold"
+                    >
+                      {modules.map((m) => (
+                        <option key={m._id} value={m._id}>{m.title}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Lesson Title</label>
+                  <input
+                    type="text"
+                    placeholder="Write lesson title here (e.g. Lesson 1: Introduction)..."
+                    value={mediaTitle}
+                    onChange={(e) => setMediaTitle(e.target.value)}
+                    className="w-full rounded-xl border border-slate-800 bg-slate-800 p-2.5 text-slate-200 placeholder:text-slate-500 font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Choose Video File (MP4 / WebM)</label>
+                  <input
+                    type="file"
+                    required
+                    accept="video/mp4,video/webm"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) setSelectedFile(e.target.files[0]);
+                    }}
+                    className="w-full rounded-xl border border-slate-800 bg-slate-800 p-2.5 text-slate-300"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Publication Status</label>
+                  <select
+                    value={uploadStatus}
+                    onChange={(e: any) => setUploadStatus(e.target.value)}
+                    className="w-full rounded-xl border border-slate-800 bg-slate-800 p-2.5 text-white font-bold"
+                  >
+                    <option value="PUBLISHED">PUBLISHED (Automatically Live in Student LMS)</option>
+                    <option value="DRAFT">DRAFT (Hidden from Students)</option>
+                  </select>
+                </div>
+
+                {uploading && (
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[10px] font-bold text-brand-400">
+                      <span>Uploading to Supabase Storage bucket [course-videos]...</span>
+                      <span>{uploadProgress}%</span>
+                    </div>
+                    <div className="h-2 w-full bg-slate-800 rounded-full overflow-hidden">
+                      <div className="h-full bg-brand-500 transition-all duration-300" style={{ width: `${uploadProgress}%` }} />
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowVideoModal(false)}
+                    className="flex-1 py-2.5 rounded-xl border border-slate-800 bg-slate-800 text-slate-300 font-bold"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={uploading}
+                    className="flex-1 py-2.5 rounded-xl bg-emerald-600 text-white font-bold hover:bg-emerald-700 disabled:opacity-50"
+                  >
+                    {uploading ? 'Uploading...' : 'Upload Video'}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <form onSubmit={handleAddZohoSubmit} className="space-y-4 text-xs">
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Target Course</label>
+                  <select
+                    value={selectedCourseId}
+                    onChange={(e) => {
+                      setSelectedCourseId(e.target.value);
+                      fetchCourseHierarchy(e.target.value);
+                    }}
+                    className="w-full rounded-xl border border-slate-800 bg-slate-800 p-2.5 text-white font-bold"
+                  >
+                    {courses.map((c) => (
+                      <option key={c._id} value={c._id}>{c.title}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-slate-300 font-semibold">Target Module</label>
+                    <button
+                      type="button"
+                      onClick={() => setUseCustomModule(!useCustomModule)}
+                      className="text-brand-400 hover:underline text-[11px] font-bold"
+                    >
+                      {useCustomModule ? 'Select existing module' : '+ Write custom module name'}
+                    </button>
+                  </div>
+
+                  {useCustomModule || modules.length === 0 ? (
+                    <input
+                      type="text"
+                      required
+                      placeholder="Write target module name here (e.g. Module 3: Live Recordings)..."
+                      value={customModuleName}
+                      onChange={(e) => setCustomModuleName(e.target.value)}
+                      className="w-full rounded-xl border border-slate-700 bg-slate-800 p-2.5 text-white font-bold placeholder:text-slate-500"
+                    />
+                  ) : (
+                    <select
+                      value={targetModuleId}
+                      onChange={(e) => setTargetModuleId(e.target.value)}
+                      className="w-full rounded-xl border border-slate-800 bg-slate-800 p-2.5 text-white font-bold"
+                    >
+                      {modules.map((m) => (
+                        <option key={m._id} value={m._id}>{m.title}</option>
+                      ))}
+                    </select>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Lesson Title</label>
+                  <input
+                    type="text"
+                    placeholder="Write lesson title here (e.g. Session 1 Live Recording)..."
+                    value={mediaTitle}
+                    onChange={(e) => setMediaTitle(e.target.value)}
+                    className="w-full rounded-xl border border-slate-800 bg-slate-800 p-2.5 text-slate-200 placeholder:text-slate-500 font-medium"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-slate-300 font-semibold mb-1">Zoho Meeting Recording URL</label>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="url"
+                      required
+                      placeholder="https://meeting.zoho.in/meeting/public/videoprv?recordingId=..."
+                      value={zohoUrl}
+                      onChange={(e) => setZohoUrl(e.target.value)}
+                      className="flex-1 rounded-xl border border-slate-800 bg-slate-800 p-2.5 text-slate-200 placeholder:text-slate-500 font-mono text-[11px]"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleValidateZohoUrl}
+                      disabled={zohoValidating || !zohoUrl.trim()}
+                      className="px-3 py-2.5 rounded-xl bg-slate-700 text-white font-bold text-xs hover:bg-slate-600 disabled:opacity-50"
+                    >
+                      {zohoValidating ? 'Checking...' : 'Validate'}
+                    </button>
+                  </div>
+                </div>
+
+                {zohoError && (
+                  <div className="p-3 rounded-xl bg-rose-950/80 border border-rose-800 text-rose-300 text-xs font-semibold flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
+                    <span>{zohoError}</span>
+                  </div>
+                )}
+
+                {zohoMetadata && (
+                  <div className="p-3 rounded-xl bg-emerald-950/80 border border-emerald-800 text-emerald-200 text-xs space-y-1">
+                    <div className="font-bold flex items-center gap-1.5 text-emerald-400">
+                      <CheckCircle2 className="h-4 w-4" /> Valid Zoho Meeting Recording
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-[11px] font-mono pt-1 text-slate-300">
+                      <div>Provider: <span className="text-white font-bold">Zoho Meeting</span></div>
+                      <div>Recording ID: <span className="text-white font-bold">{zohoMetadata.recordingId}</span></div>
+                      <div>Status: <span className="text-emerald-400 font-bold">{zohoMetadata.status}</span></div>
+                      {zohoMetadata.organizationId && <div>Org ID: <span className="text-white font-bold">{zohoMetadata.organizationId}</span></div>}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowVideoModal(false)}
+                    className="flex-1 py-2.5 rounded-xl border border-slate-800 bg-slate-800 text-slate-300 font-bold"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={uploading}
+                    className="flex-1 py-2.5 rounded-xl bg-brand-600 text-white font-bold hover:bg-brand-700 disabled:opacity-50"
+                  >
+                    {uploading ? 'Associating...' : 'Add Recording'}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}
@@ -414,16 +679,37 @@ export const CourseContentEditor: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">Target Module</label>
-                <select
-                  value={targetModuleId}
-                  onChange={(e) => setTargetModuleId(e.target.value)}
-                  className="w-full rounded-xl border border-slate-800 bg-slate-800 p-2.5 text-white font-bold"
-                >
-                  {modules.map((m) => (
-                    <option key={m._id} value={m._id}>{m.title}</option>
-                  ))}
-                </select>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-slate-300 font-semibold">Target Module</label>
+                  <button
+                    type="button"
+                    onClick={() => setUseCustomModule(!useCustomModule)}
+                    className="text-brand-400 hover:underline text-[11px] font-bold"
+                  >
+                    {useCustomModule ? 'Select existing module' : '+ Write custom module name'}
+                  </button>
+                </div>
+
+                {useCustomModule || modules.length === 0 ? (
+                  <input
+                    type="text"
+                    required
+                    placeholder="Write target module name here (e.g. Module 1: Getting Started)..."
+                    value={customModuleName}
+                    onChange={(e) => setCustomModuleName(e.target.value)}
+                    className="w-full rounded-xl border border-slate-700 bg-slate-800 p-2.5 text-white font-bold placeholder:text-slate-500"
+                  />
+                ) : (
+                  <select
+                    value={targetModuleId}
+                    onChange={(e) => setTargetModuleId(e.target.value)}
+                    className="w-full rounded-xl border border-slate-800 bg-slate-800 p-2.5 text-white font-bold"
+                  >
+                    {modules.map((m) => (
+                      <option key={m._id} value={m._id}>{m.title}</option>
+                    ))}
+                  </select>
+                )}
               </div>
 
               <div>

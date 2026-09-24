@@ -45,6 +45,30 @@ export const ResumeBuilder: React.FC = () => {
       .catch(console.error);
   };
 
+  const handleResumeFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const base64 = (event.target?.result as string).split(',')[1];
+        const res: any = await api.post('/resumes/parse', {
+          fileBuffer: base64,
+          mimeType: file.type,
+          fileName: file.name,
+        });
+
+        if (res.success && res.data) {
+          alert(`Extracted ${res.data.characterCount} characters from ${file.name}!`);
+        }
+      };
+      reader.readAsDataURL(file);
+    } catch (err: any) {
+      alert(err.message || 'Error parsing file');
+    }
+  };
+
   const handleRunAnalysis = async (e: React.FormEvent) => {
     e.preventDefault();
     setAnalyzing(true);

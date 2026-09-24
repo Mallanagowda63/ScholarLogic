@@ -188,6 +188,32 @@ export async function seedDatabase(force: boolean = true) {
     assignedTrainerIds: [trainerUser._id],
   });
 
+  const course5 = await Course.create({
+    title: 'Java Full Stack Development',
+    slug: 'java-full-stack-development',
+    description: 'Master core Java, Spring Boot, Hibernate, REST APIs, Angular/React frontend integration, and enterprise deployment.',
+    thumbnailUrl: 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=500',
+    category: 'Software Engineering',
+    level: 'INTERMEDIATE',
+    durationHours: 55,
+    status: 'PUBLISHED',
+    createdById: adminUser._id,
+    assignedTrainerIds: [trainerUser._id],
+  });
+
+  const course6 = await Course.create({
+    title: 'Digital Marketing Mastery',
+    slug: 'digital-marketing-mastery',
+    description: 'Learn SEO, SEM, social media marketing, content strategy, Google Analytics, and performance marketing campaigns.',
+    thumbnailUrl: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=500',
+    category: 'Marketing',
+    level: 'BEGINNER',
+    durationHours: 35,
+    status: 'PUBLISHED',
+    createdById: adminUser._id,
+    assignedTrainerIds: [trainerUser._id],
+  });
+
   // 3. Create Modules & Lessons for Python Course
   const mod1 = await Module.create({
     courseId: course1._id,

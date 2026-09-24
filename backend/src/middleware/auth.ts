@@ -30,6 +30,8 @@ export const authenticateUser = async (
       token = authHeader.split(' ')[1];
     } else if (req.cookies && req.cookies.token) {
       token = req.cookies.token;
+    } else if (req.query && typeof req.query.token === 'string') {
+      token = req.query.token;
     }
 
     if (!token) {
@@ -60,6 +62,42 @@ export const authenticateUser = async (
       code: 'INVALID_TOKEN',
     });
   }
+};
+
+export const optionalAuth = async (
+  req: AuthRequest,
+  _res: Response,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const authHeader = req.headers.authorization;
+    let token: string | undefined;
+
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.split(' ')[1];
+    } else if (req.cookies && req.cookies.token) {
+      token = req.cookies.token;
+    } else if (req.query && typeof req.query.token === 'string') {
+      token = req.query.token;
+    }
+
+    if (!token) return next();
+
+    const decoded = jwt.verify(token, env.JWT_SECRET) as AuthUserPayload;
+
+    if (decoded.role === 'STUDENT' && !decoded.studentId) {
+      const student = await Student.findOne({ userId: decoded.userId });
+      if (student) {
+        decoded.studentId = student.studentId;
+        decoded.studentMongoId = student._id.toString();
+      }
+    }
+
+    req.user = decoded;
+  } catch (error) {
+    // Invalid/expired token on an optionally-authenticated route: proceed as a guest
+  }
+  next();
 };
 
 export const authorizeRoles = (...roles: UserRole[]) => {

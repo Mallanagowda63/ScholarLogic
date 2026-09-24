@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import { Sun, Moon, Bell, LogOut, User, GraduationCap, ShieldCheck, Briefcase } from 'lucide-react';
+import { Sun, Moon, Bell, LogOut, User, ShieldCheck } from 'lucide-react';
 import { api } from '../services/api';
 import { NotificationItem } from '../types';
 
@@ -26,6 +26,24 @@ export const Navbar: React.FC<{ isDashboard?: boolean }> = ({ isDashboard = fals
           }
         })
         .catch(() => {});
+
+      // Connect Realtime SSE Stream
+      const token = localStorage.getItem('scholarlogic_token');
+      const eventSource = new EventSource(`/api/notifications/stream?token=${token}`);
+
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'NEW_NOTIFICATION' && data.notification) {
+            setNotifications((prev) => [data.notification, ...prev]);
+            setUnreadCount((prev) => prev + 1);
+          }
+        } catch (err) {}
+      };
+
+      return () => {
+        eventSource.close();
+      };
     }
   }, [user]);
 
@@ -60,18 +78,12 @@ export const Navbar: React.FC<{ isDashboard?: boolean }> = ({ isDashboard = fals
         
         {/* Brand Logo */}
         <div className="flex items-center gap-3">
-          <Link to="/" className="flex items-center gap-2 group">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-600 text-white shadow-lg shadow-brand-500/25 group-hover:scale-105 transition-transform">
-              <GraduationCap className="h-6 w-6" />
-            </div>
-            <div>
-              <span className="text-xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-                Scholar<span className="text-brand-600 dark:text-brand-400">Logic</span>
-              </span>
-              <span className="block text-[10px] font-semibold tracking-wider text-slate-500 dark:text-slate-400 uppercase">
-                Career & Learning Hub
-              </span>
-            </div>
+          <Link to="/" className="flex items-center group">
+            <img
+              src="/logo.png"
+              alt="ScholarLogic — Experience The Commitment"
+              className="h-10 sm:h-11 w-auto shrink-0 group-hover:scale-105 transition-transform dark:brightness-0 dark:invert"
+            />
           </Link>
         </div>
 

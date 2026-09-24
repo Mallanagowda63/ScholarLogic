@@ -1,6 +1,7 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 export type LessonType = 'VIDEO' | 'NOTES' | 'ASSIGNMENT' | 'QUIZ';
+export type VideoSource = 'UPLOAD' | 'ZOHO_MEETING';
 
 export interface ILesson extends Document {
   _id: mongoose.Types.ObjectId;
@@ -10,6 +11,11 @@ export interface ILesson extends Document {
   type: LessonType;
   order: number;
   videoUrl?: string;
+  videoSource?: VideoSource;
+  externalProvider?: 'ZOHO';
+  externalRecordingId?: string;
+  externalRecordingUrl?: string;
+  externalOrganizationId?: string;
   durationMinutes?: number;
   notesFileUrl?: string;
   notesFileType?: string;
@@ -33,6 +39,15 @@ const LessonSchema = new Schema<ILesson>(
     },
     order: { type: Number, required: true, default: 1 },
     videoUrl: { type: String, default: '' },
+    videoSource: {
+      type: String,
+      enum: ['UPLOAD', 'ZOHO_MEETING'],
+      default: 'UPLOAD',
+    },
+    externalProvider: { type: String, enum: ['ZOHO'], default: undefined },
+    externalRecordingId: { type: String, default: '' },
+    externalRecordingUrl: { type: String, default: '' },
+    externalOrganizationId: { type: String, default: '' },
     durationMinutes: { type: Number, default: 15 },
     notesFileUrl: { type: String, default: '' },
     notesFileType: { type: String, default: 'PDF' },

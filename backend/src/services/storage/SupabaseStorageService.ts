@@ -1,4 +1,6 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import fs from 'fs/promises';
+import path from 'path';
 import { env } from '../../config/env';
 
 export type StorageBucket =
@@ -79,24 +81,49 @@ export class SupabaseStorageService {
       };
     }
 
-    const { data, error } = await this.client.storage
-      .from(bucket)
-      .upload(filePath, fileBuffer, {
-        contentType: mimeType,
-        upsert: true,
-      });
+    try {
+      const { data, error } = await this.client.storage
+        .from(bucket)
+        .upload(filePath, fileBuffer, {
+          contentType: mimeType,
+          upsert: true,
+        });
 
-    if (error) {
-      console.error(`❌ Supabase upload failed for ${bucket}/${filePath}:`, error.message);
-      throw new Error(`Supabase upload failed: ${error.message}`);
+      if (error) throw new Error(error.message);
+
+      const publicUrlData = this.client.storage.from(bucket).getPublicUrl(data.path);
+
+      return {
+        bucket,
+        storagePath: data.path,
+        publicUrl: publicUrlData.data.publicUrl,
+        size: fileBuffer.length,
+        mimeType,
+      };
+    } catch (err: any) {
+      console.warn(`⚠️ Supabase upload unreachable for ${bucket}/${filePath} (${err?.message || err}). Falling back to local disk storage.`);
+      return this.uploadFileLocally(bucket, filePath, fileBuffer, mimeType);
     }
+  }
 
-    const publicUrlData = this.client.storage.from(bucket).getPublicUrl(data.path);
+  /**
+   * Local-disk fallback used when Supabase Storage is unreachable or misconfigured,
+   * so content uploads keep working end-to-end during local development.
+   */
+  private async uploadFileLocally(
+    bucket: StorageBucket,
+    filePath: string,
+    fileBuffer: Buffer,
+    mimeType: string
+  ): Promise<StorageFileMetadata> {
+    const destPath = path.join(path.resolve(env.STORAGE_PATH), bucket, filePath);
+    await fs.mkdir(path.dirname(destPath), { recursive: true });
+    await fs.writeFile(destPath, fileBuffer);
 
     return {
       bucket,
-      storagePath: data.path,
-      publicUrl: publicUrlData.data.publicUrl,
+      storagePath: filePath,
+      publicUrl: `/uploads/${bucket}/${filePath}`,
       size: fileBuffer.length,
       mimeType,
     };

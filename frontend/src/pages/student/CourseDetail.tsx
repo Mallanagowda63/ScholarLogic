@@ -233,8 +233,36 @@ export const CourseDetail: React.FC = () => {
             </button>
           </div>
 
-          {/* HTML5 Video Player (Requirement 14) */}
-          {activeLesson.videoUrl ? (
+          {/* Video Player Section (HTML5 Upload or Zoho Meeting Recording) */}
+          {activeLesson.videoSource === 'ZOHO_MEETING' || activeLesson.externalProvider === 'ZOHO' ? (
+            <div className="space-y-4">
+              <div className="p-6 rounded-2xl bg-slate-900 border border-slate-800 text-white space-y-4 text-center">
+                <div className="inline-flex items-center justify-center p-3 rounded-2xl bg-brand-600/20 text-brand-400 border border-brand-500/30 mb-1">
+                  <Video className="h-8 w-8" />
+                </div>
+                <h3 className="font-extrabold text-base text-white">{activeLesson.title}</h3>
+                <p className="text-xs text-slate-400 max-w-md mx-auto">
+                  This lesson recording is hosted on <strong className="text-brand-400">Zoho Meeting</strong>. Click below to launch the video recording player safely in a new tab.
+                </p>
+
+                <div className="pt-2 flex items-center justify-center gap-3">
+                  <a
+                    href={activeLesson.externalRecordingUrl || activeLesson.videoUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={() => handleMarkComplete(activeLesson._id)}
+                    className="px-6 py-3 rounded-xl bg-brand-600 text-white font-extrabold text-xs shadow-lg hover:bg-brand-700 transition-all flex items-center gap-2"
+                  >
+                    <Video className="h-4 w-4" /> Watch Zoho Recording ↗
+                  </a>
+                </div>
+
+                <div className="text-[11px] font-mono text-slate-500 pt-2 border-t border-slate-800/80">
+                  Provider: <span className="text-slate-300">Zoho Meeting</span> • Recording ID: <span className="text-slate-300">{activeLesson.externalRecordingId || 'Zoho-Rec'}</span>
+                </div>
+              </div>
+            </div>
+          ) : activeLesson.videoUrl ? (
             <div className="space-y-3">
               <div className="relative rounded-2xl overflow-hidden bg-black aspect-video border border-slate-800 shadow-2xl">
                 <video

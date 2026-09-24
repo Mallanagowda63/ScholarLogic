@@ -97,13 +97,22 @@ export const PlacementDashboard: React.FC = () => {
           <p className="text-xs text-slate-500">Real-time candidate pipelines, official company hiring verifications, and skill demand analytics</p>
         </div>
 
-        <button
-          onClick={handleRefreshHiringData}
-          disabled={refreshing}
-          className="px-4 py-2 rounded-xl bg-slate-900 dark:bg-slate-800 text-white font-bold text-xs hover:bg-slate-800 transition-colors flex items-center gap-2 border border-slate-700 shadow-sm"
-        >
-          <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /> Refresh Hiring Data
-        </button>
+        <div className="flex items-center gap-3">
+          <a
+            href="/api/placements/applications/export"
+            download
+            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition-colors flex items-center gap-2 shadow-md"
+          >
+            <Send className="h-3.5 w-3.5" /> Export Applicants CSV
+          </a>
+          <button
+            onClick={handleRefreshHiringData}
+            disabled={refreshing}
+            className="px-4 py-2 rounded-xl bg-slate-900 dark:bg-slate-800 text-white font-bold text-xs hover:bg-slate-800 transition-colors flex items-center gap-2 border border-slate-700 shadow-sm"
+          >
+            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /> Refresh Hiring Data
+          </button>
+        </div>
       </div>
 
       {/* Top Placement Overview Metrics (Requirement 2) */}

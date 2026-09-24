@@ -16,6 +16,7 @@ export interface ISecuritySettings {
 
 export interface IExam extends Document {
   _id: mongoose.Types.ObjectId;
+  tenantId?: mongoose.Types.ObjectId;
   title: string;
   description: string;
   courseId?: mongoose.Types.ObjectId;
@@ -38,6 +39,7 @@ export interface IExam extends Document {
 
 const ExamSchema = new Schema<IExam>(
   {
+    tenantId: { type: Schema.Types.ObjectId, ref: 'Tenant', index: true },
     title: { type: String, required: true, trim: true },
     description: { type: String, required: true },
     courseId: { type: Schema.Types.ObjectId, ref: 'Course' },

@@ -195,3 +195,22 @@ export const deleteResume = async (req: AuthRequest, res: Response): Promise<voi
     message: 'Resume version deleted',
   });
 };
+
+export const parseResumeFile = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { fileBuffer, mimeType, fileName } = req.body;
+
+  if (!fileBuffer) throw new AppError('File buffer is required', 400, 'MISSING_FIELDS');
+
+  const { resumeParserService } = await import('../services/resumeParser');
+  const buffer = Buffer.from(fileBuffer, 'base64');
+  const extractedText = await resumeParserService.extractTextFromBuffer(buffer, mimeType || 'application/pdf');
+
+  res.json({
+    success: true,
+    data: {
+      fileName,
+      extractedText,
+      characterCount: extractedText.length,
+    },
+  });
+};

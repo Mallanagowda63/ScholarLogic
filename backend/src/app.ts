@@ -5,6 +5,7 @@ import path from 'path';
 import rateLimit from 'express-rate-limit';
 import { env } from './config/env';
 import { errorHandler } from './middleware/errorHandler';
+import { tenantMiddleware } from './middleware/tenantMiddleware';
 
 // Import Routes
 import authRoutes from './routes/authRoutes';
@@ -17,6 +18,7 @@ import certificateRoutes from './routes/certificateRoutes';
 import notificationRoutes from './routes/notificationRoutes';
 import adminRoutes from './routes/adminRoutes';
 import trainerRoutes from './routes/trainerRoutes';
+import mockInterviewRoutes from './routes/mockInterviewRoutes';
 
 const app = express();
 
@@ -81,6 +83,9 @@ const corsOptions: cors.CorsOptions = {
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
 
+// Multi-Tenant University Subdomain & Hostname Resolution
+app.use(tenantMiddleware);
+
 // Granular API Rate Limiters (API Security Control)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 mins
@@ -134,6 +139,7 @@ app.use('/api/certificates', certificateRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/trainer', trainerRoutes);
+app.use('/api/ai/mock-interview', mockInterviewRoutes);
 
 // Health check endpoint
 app.get('/api/health', (_req, res) => {

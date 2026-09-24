@@ -7,7 +7,7 @@ import { Badge } from '../../components/Badge';
 import { Search, BookOpen, Clock, ArrowRight, Video, FileText, CheckCircle2, Play, Download, Eye, TrendingUp, Filter, Sparkles } from 'lucide-react';
 
 export const StudentCourses: React.FC = () => {
-  const { studentProfile } = useAuth();
+  const { user, studentProfile } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabParam = searchParams.get('tab');
   const courseParam = searchParams.get('courseId');
@@ -56,7 +56,12 @@ export const StudentCourses: React.FC = () => {
             }
           }
 
-          // Fetch student progress per registered course
+          // Fetch student progress per registered course (skip for guests browsing without an account)
+          if (!user) {
+            setRegisteredProgress([]);
+            return;
+          }
+
           const progressPromises = fetchedCourses.map(async (c: any) => {
             try {
               const pRes: any = await api.get(`/students/courses/${c._id}/progress`);
@@ -102,11 +107,13 @@ export const StudentCourses: React.FC = () => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
         <div>
           <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white flex items-center gap-2">
-            {activeTab === 'COURSES' ? 'My Registered Courses (LMS)' : activeTab === 'VIDEOS' ? '🎥 Registered Lesson Videos' : activeTab === 'NOTES' ? '📄 Registered Lesson Notes' : '📊 Course Learning Progress'}
+            {activeTab === 'COURSES' ? (user ? 'My Registered Courses (LMS)' : 'Explore Our Courses') : activeTab === 'VIDEOS' ? '🎥 Registered Lesson Videos' : activeTab === 'NOTES' ? '📄 Registered Lesson Notes' : '📊 Course Learning Progress'}
           </h1>
           <p className="text-xs text-slate-500">
             {activeTab === 'COURSES'
-              ? 'Select a course to view its specific modules, video lectures, and PDF notes'
+              ? user
+                ? 'Select a course to view its specific modules, video lectures, and PDF notes'
+                : 'Browse our full course catalog — sign in to track progress and access lessons'
               : activeTab === 'VIDEOS'
               ? 'Recorded video lectures exclusively for your selected registered course'
               : activeTab === 'NOTES'
@@ -134,9 +141,9 @@ export const StudentCourses: React.FC = () => {
               }}
               className="rounded-lg border-none bg-transparent px-2 py-1.5 text-xs font-bold text-slate-900 dark:text-white focus:outline-none cursor-pointer"
             >
-              <option value="">All Registered Courses</option>
+              <option value="" className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">All Registered Courses</option>
               {courses.map((c) => (
-                <option key={c._id} value={c._id}>
+                <option key={c._id} value={c._id} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
                   {c.title}
                 </option>
               ))}
@@ -213,7 +220,7 @@ export const StudentCourses: React.FC = () => {
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
                     <div className="absolute top-3 right-3">
-                      <Badge variant="green">REGISTERED</Badge>
+                      <Badge variant={user ? 'green' : 'blue'}>{user ? 'REGISTERED' : 'AVAILABLE'}</Badge>
                     </div>
                   </div>
 
@@ -221,16 +228,20 @@ export const StudentCourses: React.FC = () => {
                     <span className="text-[10px] font-bold uppercase tracking-wider text-brand-600 dark:text-brand-400">{c.category}</span>
                     <h3 className="font-bold text-base text-slate-900 dark:text-white line-clamp-1">{c.title}</h3>
 
-                    {/* Registered Progress Bar */}
-                    <div className="space-y-1 pt-1">
-                      <div className="flex justify-between text-[11px] font-bold">
-                        <span className="text-slate-500">Progress</span>
-                        <span className="text-brand-600">{p.progressPercentage}% ({p.completedLessons}/{p.totalLessons})</span>
+                    {user ? (
+                      /* Registered Progress Bar */
+                      <div className="space-y-1 pt-1">
+                        <div className="flex justify-between text-[11px] font-bold">
+                          <span className="text-slate-500">Progress</span>
+                          <span className="text-brand-600">{p.progressPercentage}% ({p.completedLessons}/{p.totalLessons})</span>
+                        </div>
+                        <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                          <div className="h-full bg-brand-500 rounded-full" style={{ width: `${p.progressPercentage}%` }} />
+                        </div>
                       </div>
-                      <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                        <div className="h-full bg-brand-500 rounded-full" style={{ width: `${p.progressPercentage}%` }} />
-                      </div>
-                    </div>
+                    ) : (
+                      <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed line-clamp-2 pt-1">{c.description}</p>
+                    )}
                   </div>
                 </div>
 
@@ -240,10 +251,10 @@ export const StudentCourses: React.FC = () => {
                   </span>
 
                   <Link
-                    to={`/student/courses/${c._id}`}
+                    to={user ? `/student/courses/${c._id}` : '/register'}
                     className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-brand-600 text-white text-xs font-bold shadow-md hover:bg-brand-700 transition-colors"
                   >
-                    Open LMS <ArrowRight className="h-3.5 w-3.5" />
+                    {user ? 'Open LMS' : 'Enroll Now'} <ArrowRight className="h-3.5 w-3.5" />
                   </Link>
                 </div>
               </div>

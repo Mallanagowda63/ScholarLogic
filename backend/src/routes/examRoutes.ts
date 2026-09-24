@@ -15,6 +15,10 @@ import {
   archiveQuestion,
   duplicateQuestion,
   getExamResultsForTrainer,
+  logProctoringEvent,
+  getProctoringLogs,
+  evaluateCodingQuestion,
+  importQuestions,
 } from '../controllers/examController';
 import { authenticateUser, authorizeRoles } from '../middleware/auth';
 import { asyncHandler } from '../utils/asyncHandler';
@@ -26,6 +30,8 @@ router.use(authenticateUser);
 // Question Bank Routes
 router.get('/questions', authorizeRoles('ADMIN', 'SUPER_ADMIN', 'TRAINER'), asyncHandler(getQuestionBank));
 router.post('/questions', authorizeRoles('ADMIN', 'SUPER_ADMIN', 'TRAINER'), asyncHandler(createQuestion));
+router.post('/questions/import', authorizeRoles('ADMIN', 'SUPER_ADMIN', 'TRAINER'), asyncHandler(importQuestions));
+router.post('/questions/evaluate', authorizeRoles('STUDENT', 'ADMIN', 'SUPER_ADMIN', 'TRAINER'), asyncHandler(evaluateCodingQuestion));
 router.put('/questions/:id', authorizeRoles('ADMIN', 'SUPER_ADMIN', 'TRAINER'), asyncHandler(updateQuestion));
 router.post('/questions/:id/archive', authorizeRoles('ADMIN', 'SUPER_ADMIN', 'TRAINER'), asyncHandler(archiveQuestion));
 router.post('/questions/:id/duplicate', authorizeRoles('ADMIN', 'SUPER_ADMIN', 'TRAINER'), asyncHandler(duplicateQuestion));
@@ -40,6 +46,8 @@ router.get('/:id', asyncHandler(getExamById));
 router.post('/', authorizeRoles('ADMIN', 'SUPER_ADMIN', 'TRAINER'), asyncHandler(createExam));
 router.post('/:id/start', authorizeRoles('STUDENT'), asyncHandler(startExam));
 router.post('/attempts/:attemptId/violation', authorizeRoles('STUDENT'), asyncHandler(recordViolation));
+router.post('/attempts/:attemptId/proctor-event', authorizeRoles('STUDENT'), asyncHandler(logProctoringEvent));
+router.get('/attempts/:attemptId/proctor-logs', authorizeRoles('ADMIN', 'SUPER_ADMIN', 'TRAINER'), asyncHandler(getProctoringLogs));
 router.post('/attempts/:attemptId/save', authorizeRoles('STUDENT'), asyncHandler(saveProgress));
 router.post('/attempts/:attemptId/submit', authorizeRoles('STUDENT'), asyncHandler(submitExam));
 

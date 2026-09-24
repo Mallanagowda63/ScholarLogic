@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
+import mongoose from 'mongoose';
 import { User } from '../models/User';
 import { Student } from '../models/Student';
 import { Resume } from '../models/Resume';
@@ -32,59 +33,86 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
   const salt = await bcrypt.genSalt(10);
   const passwordHash = await bcrypt.hash(password, salt);
 
-  const newUser = await User.create({
-    email: normalizedEmail,
-    passwordHash,
-    fullName,
-    role: role as any,
-    isVerified: true,
-  });
-
+  let newUser: any;
   let studentId: string | undefined;
   let studentDoc: any;
 
-  if (newUser.role === 'STUDENT') {
-    studentId = await getNextStudentId();
-    studentDoc = await Student.create({
-      userId: newUser._id,
-      studentId,
-      college: college || 'ScholarLogic Institute of Technology',
-      degree: degree || 'B.Tech',
-      branch: branch || 'Computer Science & Engineering',
-      preferredRole: preferredRole || 'DevOps & Infrastructure',
-      graduationYear: 2026,
-      cgpa: 8.5,
-    });
-
-    // Auto-create default ATS Resume record for student
-    await Resume.create({
-      studentId: studentDoc._id,
-      title: `${newUser.fullName} Profile Resume`,
-      versionName: 'Primary Profile Version',
-      template: 'MODERN',
-      isDefault: true,
-      data: {
-        fullName: newUser.fullName,
-        email: newUser.email,
-        phone: '+91 98765 43210',
-        location: 'India',
-        summary: `Student pursuing ${degree || 'B.Tech'} in ${branch || 'Computer Science & Engineering'} at ${college || 'ScholarLogic Institute of Technology'}.`,
-        skills: ['Python', 'JavaScript', 'React', 'SQL', 'Git'],
-        experience: [],
-        education: [
+  // Wrap User + Student + Resume creation in a transaction so a mid-way failure
+  // (e.g. a transient DB blip) can never leave an orphaned User with no Student profile.
+  const session = await mongoose.startSession();
+  try {
+    await session.withTransaction(async () => {
+      const createdUsers = await User.create(
+        [
           {
-            institution: college || 'ScholarLogic Institute of Technology',
-            degree: degree || 'B.Tech',
-            fieldOfStudy: branch || 'Computer Science & Engineering',
-            startDate: '2022',
-            endDate: '2026',
-            grade: 'CGPA: 8.5',
+            email: normalizedEmail,
+            passwordHash,
+            fullName,
+            role: role as any,
+            isVerified: true,
           },
         ],
-        projects: [],
-        certifications: [],
-      },
+        { session }
+      );
+      newUser = createdUsers[0];
+
+      if (newUser.role === 'STUDENT') {
+        studentId = await getNextStudentId(session);
+        const createdStudents = await Student.create(
+          [
+            {
+              userId: newUser._id,
+              studentId,
+              college: college || 'ScholarLogic Institute of Technology',
+              degree: degree || 'B.Tech',
+              branch: branch || 'Computer Science & Engineering',
+              preferredRole: preferredRole || 'DevOps & Infrastructure',
+              graduationYear: 2026,
+              cgpa: 8.5,
+            },
+          ],
+          { session }
+        );
+        studentDoc = createdStudents[0];
+
+        // Auto-create default ATS Resume record for student
+        await Resume.create(
+          [
+            {
+              studentId: studentDoc._id,
+              title: `${newUser.fullName} Profile Resume`,
+              versionName: 'Primary Profile Version',
+              template: 'MODERN',
+              isDefault: true,
+              data: {
+                fullName: newUser.fullName,
+                email: newUser.email,
+                phone: '+91 98765 43210',
+                location: 'India',
+                summary: `Student pursuing ${degree || 'B.Tech'} in ${branch || 'Computer Science & Engineering'} at ${college || 'ScholarLogic Institute of Technology'}.`,
+                skills: ['Python', 'JavaScript', 'React', 'SQL', 'Git'],
+                experience: [],
+                education: [
+                  {
+                    institution: college || 'ScholarLogic Institute of Technology',
+                    degree: degree || 'B.Tech',
+                    fieldOfStudy: branch || 'Computer Science & Engineering',
+                    startDate: '2022',
+                    endDate: '2026',
+                    grade: 'CGPA: 8.5',
+                  },
+                ],
+                projects: [],
+                certifications: [],
+              },
+            },
+          ],
+          { session }
+        );
+      }
     });
+  } finally {
+    await session.endSession();
   }
 
   const tokenPayload = {

@@ -17,6 +17,9 @@ import {
   getAnnouncements,
   createSession,
   getTrainerCalendar,
+  getCourseVideoAnalytics,
+  validateZohoRecordingUrl,
+  addZohoRecordingLesson,
 } from '../controllers/trainerController';
 import { authenticateUser, authorizeRoles } from '../middleware/auth';
 import { asyncHandler } from '../utils/asyncHandler';
@@ -28,9 +31,12 @@ router.use(authorizeRoles('TRAINER', 'ADMIN', 'SUPER_ADMIN'));
 
 router.get('/dashboard', asyncHandler(getTrainerDashboard));
 router.get('/courses', asyncHandler(getTrainerCourses));
+router.get('/courses/:courseId/analytics', asyncHandler(getCourseVideoAnalytics));
 router.post('/courses/:courseId/modules', asyncHandler(createTrainerModule));
 router.post('/modules/:moduleId/lessons', asyncHandler(createTrainerLesson));
 router.post('/lessons/:lessonId/media', asyncHandler(uploadLessonMedia));
+router.post('/zoho/validate-recording', asyncHandler(validateZohoRecordingUrl));
+router.post('/modules/:moduleId/lessons/zoho-recording', asyncHandler(addZohoRecordingLesson));
 
 router.get('/students', asyncHandler(getTrainerStudents));
 router.get('/students/:id', asyncHandler(getStudentDetailForTrainer));

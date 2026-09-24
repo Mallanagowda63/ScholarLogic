@@ -141,6 +141,7 @@ export const ExamRunner: React.FC = () => {
 
     try {
       const res: any = await api.post(`/exams/attempts/${attemptId}/violation`, { type });
+      api.post(`/exams/attempts/${attemptId}/proctor-event`, { eventType: type, metadata: { url: window.location.href, userAgent: navigator.userAgent } }).catch(() => {});
       if (res.success && res.data) {
         const count = res.data.violationsCount;
         setViolationsCount(count);
@@ -156,10 +157,26 @@ export const ExamRunner: React.FC = () => {
     }
   };
 
+  const shortAnswerSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const handleSelectAnswer = (qId: string, val: any) => {
     const updated = { ...answers, [qId]: val };
     setAnswers(updated);
     triggerAutoSave(updated);
+  };
+
+  const handleToggleMultiSelect = (qId: string, idx: number) => {
+    const existing: number[] = Array.isArray(answers[qId]) ? answers[qId] : [];
+    const updatedOptions = existing.includes(idx) ? existing.filter((i) => i !== idx) : [...existing, idx];
+    handleSelectAnswer(qId, updatedOptions);
+  };
+
+  const handleShortAnswerChange = (qId: string, val: string) => {
+    const updated = { ...answers, [qId]: val };
+    setAnswers(updated);
+
+    if (shortAnswerSaveTimer.current) clearTimeout(shortAnswerSaveTimer.current);
+    shortAnswerSaveTimer.current = setTimeout(() => triggerAutoSave(updated), 600);
   };
 
   const triggerAutoSave = async (currentAnswers: Record<string, any>) => {
@@ -327,6 +344,45 @@ export const ExamRunner: React.FC = () => {
                         </button>
                       );
                     })}
+                  </div>
+                )}
+
+                {currentQ.type === 'MULTIPLE_SELECT' && (
+                  <>
+                    <p className="text-[11px] font-semibold text-slate-500">Select all options that apply</p>
+                    {currentQ.options?.map((opt: string, idx: number) => {
+                      const selected: number[] = Array.isArray(answers[currentQ._id]) ? answers[currentQ._id] : [];
+                      const isChecked = selected.includes(idx);
+                      return (
+                        <button
+                          key={idx}
+                          onClick={() => handleToggleMultiSelect(currentQ._id, idx)}
+                          className={`w-full text-left p-4 rounded-2xl border text-xs font-semibold flex items-center gap-3 transition-all ${
+                            isChecked
+                              ? 'bg-brand-600/20 border-brand-500 text-white shadow-md'
+                              : 'bg-slate-900 border-slate-800 text-slate-300 hover:bg-slate-800'
+                          }`}
+                        >
+                          <div className={`h-6 w-6 rounded-md border flex items-center justify-center font-mono text-[11px] font-bold ${isChecked ? 'bg-brand-500 border-brand-500 text-white' : 'border-slate-700 text-slate-400'}`}>
+                            {isChecked ? '✓' : String.fromCharCode(65 + idx)}
+                          </div>
+                          <span className="flex-1">{opt}</span>
+                        </button>
+                      );
+                    })}
+                  </>
+                )}
+
+                {currentQ.type === 'SHORT_ANSWER' && (
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-semibold text-slate-500">Type your answer</label>
+                    <input
+                      type="text"
+                      value={answers[currentQ._id] ?? ''}
+                      onChange={(e) => handleShortAnswerChange(currentQ._id, e.target.value)}
+                      placeholder="Enter your answer here..."
+                      className="w-full rounded-2xl border border-slate-800 bg-slate-900 p-4 text-sm font-semibold text-white placeholder:text-slate-600 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    />
                   </div>
                 )}
               </div>

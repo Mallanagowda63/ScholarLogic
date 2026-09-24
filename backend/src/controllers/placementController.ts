@@ -842,3 +842,115 @@ export const compareCompanies = async (req: AuthRequest, res: Response): Promise
     data: { comparison },
   });
 };
+
+export const updateApplicationStatus = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { id } = req.params;
+  const { status, notes, interviewDate } = req.body;
+
+  const application = await Application.findById(id)
+    .populate('jobId', 'title')
+    .populate('companyId', 'name')
+    .populate({
+      path: 'studentId',
+      select: 'studentId fullName email',
+      populate: { path: 'userId', select: 'fullName email' },
+    });
+
+  if (!application) throw new AppError('Application not found', 404, 'NOT_FOUND');
+
+  application.status = status;
+  if (notes) application.placementRound = notes;
+  if (interviewDate) application.interviewDate = new Date(interviewDate);
+  await application.save();
+
+  // Send status email trigger
+  const studentEmail = (application.studentId as any)?.userId?.email || (application.studentId as any)?.email;
+  const studentName = (application.studentId as any)?.userId?.fullName || (application.studentId as any)?.fullName || 'Student';
+  const companyName = (application.companyId as any)?.name || 'Target Company';
+  const jobTitle = (application.jobId as any)?.title || 'Job Position';
+
+  if (studentEmail) {
+    const { emailService } = await import('../services/emailService');
+    await emailService.sendApplicationStatusEmail(studentEmail, studentName, companyName, jobTitle, status);
+  }
+
+  res.json({
+    success: true,
+    message: `Application status updated to ${status}`,
+    data: { application },
+  });
+};
+
+export const exportApplicantsCSV = async (req: AuthRequest, res: Response): Promise<void> => {
+  const applications = await Application.find()
+    .populate('jobId', 'title')
+    .populate('companyId', 'name')
+    .populate({
+      path: 'studentId',
+      select: 'studentId branch cgpa',
+      populate: { path: 'userId', select: 'fullName email' },
+    })
+    .sort({ createdAt: -1 });
+
+  let csv = 'Application ID,Student ID,Student Name,Email,Branch,CGPA,Job Title,Company,Status,Applied Date\n';
+
+  applications.forEach((app: any) => {
+    const appId = `SL-APP-${app._id.toString().slice(-6).toUpperCase()}`;
+    const studentId = app.studentId?.studentId || 'SL-2026-00001';
+    const studentName = `"${app.studentId?.userId?.fullName || 'Alex Morgan'}"`;
+    const email = app.studentId?.userId?.email || 'student@scholarlogic.edu';
+    const branch = app.studentId?.branch || 'CSE';
+    const cgpa = app.studentId?.cgpa || 8.5;
+    const jobTitle = `"${app.jobId?.title || 'Software Engineer'}"`;
+    const company = `"${app.companyId?.name || 'ScholarLogic Partner'}"`;
+    const status = app.status;
+    const date = new Date(app.appliedAt || app.createdAt).toLocaleDateString();
+
+    csv += `${appId},${studentId},${studentName},${email},${branch},${cgpa},${jobTitle},${company},${status},${date}\n`;
+  });
+
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', 'attachment; filename="scholarlogic-applicants.csv"');
+  res.status(200).send(csv);
+};
+
+export const getInterviewICS = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { id } = req.params;
+
+  const application = await Application.findById(id)
+    .populate('jobId', 'title')
+    .populate('companyId', 'name')
+    .populate({
+      path: 'studentId',
+      select: 'studentId',
+      populate: { path: 'userId', select: 'fullName email' },
+    });
+
+  if (!application) throw new AppError('Application not found', 404, 'NOT_FOUND');
+
+  const startDate = application.interviewDate || new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
+
+  const formatDateStr = (d: Date) => d.toISOString().replace(/-|:|\.\d\d\d/g, '');
+
+  const icsContent = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//ScholarLogic Placement Hub//EN',
+    'BEGIN:VEVENT',
+    `UID:interview-${application._id}@scholarlogic.edu`,
+    `DTSTAMP:${formatDateStr(new Date())}`,
+    `DTSTART:${formatDateStr(startDate)}`,
+    `DTEND:${formatDateStr(endDate)}`,
+    `SUMMARY:Technical Interview - ${(application.jobId as any)?.title || 'Position'} at ${(application.companyId as any)?.name || 'Company'}`,
+    `DESCRIPTION:ScholarLogic Official Placement Drive Technical Interview for ${(application.studentId as any)?.userId?.fullName || 'Candidate'}.`,
+    'LOCATION:ScholarLogic Virtual Interview Platform / Google Meet',
+    'STATUS:CONFIRMED',
+    'END:VEVENT',
+    'END:VCALENDAR',
+  ].join('\r\n');
+
+  res.setHeader('Content-Type', 'text/calendar');
+  res.setHeader('Content-Disposition', `attachment; filename="interview-${application._id}.ics"`);
+  res.status(200).send(icsContent);
+};

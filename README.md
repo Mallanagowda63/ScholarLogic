@@ -63,6 +63,15 @@ npm run dev      # Starts Vite dev server on http://localhost:5173
 5. **AI Resume ATS Analyzer**: Upload/paste resumes + JDs, get overall ATS score %, missing skills, keyword recommendations, 4 templates (Classic, Modern, Technical, Minimal), versioning, and PDF export.
 6. **Placement Portal**: Company & Job management, dynamic skill match % algorithm, application status flow (`APPLIED` -> `SHORTLISTED` -> `TECH_INTERVIEW` -> `OFFERED` -> `JOINED`), and interview scheduling.
 7. **Certificate Verification**: Public verification portal at `/verify/:certificateId`.
+8. **Zoho Meeting Integration**: Associate Zoho Meeting recording URLs with lessons, automatic OAuth token refresh (`ZohoMeeting.meeting.READ`), server-side URL validation with SSRF protection, and student player launcher.
+
+### 🎥 Zoho Meeting Integration Setup
+To enable Zoho Meeting API integration:
+1. Register an OAuth Application in [Zoho Developer Console](https://api-console.zoho.in/).
+2. Request scope `ZohoMeeting.meeting.READ`.
+3. Configure `ZOHO_CLIENT_ID`, `ZOHO_CLIENT_SECRET`, `ZOHO_REFRESH_TOKEN`, and `ZOHO_REGION=IN` in server-side `backend/.env`.
+4. Restart the backend service.
+
 
 ---
 

@@ -19,7 +19,9 @@ export async function connectDB(): Promise<typeof mongoose> {
 
   if (env.USE_MEMORY_DB) {
     console.log('⚡ Starting MongoMemoryServer for local development...');
-    mongoMemoryServer = await MongoMemoryServer.create();
+    mongoMemoryServer = await MongoMemoryServer.create({
+      instance: { launchTimeout: 60000 },
+    });
     const uri = mongoMemoryServer.getUri();
     const conn = await mongoose.connect(uri);
     console.log(`✅ Connected to MongoMemoryServer at ${uri}`);
@@ -28,13 +30,15 @@ export async function connectDB(): Promise<typeof mongoose> {
 
   try {
     const conn = await mongoose.connect(dbUrl, {
-      serverSelectionTimeoutMS: 15000,
+      serverSelectionTimeoutMS: 3000,
     });
     console.log(`✅ Successfully connected to MongoDB Atlas at ${dbUrl.replace(/:[^:@]+@/, ':****@')}`);
     return conn;
   } catch (err: any) {
     console.warn(`⚠️ Could not connect to MongoDB Atlas (${err.message}). Falling back to MongoMemoryServer...`);
-    mongoMemoryServer = await MongoMemoryServer.create();
+    mongoMemoryServer = await MongoMemoryServer.create({
+      instance: { launchTimeout: 60000 },
+    });
     const uri = mongoMemoryServer.getUri();
     const conn = await mongoose.connect(uri);
     console.log(`✅ Connected to MongoMemoryServer fallback at ${uri}`);

@@ -72,3 +72,29 @@ export const issueCertificate = async (req: AuthRequest, res: Response): Promise
     data: { certificate },
   });
 };
+
+export const downloadCertificatePDF = async (req: Request, res: Response): Promise<void> => {
+  const { certificateId } = req.params;
+
+  const certificate = await Certificate.findOne({ certificateId })
+    .populate({
+      path: 'studentId',
+      select: 'studentId',
+      populate: { path: 'userId', select: 'fullName' },
+    })
+    .populate('courseId', 'title');
+
+  if (!certificate) {
+    throw new AppError('Certificate not found', 404, 'NOT_FOUND');
+  }
+
+  const studentName = (certificate.studentId as any)?.userId?.fullName || 'Student';
+  const courseTitle = (certificate.courseId as any)?.title || 'ScholarLogic Certified Course';
+
+  const { generateCertificatePDFBuffer } = await import('../utils/pdfGenerator');
+  const pdfBuffer = generateCertificatePDFBuffer(studentName, courseTitle, certificate.certificateId, certificate.issueDate);
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${certificate.certificateId}.pdf"`);
+  res.status(200).send(pdfBuffer);
+};

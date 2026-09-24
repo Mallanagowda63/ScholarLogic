@@ -14,14 +14,14 @@ const CounterSchema = new Schema<ICounter>({
 
 export const Counter = mongoose.model<ICounter>('Counter', CounterSchema);
 
-export async function getNextStudentId(): Promise<string> {
+export async function getNextStudentId(session?: mongoose.ClientSession): Promise<string> {
   const currentYear = new Date().getFullYear();
   const counterName = `student_id_${currentYear}`;
-  
+
   const counter = await Counter.findOneAndUpdate(
     { name: counterName },
     { $inc: { seq: 1 }, $setOnInsert: { year: currentYear } },
-    { new: true, upsert: true }
+    { new: true, upsert: true, session }
   );
 
   const seqFormatted = String(counter.seq).padStart(5, '0');

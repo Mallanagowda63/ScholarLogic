@@ -72,6 +72,14 @@ export const VerifyCertificate: React.FC = () => {
                 <span className="font-bold text-slate-900 dark:text-white">{new Date(certData?.issueDate).toLocaleDateString()}</span>
               </div>
             </div>
+
+            <a
+              href={`/api/certificates/${certData?.certificateId}/pdf`}
+              download
+              className="w-full py-3 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-extrabold text-xs shadow-md transition-colors inline-block"
+            >
+              Download Verified PDF Certificate (.pdf)
+            </a>
           </div>
         )}
       </div>

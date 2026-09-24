@@ -19,6 +19,9 @@ import {
   getHiringLocations,
   getHiringTrends,
   compareCompanies,
+  updateApplicationStatus,
+  exportApplicantsCSV,
+  getInterviewICS,
 } from '../controllers/placementController';
 import { authenticateUser, authorizeRoles } from '../middleware/auth';
 import { asyncHandler } from '../utils/asyncHandler';
@@ -45,6 +48,9 @@ router.post('/jobs/:id/apply', asyncHandler(applyToJob));
 router.post('/jobs', authorizeRoles('ADMIN', 'SUPER_ADMIN', 'PLACEMENT_MANAGER'), asyncHandler(createJobPosting));
 
 router.get('/applications', asyncHandler(getStudentApplications));
+router.get('/applications/export', authorizeRoles('ADMIN', 'SUPER_ADMIN', 'PLACEMENT_MANAGER'), asyncHandler(exportApplicantsCSV));
+router.get('/applications/:id/ics', asyncHandler(getInterviewICS));
+router.put('/applications/:id/status', authorizeRoles('ADMIN', 'SUPER_ADMIN', 'PLACEMENT_MANAGER'), asyncHandler(updateApplicationStatus));
 router.get('/applications/:id', asyncHandler(getApplicationDetail));
 
 router.get('/hiring-intelligence', asyncHandler(getHiringIntelligence));
