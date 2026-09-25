@@ -32,8 +32,10 @@ test.describe('Online Exam Runner & Proctoring E2E Flow', () => {
   });
 
   test('should take the exam, submit it and show a passing result', async ({ page }) => {
-    // Accept the "Are you sure you want to submit?" confirm dialog
-    page.on('dialog', (dialog) => dialog.accept());
+    // Submitting must use the in-page modal, never a native browser dialog
+    page.on('dialog', (dialog) => {
+      throw new Error(`Unexpected native dialog: ${dialog.message()}`);
+    });
 
     await page.goto('/student/exams');
     const examCard = page.locator('div.rounded-2xl', { hasText: 'Python Full Stack Assessment Exam' });
@@ -48,6 +50,14 @@ test.describe('Online Exam Runner & Proctoring E2E Flow', () => {
     await page.waitForURL(/\/runner/);
     await expect(page.getByText('Question 1 of 5')).toBeVisible();
 
+    // Opening the submit modal early warns about unanswered questions; "Keep Working" closes it
+    await page.locator('header').getByRole('button', { name: /Submit Exam/ }).click();
+    const earlyModal = page.getByRole('dialog');
+    await expect(earlyModal.getByText('Hold on a second!')).toBeVisible();
+    await expect(earlyModal.getByText('5 unanswered questions will be scored as 0.')).toBeVisible();
+    await earlyModal.getByRole('button', { name: /Keep Working/ }).click();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+
     for (let i = 0; i < 5; i++) {
       const questionText = (await page.locator('main h3').innerText()).trim();
       const answer = CORRECT_ANSWERS[questionText];
@@ -59,7 +69,14 @@ test.describe('Online Exam Runner & Proctoring E2E Flow', () => {
       if (i < 4) await page.getByRole('button', { name: 'Next →' }).click();
     }
 
-    await page.getByRole('button', { name: /Submit Exam/ }).click();
+    await page.locator('header').getByRole('button', { name: /Submit Exam/ }).click();
+    const modal = page.getByRole('dialog');
+    await expect(modal.getByText('Ready to submit?')).toBeVisible();
+    await expect(modal.getByText('100%')).toBeVisible();
+    await expect(modal.getByText('unanswered question')).toHaveCount(0);
+    // Confirming through the modal must not be logged as a proctoring violation
+    await expect(page.getByText('Security Violation Detected')).toHaveCount(0);
+    await modal.getByRole('button', { name: /Submit Exam/ }).click();
 
     await page.waitForURL(/\/student\/results\//);
     await expect(page.getByText('PASSED & CERTIFIED')).toBeVisible();

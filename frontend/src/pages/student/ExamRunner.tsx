@@ -27,6 +27,7 @@ export const ExamRunner: React.FC = () => {
   const [cameraActive, setCameraActive] = useState(false);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [showSubmitModal, setShowSubmitModal] = useState(false);
 
   const mediaStreamRef = useRef<MediaStream | null>(null);
 
@@ -217,11 +218,21 @@ export const ExamRunner: React.FC = () => {
     }
   };
 
+  // In-page modal instead of window.confirm(): a native dialog steals focus and
+  // would trigger the WINDOW_BLUR proctoring listener as a false violation.
   const handleSubmitConfirmed = () => {
-    if (confirm('Are you sure you want to submit your exam now?')) {
-      handleAutoSubmit('USER_SUBMITTED');
-    }
+    setShowSubmitModal(false);
+    handleAutoSubmit('USER_SUBMITTED');
   };
+
+  useEffect(() => {
+    if (!showSubmitModal) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setShowSubmitModal(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [showSubmitModal]);
 
   const formatTimer = (seconds: number) => {
     const m = Math.floor(seconds / 60);
@@ -280,7 +291,7 @@ export const ExamRunner: React.FC = () => {
           </div>
 
           <button
-            onClick={handleSubmitConfirmed}
+            onClick={() => setShowSubmitModal(true)}
             disabled={submitting}
             className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 font-bold text-xs text-white shadow-md flex items-center gap-1.5"
           >
@@ -445,6 +456,99 @@ export const ExamRunner: React.FC = () => {
           </div>
         </aside>
       </div>
+
+      {/* Submit Confirmation Modal */}
+      {showSubmitModal && (() => {
+        const answeredCount = questions.filter((q) => {
+          const a = answers[q._id];
+          return a !== undefined && a !== '' && !(Array.isArray(a) && a.length === 0);
+        }).length;
+        const unansweredCount = questions.length - answeredCount;
+        const allAnswered = unansweredCount === 0;
+        const answeredPct = questions.length ? Math.round((answeredCount / questions.length) * 100) : 0;
+
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+            onClick={() => setShowSubmitModal(false)}
+          >
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="submit-modal-title"
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-md rounded-3xl border border-slate-700 bg-slate-900 p-6 space-y-5 shadow-2xl"
+            >
+              <div className="text-center space-y-2">
+                <div className="text-5xl leading-none" aria-hidden="true">{allAnswered ? '🎯' : '📝'}</div>
+                <h3 id="submit-modal-title" className="font-extrabold text-lg text-white">
+                  {allAnswered ? 'Ready to submit? 🚀' : 'Hold on a second! ✋'}
+                </h3>
+                <p className="text-xs text-slate-400">
+                  {allAnswered
+                    ? 'Great job, you answered every question. Once submitted, answers cannot be changed.'
+                    : 'Some questions are still unanswered. Once submitted, answers cannot be changed.'}
+                </p>
+              </div>
+
+              {/* Progress summary */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-[11px] font-bold text-slate-400">
+                  <span>Progress</span>
+                  <span className="text-white">{answeredPct}%</span>
+                </div>
+                <div className="h-2 w-full rounded-full bg-slate-800 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all ${allAnswered ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                    style={{ width: `${answeredPct}%` }}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="p-3 rounded-2xl bg-emerald-950/60 border border-emerald-900">
+                  <div className="text-lg" aria-hidden="true">✅</div>
+                  <div className="text-base font-black text-emerald-400">{answeredCount}</div>
+                  <div className="text-[10px] font-bold uppercase text-slate-400">Answered</div>
+                </div>
+                <div className={`p-3 rounded-2xl border ${unansweredCount > 0 ? 'bg-amber-950/60 border-amber-900' : 'bg-slate-800/60 border-slate-800'}`}>
+                  <div className="text-lg" aria-hidden="true">⏳</div>
+                  <div className={`text-base font-black ${unansweredCount > 0 ? 'text-amber-400' : 'text-slate-300'}`}>{unansweredCount}</div>
+                  <div className="text-[10px] font-bold uppercase text-slate-400">Unanswered</div>
+                </div>
+                <div className="p-3 rounded-2xl bg-blue-950/60 border border-blue-900">
+                  <div className="text-lg" aria-hidden="true">⏱️</div>
+                  <div className="text-base font-black text-blue-400 font-mono">{formatTimer(timeLeftSeconds)}</div>
+                  <div className="text-[10px] font-bold uppercase text-slate-400">Time Left</div>
+                </div>
+              </div>
+
+              {!allAnswered && (
+                <p className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-[11px] font-semibold text-amber-300 text-center">
+                  ⚠️ {unansweredCount} unanswered {unansweredCount === 1 ? 'question' : 'questions'} will be scored as 0.
+                </p>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => setShowSubmitModal(false)}
+                  className="py-3 rounded-xl bg-slate-800 border border-slate-700 hover:bg-slate-700 text-slate-200 font-bold text-xs transition-colors"
+                >
+                  ↩️ Keep Working
+                </button>
+                <button
+                  onClick={handleSubmitConfirmed}
+                  disabled={submitting}
+                  autoFocus
+                  className="py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-lg shadow-emerald-500/20 transition-colors disabled:opacity-50"
+                >
+                  🚀 Submit Exam
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Security Violation Overlay Banner */}
       {showViolationBanner && (
