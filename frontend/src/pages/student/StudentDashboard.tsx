@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
 import { StatCard } from '../../components/StatCard';
-import { Badge } from '../../components/Badge';
 import { Leaderboard } from '../../components/Leaderboard';
 import {
   BookOpen,
@@ -14,7 +13,6 @@ import {
   CheckCircle2,
   ArrowRight,
   ShieldCheck,
-  Clock,
   FileText,
   AlertCircle,
 } from 'lucide-react';
@@ -49,8 +47,6 @@ export const StudentDashboard: React.FC = () => {
   const metrics = data?.metrics || {};
   const student = data?.student || studentProfile;
   const continueLearningCourses = data?.continueLearningCourses || [];
-  const upcomingExams = data?.upcomingExams || [];
-  const placementDrive = data?.placementDrive || null;
 
   return (
     <div className="space-y-8 pb-12">
@@ -193,77 +189,9 @@ export const StudentDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Right 1 Col: Leaderboard, Upcoming Exams & Placement Updates */}
+        {/* Right 1 Col: Leaderboard */}
         <div className="space-y-8">
           <Leaderboard data={data?.leaderboard || null} />
-
-          {/* Upcoming Exams Panel */}
-          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm space-y-4">
-            <h3 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
-              <Calendar className="h-4 w-4 text-amber-500" /> Upcoming Assessments
-            </h3>
-
-            {upcomingExams.length > 0 ? (
-              <div className="space-y-3">
-                {upcomingExams.map((exam: any) => (
-                  <div key={exam._id} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-bold text-xs text-slate-900 dark:text-white">{exam.title}</h4>
-                      <Badge variant="amber">{exam.durationMinutes} Mins</Badge>
-                    </div>
-                    <p className="mt-1 text-[11px] text-slate-500 truncate">{exam.description}</p>
-                    <div className="mt-3 flex items-center justify-between">
-                      <span className="text-[10px] text-slate-400">Total: {exam.totalMarks} Marks</span>
-                      <Link
-                        to={`/student/exams/${exam._id}/instructions`}
-                        className="px-3 py-1 rounded-lg bg-brand-600 text-white text-[11px] font-bold hover:bg-brand-700 transition-colors"
-                      >
-                        Start Exam
-                      </Link>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="p-6 rounded-xl bg-slate-50 dark:bg-slate-800/50 text-center space-y-1">
-                <Calendar className="h-8 w-8 text-slate-400 mx-auto mb-1" />
-                <h4 className="font-bold text-xs text-slate-900 dark:text-white">No upcoming exams</h4>
-                <p className="text-[10px] text-slate-500">Scheduled exams will appear here automatically.</p>
-              </div>
-            )}
-          </div>
-
-          {/* Placement Drive Status Box */}
-          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm space-y-3">
-            <h3 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
-              <Briefcase className="h-4 w-4 text-brand-500" /> Placement Drive Status
-            </h3>
-
-            {placementDrive ? (
-              <div className="p-3.5 rounded-xl bg-brand-50/70 dark:bg-brand-950/40 border border-brand-200 dark:border-brand-900 space-y-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-brand-900 dark:text-brand-200">{placementDrive.company}</span>
-                  <Badge variant="green">{placementDrive.status}</Badge>
-                </div>
-                <p className="text-[11px] text-brand-700 dark:text-brand-300">Applied for: {placementDrive.title}</p>
-                <div className="flex items-center gap-1 text-[10px] text-brand-600 font-semibold">
-                  <Clock className="h-3 w-3" /> Updated: {new Date(placementDrive.updatedAt).toLocaleDateString()}
-                </div>
-              </div>
-            ) : (
-              <div className="p-6 rounded-xl bg-slate-50 dark:bg-slate-800/50 text-center space-y-2">
-                <Briefcase className="h-8 w-8 text-slate-400 mx-auto" />
-                <h4 className="font-bold text-xs text-slate-900 dark:text-white">No active placement applications</h4>
-                <p className="text-[10px] text-slate-500">Explore partner companies and submit job applications to track your progress.</p>
-                <Link
-                  to="/student/jobs"
-                  className="inline-block mt-2 px-3 py-1.5 rounded-lg bg-brand-600 text-white font-bold text-[11px]"
-                >
-                  View Job Postings
-                </Link>
-              </div>
-            )}
-          </div>
         </div>
       </div>
     </div>

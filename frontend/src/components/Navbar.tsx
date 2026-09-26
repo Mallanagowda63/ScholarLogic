@@ -2,9 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
-import { Sun, Moon, Bell, LogOut, User, ShieldCheck } from 'lucide-react';
+import { Sun, Moon, Bell, LogOut, User, ShieldCheck, Calendar, Briefcase, Clock } from 'lucide-react';
 import { api } from '../services/api';
 import { NotificationItem } from '../types';
+import { Badge } from './Badge';
+
+type NotificationTab = 'alerts' | 'assessments' | 'placement';
 
 export const Navbar: React.FC<{ isDashboard?: boolean }> = ({ isDashboard = false }) => {
   const { user, studentProfile, logout } = useAuth();
@@ -15,6 +18,23 @@ export const Navbar: React.FC<{ isDashboard?: boolean }> = ({ isDashboard = fals
   const [unreadCount, setUnreadCount] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [activeTab, setActiveTab] = useState<NotificationTab>('alerts');
+  const [upcomingExams, setUpcomingExams] = useState<any[]>([]);
+  const [placementDrive, setPlacementDrive] = useState<any>(null);
+  const isStudent = user?.role === 'STUDENT';
+
+  // Refresh student assessments & placement status each time the bell panel opens
+  useEffect(() => {
+    if (!showNotifications || !isStudent) return;
+    api.get('/students/dashboard')
+      .then((res: any) => {
+        if (res.success && res.data) {
+          setUpcomingExams(res.data.upcomingExams || []);
+          setPlacementDrive(res.data.placementDrive || null);
+        }
+      })
+      .catch(() => {});
+  }, [showNotifications, isStudent]);
 
   useEffect(() => {
     if (user) {
@@ -138,13 +158,103 @@ export const Navbar: React.FC<{ isDashboard?: boolean }> = ({ isDashboard = fals
 
                 {/* Notifications Dropdown */}
                 {showNotifications && (
-                  <div className="absolute right-0 mt-2 w-80 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-2xl z-50">
+                  <div className="absolute right-0 mt-2 w-[22rem] max-w-[calc(100vw-2rem)] rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 shadow-2xl z-50">
                     <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3 mb-3">
                       <h4 className="font-semibold text-sm text-slate-900 dark:text-white">Notifications</h4>
                       <span className="text-xs text-slate-500">{unreadCount} unread</span>
                     </div>
 
-                    <div className="max-h-64 overflow-y-auto space-y-2">
+                    {isStudent && (
+                      <div className="mb-3 grid grid-cols-3 gap-1 rounded-xl bg-slate-100 dark:bg-slate-800 p-1 text-[11px] font-semibold">
+                        {([
+                          ['alerts', 'Alerts', unreadCount],
+                          ['assessments', 'Assessments', upcomingExams.length],
+                          ['placement', 'Placement', placementDrive ? 1 : 0],
+                        ] as const).map(([tab, label, count]) => (
+                          <button
+                            key={tab}
+                            type="button"
+                            onClick={() => setActiveTab(tab)}
+                            className={`flex items-center justify-center gap-1 rounded-lg px-2 py-1.5 transition-colors ${
+                              activeTab === tab
+                                ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
+                                : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                            }`}
+                          >
+                            {label}
+                            {count > 0 && (
+                              <span className="rounded-full bg-brand-600 px-1.5 text-[9px] leading-4 text-white">{count}</span>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {isStudent && activeTab === 'assessments' && (
+                      <div className="max-h-80 overflow-y-auto space-y-2">
+                        {upcomingExams.length === 0 ? (
+                          <div className="py-6 text-center">
+                            <Calendar className="h-7 w-7 text-slate-400 mx-auto mb-1" />
+                            <p className="text-xs font-semibold text-slate-900 dark:text-white">No upcoming exams</p>
+                            <p className="text-[10px] text-slate-500">Scheduled exams will appear here automatically.</p>
+                          </div>
+                        ) : (
+                          upcomingExams.map((exam) => (
+                            <div key={exam._id} className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
+                              <div className="flex items-center justify-between gap-2">
+                                <p className="font-semibold text-xs text-slate-900 dark:text-white truncate">{exam.title}</p>
+                                <Badge variant="amber">{exam.durationMinutes} Mins</Badge>
+                              </div>
+                              {exam.description && (
+                                <p className="mt-0.5 text-[11px] text-slate-500 truncate">{exam.description}</p>
+                              )}
+                              <div className="mt-2 flex items-center justify-between">
+                                <span className="text-[10px] text-slate-400">Total: {exam.totalMarks} Marks</span>
+                                <Link
+                                  to={`/student/exams/${exam._id}/instructions`}
+                                  onClick={() => setShowNotifications(false)}
+                                  className="px-2.5 py-1 rounded-lg bg-brand-600 text-white text-[11px] font-bold hover:bg-brand-700 transition-colors"
+                                >
+                                  Start Exam
+                                </Link>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    )}
+
+                    {isStudent && activeTab === 'placement' && (
+                      <div className="max-h-80 overflow-y-auto">
+                        {placementDrive ? (
+                          <div className="p-3 rounded-xl bg-brand-50/70 dark:bg-brand-950/40 border border-brand-200 dark:border-brand-900 space-y-1.5">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-xs font-bold text-brand-900 dark:text-brand-200 truncate">{placementDrive.company}</span>
+                              <Badge variant="green">{placementDrive.status}</Badge>
+                            </div>
+                            <p className="text-[11px] text-brand-700 dark:text-brand-300">Applied for: {placementDrive.title}</p>
+                            <div className="flex items-center gap-1 text-[10px] text-brand-600 font-semibold">
+                              <Clock className="h-3 w-3" /> Updated: {new Date(placementDrive.updatedAt).toLocaleDateString()}
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="py-6 text-center space-y-1">
+                            <Briefcase className="h-7 w-7 text-slate-400 mx-auto" />
+                            <p className="text-xs font-semibold text-slate-900 dark:text-white">No active placement applications</p>
+                            <p className="text-[10px] text-slate-500">Apply to partner companies to track your progress here.</p>
+                            <Link
+                              to="/student/jobs"
+                              onClick={() => setShowNotifications(false)}
+                              className="inline-block mt-1.5 px-3 py-1.5 rounded-lg bg-brand-600 text-white font-bold text-[11px]"
+                            >
+                              View Job Postings
+                            </Link>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <div className={`max-h-64 overflow-y-auto space-y-2 ${isStudent && activeTab !== 'alerts' ? 'hidden' : ''}`}>
                       {notifications.length === 0 ? (
                         <p className="text-xs text-slate-500 text-center py-4">No notifications yet</p>
                       ) : (
