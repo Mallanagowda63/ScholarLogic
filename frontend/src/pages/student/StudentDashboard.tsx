@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
 import { StatCard } from '../../components/StatCard';
 import { Badge } from '../../components/Badge';
+import { Leaderboard } from '../../components/Leaderboard';
 import {
   BookOpen,
   Award,
@@ -13,21 +14,10 @@ import {
   CheckCircle2,
   ArrowRight,
   ShieldCheck,
-  TrendingUp,
   Clock,
-  HelpCircle,
   FileText,
   AlertCircle,
 } from 'lucide-react';
-import {
-  ResponsiveContainer,
-  RadarChart,
-  PolarGrid,
-  PolarAngleAxis,
-  PolarRadiusAxis,
-  Radar,
-  Tooltip,
-} from 'recharts';
 
 export const StudentDashboard: React.FC = () => {
   const { user, studentProfile } = useAuth();
@@ -58,7 +48,6 @@ export const StudentDashboard: React.FC = () => {
 
   const metrics = data?.metrics || {};
   const student = data?.student || studentProfile;
-  const skillData = data?.skillData || [];
   const continueLearningCourses = data?.continueLearningCourses || [];
   const upcomingExams = data?.upcomingExams || [];
   const placementDrive = data?.placementDrive || null;
@@ -135,43 +124,8 @@ export const StudentDashboard: React.FC = () => {
 
       {/* Analytics & Continue Learning Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left 2 Cols: Skill Radar & Course Progress */}
+        {/* Left 2 Cols: Course Progress */}
         <div className="lg:col-span-2 space-y-8">
-          {/* Skill Performance Radar Chart */}
-          <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-4 mb-4">
-              <div>
-                <h3 className="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
-                  <TrendingUp className="h-5 w-5 text-brand-500" /> Skill Proficiency Radar
-                </h3>
-                <p className="text-xs text-slate-500">Evaluated from your actual online assessment exams and quizzes</p>
-              </div>
-              {skillData.length > 0 && <Badge variant="green" className="font-mono">Exam Verified</Badge>}
-            </div>
-
-            {skillData.length > 0 ? (
-              <div className="h-64 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <RadarChart data={skillData}>
-                    <PolarGrid stroke="#94a3b8" strokeDasharray="3 3" opacity={0.3} />
-                    <PolarAngleAxis dataKey="skill" tick={{ fill: '#64748b', fontSize: 11 }} />
-                    <PolarRadiusAxis angle={30} domain={[0, 100]} />
-                    <Radar name="Score" dataKey="score" stroke="#0c8ee9" fill="#0c8ee9" fillOpacity={0.4} />
-                    <Tooltip />
-                  </RadarChart>
-                </ResponsiveContainer>
-              </div>
-            ) : (
-              <div className="h-56 flex flex-col items-center justify-center rounded-xl bg-slate-50 dark:bg-slate-800/50 p-6 text-center">
-                <HelpCircle className="h-10 w-10 text-slate-400 mb-2" />
-                <h4 className="font-bold text-xs text-slate-900 dark:text-white">No assessment data yet</h4>
-                <p className="text-[11px] text-slate-500 mt-1 max-w-sm">
-                  Complete your first course assessment or online exam to generate your personalized skill proficiency radar.
-                </p>
-              </div>
-            )}
-          </div>
-
           {/* Continue Learning Course Cards */}
           <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -239,8 +193,10 @@ export const StudentDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Right 1 Col: Upcoming Exams & Placement Updates */}
+        {/* Right 1 Col: Leaderboard, Upcoming Exams & Placement Updates */}
         <div className="space-y-8">
+          <Leaderboard data={data?.leaderboard || null} />
+
           {/* Upcoming Exams Panel */}
           <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm space-y-4">
             <h3 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">

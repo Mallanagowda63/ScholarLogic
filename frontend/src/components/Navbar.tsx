@@ -38,7 +38,9 @@ export const Navbar: React.FC<{ isDashboard?: boolean }> = ({ isDashboard = fals
             setNotifications((prev) => [data.notification, ...prev]);
             setUnreadCount((prev) => prev + 1);
           }
-        } catch (err) {}
+        } catch {
+          // Ignore malformed / keep-alive SSE payloads
+        }
       };
 
       return () => {
@@ -54,7 +56,9 @@ export const Navbar: React.FC<{ isDashboard?: boolean }> = ({ isDashboard = fals
         prev.map((n) => (n._id === id ? { ...n, read: true } : n))
       );
       setUnreadCount((prev) => Math.max(0, prev - 1));
-    } catch (err) {}
+    } catch (err) {
+      console.error('Failed to mark notification as read', err);
+    }
   };
 
   const getDashboardPath = () => {

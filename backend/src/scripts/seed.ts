@@ -104,9 +104,9 @@ export async function seedDatabase(force: boolean = true) {
     dateOfBirth: '2004-05-15',
     gender: 'Male',
     location: 'Bangalore, Karnataka',
-    college: 'ScholarLogic Institute of Technology',
+    college: '',
     degree: 'B.Tech',
-    branch: 'Computer Science & Engineering',
+    branch: '',
     graduationYear: 2026,
     cgpa: 8.8,
     tenthPercentage: 92,
@@ -453,9 +453,9 @@ export async function seedDatabase(force: boolean = true) {
       ],
       education: [
         {
-          institution: 'ScholarLogic Institute of Technology',
+          institution: '',
           degree: 'B.Tech',
-          fieldOfStudy: 'Computer Science & Engineering',
+          fieldOfStudy: '',
           startDate: '2022',
           endDate: '2026',
           grade: 'CGPA: 8.8',

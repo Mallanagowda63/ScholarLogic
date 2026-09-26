@@ -25,9 +25,10 @@ export const ResumeBuilder: React.FC = () => {
   const studentEmail = user?.email || 'student@scholarlogic.edu';
   const studentPhone = studentProfile?.phone || '+91 98765 43210';
   const studentLocation = studentProfile?.location || 'India';
-  const studentCollege = studentProfile?.college || 'ScholarLogic Institute of Technology';
+  const studentCollege = studentProfile?.college || '';
   const studentDegree = studentProfile?.degree || 'B.Tech';
-  const studentBranch = studentProfile?.branch || 'Computer Science & Engineering';
+  const studentBranch = studentProfile?.branch || '';
+  const studentDegreeLine = studentBranch ? `${studentDegree} in ${studentBranch}` : studentDegree;
   const studentCgpa = studentProfile?.cgpa ? `CGPA: ${studentProfile.cgpa}` : 'Graduation 2026';
   const studentSkills = studentProfile?.skills?.length ? studentProfile.skills : ['Python', 'JavaScript', 'React', 'Node.js', 'Express', 'MongoDB', 'SQL', 'Git'];
   const studentGitHub = studentProfile?.githubUrl || 'github.com/scholarlogic-student';
@@ -73,7 +74,7 @@ export const ResumeBuilder: React.FC = () => {
     e.preventDefault();
     setAnalyzing(true);
     try {
-      const resumeTextPayload = `${studentName}\nEmail: ${studentEmail} | Phone: ${studentPhone}\nDegree: ${studentDegree} in ${studentBranch}\nSkills: ${studentSkills.join(', ')}`;
+      const resumeTextPayload = `${studentName}\nEmail: ${studentEmail} | Phone: ${studentPhone}\nDegree: ${studentDegreeLine}\nSkills: ${studentSkills.join(', ')}`;
       const res: any = await api.post('/resumes/analyze', {
         resumeText: resumeTextPayload,
         jobDescriptionText,
@@ -246,7 +247,7 @@ export const ResumeBuilder: React.FC = () => {
                   Professional Summary
                 </h3>
                 <p className="text-xs text-slate-700 leading-relaxed font-normal">
-                  Results-oriented software engineering graduate ({studentDegree} in {studentBranch}) with hands-on experience developing full-stack web applications, database management systems, and cloud infrastructure. Proficient in {studentSkills.slice(0, 5).join(', ')}, with a strong foundation in algorithm design and system engineering.
+                  Results-oriented software engineering graduate ({studentDegreeLine}) with hands-on experience developing full-stack web applications, database management systems, and cloud infrastructure. Proficient in {studentSkills.slice(0, 5).join(', ')}, with a strong foundation in algorithm design and system engineering.
                 </p>
               </div>
 
@@ -312,7 +313,7 @@ export const ResumeBuilder: React.FC = () => {
                   <span>{studentCollege}</span>
                   <span className="font-mono font-semibold text-slate-600">{studentCgpa}</span>
                 </div>
-                <p className="text-xs text-slate-700">{studentDegree} in {studentBranch}</p>
+                <p className="text-xs text-slate-700">{studentDegreeLine}</p>
               </div>
 
               {/* 6. CERTIFICATIONS */}

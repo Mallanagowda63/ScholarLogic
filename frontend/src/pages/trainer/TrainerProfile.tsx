@@ -7,7 +7,7 @@ export const TrainerProfile: React.FC = () => {
   const { user } = useAuth();
   const [fullName, setFullName] = useState(user?.fullName || 'Prof. Michael Vance');
   const [phone, setPhone] = useState('+91 98765 43210');
-  const [department, setDepartment] = useState('Computer Science & Engineering');
+  const [department, setDepartment] = useState('');
   const [specialization, setSpecialization] = useState('Full Stack Python & Cloud Architecture');
   const [experience, setExperience] = useState('8 Years');
   const [bio, setBio] = useState('Senior Lead Instructor specializing in Python Full Stack Development, Microservices Architecture, and Cloud Engineering.');

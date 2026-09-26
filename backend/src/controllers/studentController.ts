@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import { AuthRequest } from '../middleware/auth';
 import { Student } from '../models/Student';
+import { User } from '../models/User';
 import { Course } from '../models/Course';
 import { VideoProgress } from '../models/VideoProgress';
 import { LessonProgress } from '../models/LessonProgress';
@@ -102,9 +103,49 @@ export const getStudentDashboard = async (req: AuthRequest, res: Response): Prom
     totalLessons: doc.totalLessonsCount,
   }));
 
+  // 8. Exam Leaderboard: points = sum of each student's best score per exam
+  const standings: { _id: any; points: number; examsTaken: number }[] = await Result.aggregate([
+    { $group: { _id: { studentId: '$studentId', examId: '$examId' }, best: { $max: '$score' } } },
+    { $group: { _id: '$_id.studentId', points: { $sum: '$best' }, examsTaken: { $sum: 1 } } },
+    // Skip results left behind by deleted student/user accounts
+    { $lookup: { from: Student.collection.name, localField: '_id', foreignField: '_id', as: 'student' } },
+    { $unwind: '$student' },
+    { $lookup: { from: User.collection.name, localField: 'student.userId', foreignField: '_id', as: 'user' } },
+    { $unwind: '$user' },
+    { $addFields: { name: '$user.fullName' } },
+    { $project: { student: 0, user: 0 } },
+    { $sort: { points: -1, _id: 1 } },
+  ]);
+
+  const topStandings = standings.slice(0, 10);
+  const nameByStudentId = new Map(topStandings.map((s: any) => [String(s._id), s.name || 'Student']));
+
+  const myIndex = standings.findIndex((s) => String(s._id) === String(student._id));
+  const myLatestResult = recentResults[0];
+
+  const leaderboard = {
+    top: topStandings.map((s, i) => ({
+      rank: i + 1,
+      name: nameByStudentId.get(String(s._id)) || 'Student',
+      points: Math.round(s.points),
+      examsTaken: s.examsTaken,
+      isMe: String(s._id) === String(student._id),
+    })),
+    me: myIndex >= 0
+      ? {
+          rank: myIndex + 1,
+          points: Math.round(standings[myIndex].points),
+          examsTaken: standings[myIndex].examsTaken,
+          latestResultId: myLatestResult?._id || null,
+        }
+      : null,
+    totalParticipants: standings.length,
+  };
+
   res.json({
     success: true,
     data: {
+      leaderboard,
       student,
       metrics: {
         learningProgressPct,

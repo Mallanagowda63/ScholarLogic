@@ -8,9 +8,9 @@ export const Register: React.FC = () => {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [college, setCollege] = useState('ScholarLogic Institute of Technology');
+  const [college, setCollege] = useState('');
   const [degree, setDegree] = useState('B.Tech');
-  const [branch, setBranch] = useState('Computer Science & Engineering');
+  const [branch, setBranch] = useState('');
   const [preferredTrack, setPreferredTrack] = useState('Software Engineering');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
@@ -20,57 +20,71 @@ import { VerifyCertificate } from './pages/public/VerifyCertificate';
 import { PlacementDrive } from './pages/public/PlacementDrive';
 import { About } from './pages/public/About';
 
+// Portal pages are code-split so public visitors don't download the whole app.
+// Pages use named exports, so map the named export to the `default` React.lazy expects.
+const lazyPage = <K extends string>(
+  loader: () => Promise<Record<K, React.ComponentType>>,
+  name: K
+) => lazy(() => loader().then((m) => ({ default: m[name] })));
+
+const PageFallback: React.FC = () => (
+  <div className="flex min-h-[50vh] items-center justify-center">
+    <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-500 border-t-transparent" />
+  </div>
+);
+
 // Student Pages
-import { StudentDashboard } from './pages/student/StudentDashboard';
-import { StudentCourses } from './pages/student/StudentCourses';
-import { CourseDetail } from './pages/student/CourseDetail';
-import { StudentExams } from './pages/student/StudentExams';
-import { ExamInstructions } from './pages/student/ExamInstructions';
-import { ExamRunner } from './pages/student/ExamRunner';
-import { ExamResult } from './pages/student/ExamResult';
-import { ResumeBuilder } from './pages/student/ResumeBuilder';
-import { StudentJobs } from './pages/student/StudentJobs';
-import { StudentApplications } from './pages/student/StudentApplications';
-import { StudentProfile } from './pages/student/StudentProfile';
-import { Certificates } from './pages/student/Certificates';
-import { VoiceMockInterview } from './pages/student/VoiceMockInterview';
+const StudentDashboard = lazyPage(() => import('./pages/student/StudentDashboard'), 'StudentDashboard');
+const StudentCourses = lazyPage(() => import('./pages/student/StudentCourses'), 'StudentCourses');
+const CourseDetail = lazyPage(() => import('./pages/student/CourseDetail'), 'CourseDetail');
+const StudentExams = lazyPage(() => import('./pages/student/StudentExams'), 'StudentExams');
+const ExamInstructions = lazyPage(() => import('./pages/student/ExamInstructions'), 'ExamInstructions');
+const ExamRunner = lazyPage(() => import('./pages/student/ExamRunner'), 'ExamRunner');
+const ExamResult = lazyPage(() => import('./pages/student/ExamResult'), 'ExamResult');
+const ResumeBuilder = lazyPage(() => import('./pages/student/ResumeBuilder'), 'ResumeBuilder');
+const StudentJobs = lazyPage(() => import('./pages/student/StudentJobs'), 'StudentJobs');
+const StudentApplications = lazyPage(() => import('./pages/student/StudentApplications'), 'StudentApplications');
+const StudentProfile = lazyPage(() => import('./pages/student/StudentProfile'), 'StudentProfile');
+const Certificates = lazyPage(() => import('./pages/student/Certificates'), 'Certificates');
+const VoiceMockInterview = lazyPage(() => import('./pages/student/VoiceMockInterview'), 'VoiceMockInterview');
 
 // Admin Pages
-import { AdminDashboard } from './pages/admin/AdminDashboard';
-import { AdminStudents } from './pages/admin/AdminStudents';
+const AdminDashboard = lazyPage(() => import('./pages/admin/AdminDashboard'), 'AdminDashboard');
+const AdminStudents = lazyPage(() => import('./pages/admin/AdminStudents'), 'AdminStudents');
 
 // Upgraded Trainer Workspace Pages
-import { TrainerDashboard } from './pages/trainer/TrainerDashboard';
-import { TrainerCourses } from './pages/trainer/TrainerCourses';
-import { CourseContentEditor } from './pages/trainer/CourseContentEditor';
-import { TrainerStudents } from './pages/trainer/TrainerStudents';
-import { StudentDetailView } from './pages/trainer/StudentDetailView';
-import { TrainerAssignments } from './pages/trainer/TrainerAssignments';
-import { TrainerAssessments } from './pages/trainer/TrainerAssessments';
-import { TrainerQuestionBank } from './pages/trainer/TrainerQuestionBank';
-import { TrainerExamResults } from './pages/trainer/TrainerExamResults';
-import { TrainerAttendance } from './pages/trainer/TrainerAttendance';
-import { TrainerCalendar } from './pages/trainer/TrainerCalendar';
-import { TrainerAnnouncements } from './pages/trainer/TrainerAnnouncements';
-import { TrainerMessages } from './pages/trainer/TrainerMessages';
-import { TrainerAnalytics } from './pages/trainer/TrainerAnalytics';
-import { TrainerProfile } from './pages/trainer/TrainerProfile';
-import { TrainerGradingPanel } from './pages/trainer/TrainerGradingPanel';
-import { QuestionBankImporter } from './pages/trainer/QuestionBankImporter';
+const TrainerDashboard = lazyPage(() => import('./pages/trainer/TrainerDashboard'), 'TrainerDashboard');
+const TrainerCourses = lazyPage(() => import('./pages/trainer/TrainerCourses'), 'TrainerCourses');
+const CourseContentEditor = lazyPage(() => import('./pages/trainer/CourseContentEditor'), 'CourseContentEditor');
+const TrainerStudents = lazyPage(() => import('./pages/trainer/TrainerStudents'), 'TrainerStudents');
+const StudentDetailView = lazyPage(() => import('./pages/trainer/StudentDetailView'), 'StudentDetailView');
+const TrainerAssignments = lazyPage(() => import('./pages/trainer/TrainerAssignments'), 'TrainerAssignments');
+const TrainerAssessments = lazyPage(() => import('./pages/trainer/TrainerAssessments'), 'TrainerAssessments');
+const TrainerQuestionBank = lazyPage(() => import('./pages/trainer/TrainerQuestionBank'), 'TrainerQuestionBank');
+const TrainerExamResults = lazyPage(() => import('./pages/trainer/TrainerExamResults'), 'TrainerExamResults');
+const TrainerAttendance = lazyPage(() => import('./pages/trainer/TrainerAttendance'), 'TrainerAttendance');
+const TrainerCalendar = lazyPage(() => import('./pages/trainer/TrainerCalendar'), 'TrainerCalendar');
+const TrainerAnnouncements = lazyPage(() => import('./pages/trainer/TrainerAnnouncements'), 'TrainerAnnouncements');
+const TrainerMessages = lazyPage(() => import('./pages/trainer/TrainerMessages'), 'TrainerMessages');
+const TrainerAnalytics = lazyPage(() => import('./pages/trainer/TrainerAnalytics'), 'TrainerAnalytics');
+const TrainerProfile = lazyPage(() => import('./pages/trainer/TrainerProfile'), 'TrainerProfile');
+const TrainerGradingPanel = lazyPage(() => import('./pages/trainer/TrainerGradingPanel'), 'TrainerGradingPanel');
+const QuestionBankImporter = lazyPage(() => import('./pages/trainer/QuestionBankImporter'), 'QuestionBankImporter');
 
 // Upgraded Placement Intelligence Platform Pages
-import { PlacementDashboard } from './pages/placement/PlacementDashboard';
-import { PlacementCompanies } from './pages/placement/PlacementCompanies';
-import { CompanyComparison } from './pages/placement/CompanyComparison';
-import { PlacementJobs } from './pages/placement/PlacementJobs';
-import { HiringIntelligence } from './pages/placement/HiringIntelligence';
-import { PlacementReports } from './pages/placement/PlacementReports';
+const PlacementDashboard = lazyPage(() => import('./pages/placement/PlacementDashboard'), 'PlacementDashboard');
+const PlacementCompanies = lazyPage(() => import('./pages/placement/PlacementCompanies'), 'PlacementCompanies');
+const CompanyComparison = lazyPage(() => import('./pages/placement/CompanyComparison'), 'CompanyComparison');
+const PlacementJobs = lazyPage(() => import('./pages/placement/PlacementJobs'), 'PlacementJobs');
+const HiringIntelligence = lazyPage(() => import('./pages/placement/HiringIntelligence'), 'HiringIntelligence');
+const PlacementReports = lazyPage(() => import('./pages/placement/PlacementReports'), 'PlacementReports');
 
 export const App: React.FC = () => {
   return (
     <ThemeProvider>
       <AuthProvider>
         <BrowserRouter>
+          <Suspense fallback={<PageFallback />}>
           <Routes>
             {/* Public Marketing Routes */}
             <Route element={<PublicLayout />}>
@@ -163,6 +177,7 @@ export const App: React.FC = () => {
             {/* Fallback */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          </Suspense>
         </BrowserRouter>
       </AuthProvider>
     </ThemeProvider>

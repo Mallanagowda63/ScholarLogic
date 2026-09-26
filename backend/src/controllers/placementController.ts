@@ -430,14 +430,14 @@ export const applyToJob = async (req: AuthRequest, res: Response): Promise<void>
           email: userEmail,
           phone: student.phone || '+91 98765 43210',
           location: student.location || 'Bangalore, India',
-          summary: `Student pursuing ${student.degree || 'B.Tech'} in ${student.branch || 'CSE'}.`,
+          summary: `Student pursuing ${student.degree || 'B.Tech'}${student.branch ? ` in ${student.branch}` : ''}.`,
           skills: student.skills?.length ? student.skills : ['Python', 'JavaScript', 'SQL', 'React', 'Git'],
           experience: [],
           education: [
             {
-              institution: student.college || 'ScholarLogic Institute of Technology',
+              institution: student.college || '',
               degree: student.degree || 'B.Tech',
-              fieldOfStudy: student.branch || 'Computer Science & Engineering',
+              fieldOfStudy: student.branch || '',
               startDate: '2022',
               endDate: String(student.graduationYear || 2026),
               grade: `CGPA: ${student.cgpa || 8.5}`,
