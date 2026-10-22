@@ -17,6 +17,29 @@ interface Banner {
 
 const BANNER_SIZE = '1257 × 360 px';
 
+// Banners are shown to every student on every visit, so keep them small: at most 1600 px wide,
+// re-encoded as WebP (JPEG where the browser cannot write WebP). A 600 KB PNG becomes about 60 KB.
+async function compressBanner(file: File): Promise<File> {
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const i = new Image();
+    i.onload = () => resolve(i);
+    i.onerror = () => reject(new Error('That file could not be read as an image'));
+    i.src = URL.createObjectURL(file);
+  });
+  const scale = Math.min(1, 1600 / img.naturalWidth);
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(img.naturalWidth * scale);
+  canvas.height = Math.round(img.naturalHeight * scale);
+  canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
+  URL.revokeObjectURL(img.src);
+  const encode = (type: string) => new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, type, 0.82));
+  let blob = await encode('image/webp');
+  if (!blob || blob.type !== 'image/webp') blob = await encode('image/jpeg');
+  if (!blob || blob.size >= file.size) return file; // already small: keep the original
+  const ext = blob.type === 'image/webp' ? 'webp' : 'jpg';
+  return new File([blob], file.name.replace(/\.[^.]+$/, '') + '.' + ext, { type: blob.type });
+}
+
 const BannerForm: React.FC<{ banner?: Banner; onClose: () => void; onDone: (msg: string) => void }> = ({ banner, onClose, onDone }) => {
   const [title, setTitle] = useState(banner?.title || '');
   const [isActive, setIsActive] = useState(banner?.isActive ?? true);
@@ -33,12 +56,18 @@ const BannerForm: React.FC<{ banner?: Banner; onClose: () => void; onDone: (msg:
     return () => URL.revokeObjectURL(url);
   }, [file]);
 
-  const pick = (f?: File) => {
+  const pick = async (f?: File) => {
     if (!f) return;
     if (!/^image\/(png|jpeg|webp)$/.test(f.type)) return setError('Choose a PNG, JPG or WEBP image');
-    if (f.size > 5 * 1024 * 1024) return setError('The image must be 5 MB or smaller');
+    if (f.size > 15 * 1024 * 1024) return setError('The image must be 15 MB or smaller');
     setError('');
-    setFile(f);
+    try {
+      const small = await compressBanner(f);
+      if (small.size > 5 * 1024 * 1024) return setError('The image is still over 5 MB after compressing; please use a smaller one');
+      setFile(small);
+    } catch (err: any) {
+      setError(err.message);
+    }
   };
 
   const submit = async (e: React.FormEvent) => {

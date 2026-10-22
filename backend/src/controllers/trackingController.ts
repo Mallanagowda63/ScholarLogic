@@ -155,7 +155,8 @@ const summarizeStudent = (student: any, journey: ReturnType<typeof buildJourney>
 });
 
 export const listTrackedStudents = async (_req: AuthRequest, res: Response) => {
-  const students = await Student.find({}).populate('userId', 'fullName email').sort({ createdAt: -1 });
+  // Only the fields the list and journey need, as plain objects: much faster with hundreds of students
+  const students: any[] = await Student.find({}).select('studentId phone enrollment enrollmentDate registrationSource userId createdAt biometricId cardNumber').populate('userId', 'fullName email').sort({ createdAt: -1 }).lean();
   const ctx = await loadJourneyContext(students.map((s) => s._id));
   res.json({ success: true, data: { students: students.map((s) => summarizeStudent(s, buildJourney(s, ctx))) } });
 };
@@ -760,7 +761,7 @@ export const submitDailyUpdate = async (req: AuthRequest, res: Response) => {
 // ---------------------------------------------------------------------------
 
 export const getOverview = async (_req: AuthRequest, res: Response) => {
-  const students = await Student.find({}).populate('userId', 'fullName email');
+  const students: any[] = await Student.find({}).select('studentId phone enrollment enrollmentDate registrationSource userId createdAt biometricId cardNumber').populate('userId', 'fullName email').lean();
   const ctx = await loadJourneyContext(students.map((s) => s._id));
   const summaries = students.map((s) => summarizeStudent(s, buildJourney(s, ctx)));
   const batches = await listBatchSummaries();
