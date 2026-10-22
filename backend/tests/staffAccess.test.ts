@@ -137,6 +137,21 @@ describe('Admin → Staff Access', () => {
     expect((await as(admin).put(`/api/admin/staff/${id2}`).send({ role: 'TRAINER' })).status).toBe(200);
   });
 
+  it('changing the login email keeps the same password', async () => {
+    const res = await as(admin).post('/api/admin/staff').send({ fullName: 'Mail Change', email: 'old.mail@campus.com', role: 'ADMIN' });
+    const id = res.body.data.staff._id;
+    const pw = res.body.data.password;
+    const upd = await as(admin).put(`/api/admin/staff/${id}`).send({ email: 'New.Mail@Campus.com' });
+    expect(upd.status).toBe(200);
+    expect(upd.body.data.staff.email).toBe('new.mail@campus.com');
+    expect((await login('old.mail@campus.com', pw)).status).toBe(401);
+    expect((await login('new.mail@campus.com', pw)).status).toBe(200);
+    expect((await as(admin).put(`/api/admin/staff/${id}`).send({ email: 'trainer@scholarlogic.edu' })).status).toBe(409);
+    expect((await as(admin).put(`/api/admin/staff/${id}`).send({ email: 'not-an-email' })).status).toBe(400);
+    const me = await User.findOne({ email: 'admin@scholarlogic.edu' });
+    expect((await as(admin).put(`/api/admin/staff/${me!._id}`).send({ email: 'me2@campus.com' })).status).toBe(400);
+  });
+
   it('this screen never touches student accounts', async () => {
     const studentUser = await User.findOne({ role: 'STUDENT' });
     expect((await as(admin).put(`/api/admin/staff/${studentUser!._id}`).send({ isActive: false })).status).toBe(404);

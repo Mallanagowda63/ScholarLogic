@@ -133,7 +133,7 @@ router.put(
   '/:id',
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const user = await staffAccount(String(req.params.id));
-    const { fullName, role, isActive } = req.body || {};
+    const { fullName, role, isActive, email } = req.body || {};
     const changes: Record<string, unknown> = {};
     const demoting = role !== undefined && role !== user.role && user.role === 'ADMIN';
     const disabling = isActive === false && user.isActive !== false;
@@ -141,6 +141,16 @@ router.put(
     if (demoting || disabling) await assertAnotherActiveAdmin(user);
     if (typeof fullName === 'string' && fullName.trim() && fullName.trim() !== user.fullName) {
       changes.fullName = user.fullName = fullName.trim();
+    }
+    // New login email; the password stays the same
+    if (typeof email === 'string' && email.trim().toLowerCase() !== user.email) {
+      const next = email.trim().toLowerCase();
+      if (isSelf(req, user)) throw new AppError('Change your own login email on Login & Password', 400, 'SELF_CHANGE');
+      if (!EMAIL_RE.test(next)) throw new AppError('Enter a valid email address', 400, 'INVALID_EMAIL');
+      if (await User.exists({ email: next, _id: { $ne: user._id } })) throw new AppError('Another account already uses this email', 409, 'DUPLICATE');
+      changes.email = next;
+      changes.previousEmail = user.email;
+      user.email = next;
     }
     if (role !== undefined && role !== user.role) {
       if (!STAFF_ROLES.includes(role)) throw new AppError('Choose Admin, Trainer or Placement team', 400, 'INVALID_ROLE');
@@ -155,7 +165,14 @@ router.put(
     if (Object.keys(changes).length) {
       await audit(req, changes.isActive === false ? 'STAFF_ACCESS_REMOVED' : changes.isActive === true ? 'STAFF_ACCESS_RESTORED' : 'STAFF_UPDATED', user, changes);
     }
-    const message = changes.isActive === false ? `${user.fullName} can no longer log in` : changes.isActive === true ? `${user.fullName} can log in again` : 'Saved';
+    const message =
+      changes.isActive === false
+        ? `${user.fullName} can no longer log in`
+        : changes.isActive === true
+          ? `${user.fullName} can log in again`
+          : changes.email
+            ? `${user.fullName} now logs in with ${user.email} (same password)`
+            : 'Saved';
     res.json({ success: true, message, data: { staff: view(user) } });
   })
 );

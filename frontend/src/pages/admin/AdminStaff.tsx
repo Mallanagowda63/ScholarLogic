@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Copy, KeyRound, Search, ShieldCheck, ShieldOff, Trash2, UserPlus } from 'lucide-react';
+import { Copy, KeyRound, Pencil, Search, ShieldCheck, ShieldOff, Trash2, UserPlus } from 'lucide-react';
 import { api } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { Card, EmptyRow, ErrorNote, Field, Modal, PageHeader, Spinner, inputClass, primaryBtn, secondaryBtn, useToast } from './tracking/shared';
@@ -77,6 +77,31 @@ export const AdminStaff: React.FC = () => {
   const [formError, setFormError] = useState('');
   const [busy, setBusy] = useState('');
   const [reveal, setReveal] = useState<{ staff: Staff; password: string } | null>(null);
+  // Edit name / login email; the password is not touched
+  const [editing, setEditing] = useState<Staff | null>(null);
+  const [editForm, setEditForm] = useState({ fullName: '', email: '' });
+  const [editError, setEditError] = useState('');
+  const openEdit = (s: Staff) => {
+    setEditing(s);
+    setEditForm({ fullName: s.fullName, email: s.email });
+    setEditError('');
+  };
+  const saveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editing) return;
+    setBusy(editing._id);
+    setEditError('');
+    try {
+      const res: any = await api.put(`/admin/staff/${editing._id}`, { fullName: editForm.fullName.trim(), email: editForm.email.trim() });
+      setEditing(null);
+      toast.show(res.message);
+      load();
+    } catch (err: any) {
+      setEditError(err.message);
+    } finally {
+      setBusy('');
+    }
+  };
   const [confirm, setConfirm] = useState<{ kind: 'reset' | 'remove' | 'delete'; staff: Staff } | null>(null);
 
   const load = () =>
@@ -253,8 +278,13 @@ export const AdminStaff: React.FC = () => {
                       <td className="px-3 py-3 whitespace-nowrap text-slate-500">{fmt(s.passwordChangedAt)}</td>
                       <td className="px-3 py-3">
                         <div className="flex flex-wrap gap-2">
+                          {!isMe(s) && (
+                            <button type="button" className={`${secondaryBtn} !px-2.5 !py-1`} disabled={busy === s._id} onClick={() => openEdit(s)}>
+                              <Pencil className="h-3.5 w-3.5" /> Edit
+                            </button>
+                          )}
                           {isMe(s) ? (
-                            <span className="text-[11px] text-slate-400">This is you. Change your password on Login &amp; Password.</span>
+                            <span className="text-[11px] text-slate-400">This is you. Change your email or password on Login &amp; Password.</span>
                           ) : s.isActive ? (
                             <>
                               <button type="button" className={`${secondaryBtn} !px-2.5 !py-1`} disabled={busy === s._id} onClick={() => setConfirm({ kind: 'reset', staff: s })}>
@@ -364,6 +394,33 @@ export const AdminStaff: React.FC = () => {
               {confirm.kind === 'reset' ? 'Generate new password' : confirm.kind === 'delete' ? 'Delete permanently' : 'Remove access'}
             </button>
           </div>
+        </Modal>
+      )}
+
+      {editing && (
+        <Modal title={`Edit ${editing.fullName}`} subtitle="Change the name or login email. The password stays the same; they sign in with the new email." onClose={() => setEditing(null)}>
+          <ErrorNote text={editError} />
+          <form onSubmit={saveEdit} className="space-y-3">
+            <Field label="Full name" required>
+              <input id="edit-name" className={inputClass} value={editForm.fullName} onChange={(e) => setEditForm((f) => ({ ...f, fullName: e.target.value }))} required />
+            </Field>
+            <Field label="Login email" required hint={`Now: ${editing.email}`}>
+              <input id="edit-email" type="email" className={inputClass} value={editForm.email} onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))} required />
+            </Field>
+            {editForm.email.trim().toLowerCase() !== editing.email && (
+              <p className="rounded-xl bg-brand-50 dark:bg-brand-950/40 p-3 text-xs text-brand-800 dark:text-brand-200">
+                From now on {editing.fullName} logs in with <b>{editForm.email.trim().toLowerCase()}</b> and the <b>same password</b> as before. Let them know.
+              </p>
+            )}
+            <div className="flex justify-end gap-2 pt-1">
+              <button type="button" className={secondaryBtn} onClick={() => setEditing(null)}>
+                Cancel
+              </button>
+              <button type="submit" className={primaryBtn} disabled={busy === editing._id}>
+                {busy === editing._id ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </form>
         </Modal>
       )}
 
