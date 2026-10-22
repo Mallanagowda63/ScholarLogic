@@ -1,4 +1,11 @@
 import { Router } from 'express';
+import mongoose from 'mongoose';
+import { Response } from 'express';
+import { AuthRequest } from '../middleware/auth';
+import { AppError } from '../middleware/errorHandler';
+import { Student } from '../models/Student';
+import { AuditLog } from '../models/AuditLog';
+import { deleteStudentCompletely } from '../services/studentDeletion';
 import {
   allocateStudent,
   changeMode,
@@ -78,6 +85,28 @@ router.get('/students', admin, asyncHandler(listTrackedStudents));
 router.post('/students', admin, asyncHandler(createTrackedStudent));
 router.get('/students/:id', admin, asyncHandler(getTrackedStudent));
 router.put('/students/:id', admin, asyncHandler(updateTrackedStudent));
+// Permanently delete a student (login, profile and their own records); audit-logged
+router.delete(
+  '/students/:id',
+  admin,
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const id = String(req.params.id);
+    if (!mongoose.isValidObjectId(id)) throw new AppError('Invalid student', 400, 'INVALID_ID');
+    const student: any = await Student.findById(id).select('studentId userId').populate('userId', 'fullName email').lean();
+    if (!student) throw new AppError('Student not found', 404, 'NOT_FOUND');
+    const result = await deleteStudentCompletely(id);
+    await AuditLog.create({
+      userId: req.user?.userId,
+      userEmail: req.user?.email,
+      userRole: req.user?.role,
+      action: 'STUDENT_DELETED',
+      resource: 'STUDENT',
+      metadata: { studentId: student.studentId, fullName: student.userId?.fullName, removed: result?.summary },
+      ipAddress: req.ip,
+    }).catch(() => undefined);
+    res.json({ success: true, message: `${student.userId?.fullName || student.studentId} was deleted`, data: result });
+  })
+);
 router.post('/students/:id/allocate', admin, asyncHandler(allocateStudent));
 router.post('/students/:id/status', admin, asyncHandler(changeTrainingStatus));
 router.post('/students/:id/mode', admin, asyncHandler(changeMode));
