@@ -10,3 +10,7 @@ dist-ssr
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# TypeScript build cache, rewritten by every build
+tsconfig.tsbuildinfo
+*.tsbuildinfo
