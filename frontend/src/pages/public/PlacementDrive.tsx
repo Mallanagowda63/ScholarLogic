@@ -1,4 +1,5 @@
 import React from 'react';
+import { COURSES_PAGE_URL } from '../../config/siteLinks';
 import { Link } from 'react-router-dom';
 import {
   Briefcase,
@@ -158,12 +159,12 @@ export const PlacementDrive: React.FC = () => {
             Sign in with your ScholarLogic Student ID and start matching with verified hiring partners.
           </p>
           <div className="relative z-10 mt-6 flex flex-wrap items-center justify-center gap-4">
-            <Link
-              to="/courses"
+            <a
+              href={COURSES_PAGE_URL}
               className="inline-flex items-center gap-2 rounded-xl border border-white/30 bg-white/10 px-6 py-3 text-sm font-semibold text-white hover:bg-white/20 transition-colors backdrop-blur-md"
             >
               Browse Courses First
-            </Link>
+            </a>
           </div>
         </div>
       </section>

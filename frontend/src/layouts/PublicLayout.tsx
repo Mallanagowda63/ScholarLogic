@@ -1,17 +1,8 @@
 import React from 'react';
+import { COURSES_PAGE_URL, PROGRAMS } from '../config/siteLinks';
 import { Link, Outlet } from 'react-router-dom';
 import { Navbar } from '../components/Navbar';
 import { Heart, Mail, Phone, MapPin } from 'lucide-react';
-
-// Footer program links open the course catalogue searched for that program
-const PROGRAMS: [string, string][] = [
-  ['Python Full Stack Development', 'Python'],
-  ['Java Full Stack Development', 'Java'],
-  ['Cloud Computing (AWS)', 'Cloud'],
-  ['Data Analytics & Power BI', 'Data Analytics'],
-  ['Digital Marketing', 'Digital Marketing'],
-  ['DevOps Engineering', 'DevOps'],
-];
 
 export const PublicLayout: React.FC = () => {
   return (
@@ -46,13 +37,18 @@ export const PublicLayout: React.FC = () => {
             <div>
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white mb-3">Popular Programs</h4>
               <ul className="space-y-2 text-xs text-slate-600 dark:text-slate-400">
-                {PROGRAMS.map(([label, q]) => (
-                  <li key={label}>
-                    <Link to={`/courses?q=${encodeURIComponent(q)}`} className="hover:text-brand-600 dark:hover:text-brand-400 hover:underline transition-colors">
-                      {label}
-                    </Link>
+                {PROGRAMS.map((p) => (
+                  <li key={p.name}>
+                    <a href={p.url} className="hover:text-brand-600 dark:hover:text-brand-400 hover:underline transition-colors">
+                      {p.name}
+                    </a>
                   </li>
                 ))}
+                <li>
+                  <a href={COURSES_PAGE_URL} className="font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+                    All courses →
+                  </a>
+                </li>
               </ul>
             </div>
 

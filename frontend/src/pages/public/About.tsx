@@ -1,4 +1,5 @@
 import React from 'react';
+import { COURSES_PAGE_URL } from '../../config/siteLinks';
 import { Link } from 'react-router-dom';
 import {
   GraduationCap,
@@ -72,12 +73,12 @@ export const About: React.FC = () => {
           </p>
 
           <div className="flex flex-wrap items-center gap-4 pt-2">
-            <Link
-              to="/courses"
+            <a
+              href={COURSES_PAGE_URL}
               className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-6 py-3 text-sm font-semibold text-white hover:bg-white/20 transition-colors backdrop-blur-md"
             >
               Browse Courses
-            </Link>
+            </a>
           </div>
         </div>
 

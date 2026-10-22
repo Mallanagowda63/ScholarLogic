@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { COURSES_PAGE_URL } from '../config/siteLinks';
 import { UserAvatar } from './UserAvatar';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
@@ -116,7 +117,7 @@ export const Navbar: React.FC<{ isDashboard?: boolean }> = ({ isDashboard = fals
         {!isDashboard && (
           <nav className="hidden md:flex items-center gap-8 text-sm font-medium text-slate-600 dark:text-slate-300">
             <Link to="/" className="hover:text-brand-600 dark:hover:text-brand-400 transition-colors">Home</Link>
-            <Link to="/courses" className="hover:text-brand-600 dark:hover:text-brand-400 transition-colors">Courses</Link>
+            <a href={COURSES_PAGE_URL} className="hover:text-brand-600 dark:hover:text-brand-400 transition-colors">Courses</a>
             <Link to="/placement" className="hover:text-brand-600 dark:hover:text-brand-400 transition-colors">Placement Drive</Link>
             <Link to="/about" className="hover:text-brand-600 dark:hover:text-brand-400 transition-colors">About Us</Link>
           </nav>
