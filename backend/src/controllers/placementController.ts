@@ -7,6 +7,22 @@ import { Application } from '../models/Application';
 import { Student } from '../models/Student';
 import { Resume } from '../models/Resume';
 import { AppError } from '../middleware/errorHandler';
+import { PLACEHOLDER_EMAIL_DOMAIN } from '../services/trackingService';
+
+// Only http(s) links are stored, so a job can never send students to a javascript: or file: URL
+const cleanApplyUrl = (raw: unknown) => {
+  const value = String(raw ?? '').trim();
+  if (!value) return '';
+  let url: URL;
+  try {
+    url = new URL(/^https?:\/\//i.test(value) ? value : `https://${value}`);
+  } catch {
+    throw new AppError('The company application link is not a valid web address', 400, 'INVALID_URL');
+  }
+  if (!['http:', 'https:'].includes(url.protocol)) throw new AppError('The company application link must start with http:// or https://', 400, 'INVALID_URL');
+  return url.toString();
+};
+const realEmail = (email?: string) => (email && !email.endsWith(`@${PLACEHOLDER_EMAIL_DOMAIN}`) ? email : '');
 
 export const getPlacementOverview = async (req: AuthRequest, res: Response): Promise<void> => {
   const partnerCompanyCount = await Company.countDocuments();
@@ -190,6 +206,10 @@ export const getJobPostings = async (req: AuthRequest, res: Response): Promise<v
     query.postingType = 'OFFICIAL_COMPANY_POSTING';
   } else if (type === 'scholarlogic') {
     query.postingType = 'SCHOLARLOGIC_POSTING';
+  }
+  // Draft postings are only visible to staff
+  if (req.user?.role === 'STUDENT') {
+    query.status = { $ne: 'DRAFT' };
   }
 
   const jobs = await Job.find(query)
@@ -553,10 +573,32 @@ export const getApplicationDetail = async (req: AuthRequest, res: Response): Pro
 };
 
 export const createJobPosting = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { title, companyId, description, type, postingType, location, salaryPackage, requiredSkills, eligibilityCriteria, deadline, openings, sourceUrl } = req.body;
+  const { title, description, type, postingType, location, salaryPackage, requiredSkills, eligibilityCriteria, deadline, openings, sourceUrl, applyUrl } = req.body;
+  let { companyId } = req.body;
+  const companyName = String(req.body.companyName || '').trim();
 
-  if (!title || !companyId || !description || !location || !salaryPackage) {
+  if (!title || (!companyId && !companyName) || !description || !location || !salaryPackage) {
     throw new AppError('Job title, company, description, location, and salary package are required', 400, 'MISSING_FIELDS');
+  }
+
+  // A typed company name: reuse the company with that name, or add it (details can be completed later)
+  if (!companyId) {
+    const escaped = companyName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const existing = await Company.findOne({ name: { $regex: `^${escaped}$`, $options: 'i' } }).select('_id');
+    companyId = existing
+      ? existing._id
+      : (
+          await Company.create({
+            name: companyName,
+            location,
+            headquarters: location,
+            hiringStatus: 'HIRING_NOW',
+            verificationStatus: 'PENDING',
+            sourceType: 'SCHOLARLOGIC_INTERNAL',
+          })
+        )._id;
+  } else if (!mongoose.isValidObjectId(companyId) || !(await Company.exists({ _id: companyId }))) {
+    throw new AppError('Company not found', 404, 'NOT_FOUND');
   }
 
   const job = await Job.create({
@@ -573,6 +615,7 @@ export const createJobPosting = async (req: AuthRequest, res: Response): Promise
     openings: openings || 5,
     status: 'OPEN',
     sourceUrl: sourceUrl || '',
+    applyUrl: cleanApplyUrl(applyUrl),
     sourceType: postingType === 'OFFICIAL_COMPANY_POSTING' ? 'OFFICIAL_CAREERS_PAGE' : 'SCHOLARLOGIC_INTERNAL',
     lastVerifiedAt: new Date(),
     createdById: req.user!.userId,
@@ -886,26 +929,20 @@ export const exportApplicantsCSV = async (req: AuthRequest, res: Response): Prom
     .populate('companyId', 'name')
     .populate({
       path: 'studentId',
-      select: 'studentId branch cgpa',
+      select: 'studentId branch cgpa phone',
       populate: { path: 'userId', select: 'fullName email' },
     })
     .sort({ createdAt: -1 });
 
-  let csv = 'Application ID,Student ID,Student Name,Email,Branch,CGPA,Job Title,Company,Status,Applied Date\n';
+  let csv = 'Application ID,Student ID,Student Name,Email,Phone,Branch,CGPA,Job Title,Company,Applied Via,Status,Applied Date\n';
 
   applications.forEach((app: any) => {
     const appId = `SL-APP-${app._id.toString().slice(-6).toUpperCase()}`;
-    const studentId = app.studentId?.studentId || 'SL-2026-00001';
-    const studentName = `"${app.studentId?.userId?.fullName || 'Alex Morgan'}"`;
-    const email = app.studentId?.userId?.email || 'student@scholarlogic.edu';
-    const branch = app.studentId?.branch || 'CSE';
-    const cgpa = app.studentId?.cgpa || 8.5;
-    const jobTitle = `"${app.jobId?.title || 'Software Engineer'}"`;
-    const company = `"${app.companyId?.name || 'ScholarLogic Partner'}"`;
-    const status = app.status;
+    const q = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const s = app.studentId;
+    const via = app.appliedVia === 'COMPANY_SITE' ? 'Company website' : 'ScholarLogic portal';
     const date = new Date(app.appliedAt || app.createdAt).toLocaleDateString();
-
-    csv += `${appId},${studentId},${studentName},${email},${branch},${cgpa},${jobTitle},${company},${status},${date}\n`;
+    csv += [appId, s?.studentId, s?.userId?.fullName, realEmail(s?.userId?.email), s?.phone, s?.branch, s?.cgpa, app.jobId?.title, app.companyId?.name, via, app.status, date].map(q).join(',') + '\n';
   });
 
   res.setHeader('Content-Type', 'text/csv');
@@ -952,4 +989,93 @@ export const getInterviewICS = async (req: AuthRequest, res: Response): Promise<
   res.setHeader('Content-Type', 'text/calendar');
   res.setHeader('Content-Disposition', `attachment; filename="interview-${application._id}.ics"`);
   res.status(200).send(icsContent);
+};
+
+/**
+ * Student clicked Apply on a job that has the company's own application link. The student finishes
+ * the application on the company's site; ScholarLogic records who went to apply and when, once per job.
+ */
+export const recordExternalApplication = async (req: AuthRequest, res: Response): Promise<void> => {
+  if (!req.user || req.user.role !== 'STUDENT') throw new AppError('Only students can apply to jobs', 403, 'FORBIDDEN');
+  if (!mongoose.isValidObjectId(req.params.id)) throw new AppError('Invalid job', 400, 'INVALID_ID');
+  const student = await Student.findOne({ userId: req.user.userId }).select('_id');
+  if (!student) throw new AppError('Student profile not found', 404, 'STUDENT_NOT_FOUND');
+  const job = await Job.findById(req.params.id);
+  if (!job) throw new AppError('Job posting not found', 404, 'JOB_NOT_FOUND');
+  if (!job.applyUrl) throw new AppError('This job has no company application link', 400, 'NO_APPLY_URL');
+
+  const existing = await Application.findOne({ jobId: job._id, studentId: student._id });
+  if (existing) {
+    // Opening the company's page again is fine; the application is already on record
+    res.json({ success: true, message: 'Already recorded', data: { applyUrl: job.applyUrl, alreadyApplied: true, application: existing } });
+    return;
+  }
+  if (job.status !== 'OPEN') throw new AppError('This job drive is closed', 400, 'JOB_CLOSED');
+  if (new Date() > new Date(job.deadline)) throw new AppError('The application deadline has passed', 400, 'DEADLINE_EXCEEDED');
+
+  const application = await Application.create({
+    jobId: job._id,
+    studentId: student._id,
+    companyId: job.companyId,
+    status: 'APPLIED',
+    placementRound: 'Applied on company website',
+    appliedVia: 'COMPANY_SITE',
+    externalApplyUrl: job.applyUrl,
+    appliedAt: new Date(),
+  });
+  res.status(201).json({ success: true, message: 'Application recorded', data: { applyUrl: job.applyUrl, alreadyApplied: false, application } });
+};
+
+// Placement team: change a job's company application link (or remove it with an empty value), status or deadline
+export const updateJobPosting = async (req: AuthRequest, res: Response): Promise<void> => {
+  if (!mongoose.isValidObjectId(req.params.id)) throw new AppError('Invalid job', 400, 'INVALID_ID');
+  const job = await Job.findById(req.params.id);
+  if (!job) throw new AppError('Job posting not found', 404, 'JOB_NOT_FOUND');
+  const { applyUrl, status, deadline } = req.body || {};
+  if (applyUrl !== undefined) job.applyUrl = cleanApplyUrl(applyUrl);
+  if (status !== undefined) {
+    if (!['OPEN', 'CLOSED', 'DRAFT'].includes(status)) throw new AppError('Status must be OPEN, CLOSED or DRAFT', 400, 'INVALID_STATUS');
+    job.status = status;
+  }
+  if (deadline !== undefined) {
+    const d = new Date(deadline);
+    if (Number.isNaN(d.getTime())) throw new AppError('Invalid deadline', 400, 'INVALID_DATE');
+    job.deadline = d;
+  }
+  await job.save();
+  res.json({ success: true, message: 'Job updated', data: { job } });
+};
+
+// Placement team: every application with the student's name, for the Applications section
+export const listAllApplications = async (req: AuthRequest, res: Response): Promise<void> => {
+  const filter: Record<string, unknown> = {};
+  if (typeof req.query.jobId === 'string' && mongoose.isValidObjectId(req.query.jobId)) filter.jobId = req.query.jobId;
+  if (req.query.via === 'COMPANY_SITE' || req.query.via === 'PORTAL') filter.appliedVia = req.query.via;
+  const apps: any[] = await Application.find(filter)
+    .sort({ appliedAt: -1, createdAt: -1 })
+    .limit(2000)
+    .populate('jobId', 'title location salaryPackage applyUrl deadline status')
+    .populate('companyId', 'name logoUrl')
+    .populate({ path: 'studentId', select: 'studentId phone college branch cgpa', populate: { path: 'userId', select: 'fullName email' } })
+    .lean();
+  const applications = apps.map((a) => ({
+    _id: a._id,
+    applicationId: `SL-APP-${String(a._id).slice(-6).toUpperCase()}`,
+    student: a.studentId
+      ? {
+          _id: a.studentId._id,
+          studentId: a.studentId.studentId,
+          fullName: a.studentId.userId?.fullName || '',
+          email: realEmail(a.studentId.userId?.email),
+          phone: a.studentId.phone || '',
+          college: a.studentId.college || '',
+        }
+      : null,
+    job: a.jobId ? { _id: a.jobId._id, title: a.jobId.title, location: a.jobId.location, salaryPackage: a.jobId.salaryPackage } : null,
+    company: a.companyId ? { _id: a.companyId._id, name: a.companyId.name } : null,
+    appliedVia: a.appliedVia || 'PORTAL',
+    status: a.status,
+    appliedAt: a.appliedAt || a.createdAt,
+  }));
+  res.json({ success: true, data: { applications } });
 };

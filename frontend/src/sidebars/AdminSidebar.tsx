@@ -1,24 +1,65 @@
-import React from 'react';
-import { NavLink } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { api } from '../services/api';
+import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
+  GalleryHorizontal,
   LayoutDashboard,
   Users,
   BookOpen,
   FileCheck,
   ShieldAlert,
+  Layers,
+  CalendarClock,
+  CalendarRange,
+  ListOrdered,
+  UserCog,
+  CheckSquare,
+  History,
+  PlaySquare,
+  UserPlus,
+  Fingerprint,
+  IdCard,
 } from 'lucide-react';
 
 export const AdminSidebar: React.FC = () => {
   const { user } = useAuth();
+  const location = useLocation();
+  const onSubjectsTab = location.pathname === '/admin/courses' && location.search.includes('tab=subjects');
+  const [pendingRegistrations, setPendingRegistrations] = useState(0);
+
+  // Refresh the badge on navigation so new Google Form responses show up without a reload
+  useEffect(() => {
+    if (!user) return;
+    api
+      .get('/tracking/registrations')
+      .then((r: any) => setPendingRegistrations(r.data?.counts?.PENDING || 0))
+      .catch(() => {});
+  }, [user, location.pathname]);
 
   if (!user) return null;
 
   const adminLinks = [
-    { name: 'Admin Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
-    { name: 'Manage Students', path: '/admin/students', icon: Users },
-    { name: 'Manage Courses', path: '/admin/courses', icon: BookOpen },
-    { name: 'Manage Exams', path: '/admin/exams', icon: FileCheck },
+    { name: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
+    { name: 'Students', path: '/admin/students', icon: Users },
+    { name: 'New Registrations', path: '/admin/registrations', icon: UserPlus },
+    { name: 'Banners', path: '/admin/banners', icon: GalleryHorizontal },
+    { name: 'Batches', path: '/admin/batches', icon: Layers },
+    { name: 'Next Allocations', path: '/admin/next-allocations', icon: CalendarClock },
+    { name: 'Monthly Planning', path: '/admin/planning', icon: CalendarRange },
+    { name: 'Courses', path: '/admin/courses', icon: BookOpen },
+    { name: 'Subjects', path: '/admin/courses?tab=subjects', icon: ListOrdered },
+    { name: 'Trainers', path: '/admin/trainers', icon: UserCog },
+    { name: 'Attendance', path: '/admin/attendance', icon: CheckSquare },
+    { name: 'Biometric Live', path: '/admin/biometric', icon: Fingerprint },
+    { name: 'eSSL Integration', path: '/admin/essl', icon: IdCard },
+    { name: 'History', path: '/admin/history', icon: History },
+  ];
+
+  // Existing platform modules stay available
+  const platformLinks = [
+    { name: 'LMS Content', path: '/admin/lms', icon: PlaySquare },
+    { name: 'Exams', path: '/admin/exams', icon: FileCheck },
     { name: 'Audit Logs', path: '/admin/audit-logs', icon: ShieldAlert },
   ];
 
@@ -47,22 +88,35 @@ export const AdminSidebar: React.FC = () => {
             ADMIN PORTAL
           </p>
 
-          {adminLinks.map((item) => {
+          {[...adminLinks, null, ...platformLinks].map((item, i) => {
+            if (!item) {
+              return (
+                <p key={`sep-${i}`} className="px-3 pt-4 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500 mb-2">
+                  PLATFORM
+                </p>
+              );
+            }
             const Icon = item.icon;
+            // "Courses" and "Subjects" share a route; highlight by tab
+            const isSubjects = item.path.includes('tab=subjects');
             return (
               <NavLink
                 key={item.path}
                 to={item.path}
+                end={item.path === '/admin/courses'}
                 className={({ isActive }) =>
                   `flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all ${
-                    isActive
+                    (isSubjects ? onSubjectsTab : item.path === '/admin/courses' ? isActive && !onSubjectsTab : isActive)
                       ? 'bg-brand-600 text-white shadow-md'
                       : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800'
                   }`
                 }
               >
                 <Icon className="h-4 w-4" />
-                <span>{item.name}</span>
+                <span className="flex-1">{item.name}</span>
+                {item.path === '/admin/registrations' && pendingRegistrations > 0 && (
+                  <span className="rounded-full bg-amber-500 px-1.5 text-[10px] font-bold leading-4 text-white">{pendingRegistrations}</span>
+                )}
               </NavLink>
             );
           })}

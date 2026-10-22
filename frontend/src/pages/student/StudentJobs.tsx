@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../services/api';
 import { Job } from '../../types';
@@ -7,25 +7,87 @@ import {
   Briefcase,
   Building,
   MapPin,
-  DollarSign,
   CheckCircle2,
   AlertTriangle,
   Send,
-  Eye,
-  Calendar,
-  Award,
   Globe,
-  FileText,
-  ShieldCheck,
   Sparkles,
   ArrowRight,
-  User,
   X,
+  Search,
+  Zap,
+  Ban,
+  Wallet,
+  GraduationCap,
+  CalendarDays,
+  CalendarClock,
 } from 'lucide-react';
+
+type DriveTab = 'all' | 'fulltime' | 'internship' | 'applied';
+
+const DRIVE_TABS: { key: DriveTab; label: string }[] = [
+  { key: 'all', label: 'All drives' },
+  { key: 'fulltime', label: 'Full-time' },
+  { key: 'internship', label: 'Internships' },
+  { key: 'applied', label: 'Applied drives' },
+];
+
+const JOB_TYPE_LABEL: Record<string, string> = {
+  FULL_TIME: 'Full-time',
+  INTERNSHIP: 'Internship',
+  CONTRACT: 'Contract',
+};
+
+const driveCode = (id: string) => `SL-JOB-${String(id).slice(-5).toUpperCase()}`;
+
+const isDriveOpen = (job: any, now: number) => job.status === 'OPEN' && new Date(job.deadline).getTime() > now;
+
+const pad = (n: number) => String(n).padStart(2, '0');
+
+// "Ends in 05:12:09" inside the last day, "Ends in 3 days" before that, "Expired 2 hours ago" after
+const deadlineLabel = (job: any, now: number) => {
+  const diff = new Date(job.deadline).getTime() - now;
+  const abs = Math.abs(diff);
+  const minutes = Math.floor(abs / 60000);
+  const hours = Math.floor(abs / 3600000);
+  const days = Math.floor(abs / 86400000);
+
+  if (isDriveOpen(job, now)) {
+    if (diff < 86400000) {
+      return `Ends in ${pad(hours)}:${pad(Math.floor((abs % 3600000) / 60000))}:${pad(Math.floor((abs % 60000) / 1000))}`;
+    }
+    return `Ends in ${days} ${days === 1 ? 'day' : 'days'}`;
+  }
+  if (diff > 0) return 'Closed early';
+  if (minutes < 60) return `Expired ${Math.max(1, minutes)} ${minutes === 1 ? 'minute' : 'minutes'} ago`;
+  if (hours < 24) return `Expired ${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;
+  return `Expired ${days} ${days === 1 ? 'day' : 'days'} ago`;
+};
+
+const DriveFact: React.FC<{ icon: React.ElementType; label: string; value: React.ReactNode }> = ({ icon: Icon, label, value }) => (
+  <div className="flex min-w-0 gap-2.5">
+    <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-slate-50 dark:bg-slate-800">
+      <Icon className="h-3.5 w-3.5 text-slate-400" />
+    </span>
+    <div className="min-w-0">
+      <dt className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</dt>
+      <dd className="mt-0.5 line-clamp-3 text-xs font-semibold text-slate-800 dark:text-slate-200">{value}</dd>
+    </div>
+  </div>
+);
 
 export const StudentJobs: React.FC = () => {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<DriveTab>('all');
+  const [search, setSearch] = useState('');
+  const [now, setNow] = useState(() => Date.now());
+
+  // Tick every second so countdowns and open/closed status stay live
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   // Modals state
   const [viewJdJob, setViewJdJob] = useState<any | null>(null);
@@ -74,6 +136,25 @@ export const StudentJobs: React.FC = () => {
 
   const openViewJd = (job: any) => {
     setViewJdJob(job);
+  };
+
+  // Jobs with the company's own application link: record the application, then send the student there
+  const [externalNote, setExternalNote] = useState<{ job: any; url: string; popupBlocked: boolean } | null>(null);
+  const applyOnCompanySite = async (job: any) => {
+    // Open the tab inside the click so the browser doesn't block it; fill it once the application is recorded
+    const tab = window.open('', '_blank');
+    if (tab) tab.opener = null;
+    try {
+      const res: any = await api.post(`/placements/jobs/${job._id}/apply-external`, {});
+      const url = res.data.applyUrl;
+      if (tab) tab.location.href = url;
+      setViewJdJob(null);
+      setExternalNote({ job, url, popupBlocked: !tab });
+      fetchJobs();
+    } catch (err: any) {
+      tab?.close();
+      alert(err.message || 'Could not record your application. Please try again.');
+    }
   };
 
   const openApplyWizard = async (job: any) => {
@@ -140,99 +221,206 @@ export const StudentJobs: React.FC = () => {
     }
   };
 
+  const drives = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    return jobs
+      .filter((job: any) => {
+        if (activeTab === 'fulltime' && job.type !== 'FULL_TIME') return false;
+        if (activeTab === 'internship' && job.type !== 'INTERNSHIP') return false;
+        if (activeTab === 'applied' && !job.appliedStatus) return false;
+        if (!q) return true;
+        return [job.title, job.companyId?.name, job.location, ...(job.requiredSkills || [])]
+          .filter(Boolean)
+          .some((v: string) => v.toLowerCase().includes(q));
+      })
+      .sort((a: any, b: any) => {
+        const aOpen = isDriveOpen(a, now);
+        const bOpen = isDriveOpen(b, now);
+        if (aOpen !== bOpen) return aOpen ? -1 : 1;
+        const aTime = new Date(a.deadline).getTime();
+        const bTime = new Date(b.deadline).getTime();
+        // Open drives: closing soonest first. Closed drives: most recently closed first.
+        return aOpen ? aTime - bTime : bTime - aTime;
+      });
+  }, [jobs, activeTab, search, now]);
+
+  const tabCounts: Record<DriveTab, number> = {
+    all: jobs.length,
+    fulltime: jobs.filter((j: any) => j.type === 'FULL_TIME').length,
+    internship: jobs.filter((j: any) => j.type === 'INTERNSHIP').length,
+    applied: jobs.filter((j: any) => j.appliedStatus).length,
+  };
+  const openCount = jobs.filter((j: any) => isDriveOpen(j, now)).length;
+
   return (
-    <div className="space-y-6 pb-12">
-      {/* Header Banner */}
-      <div>
-        <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">ScholarLogic Placement & Hiring Portal</h1>
-        <p className="text-xs text-slate-500">Verified placement drives dynamically matched against your CGPA, course certificates, and ATS resume</p>
+    <div className="mx-auto max-w-7xl space-y-6 pb-12">
+      {/* Header */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">Jobs</h1>
+          <p className="text-xs text-slate-500">Placement drives matched against your CGPA, certificates and resume.</p>
+        </div>
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-3 py-1.5 text-xs font-bold text-amber-700 dark:text-amber-300">
+          <Zap className="h-3.5 w-3.5" /> {openCount} open {openCount === 1 ? 'drive' : 'drives'}
+        </span>
       </div>
+
+      {/* Tabs */}
+      <nav className="flex gap-6 overflow-x-auto border-b border-slate-200 dark:border-slate-800" aria-label="Drive categories">
+        {DRIVE_TABS.map(({ key, label }) => {
+          const active = key === activeTab;
+          return (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setActiveTab(key)}
+              className={`relative shrink-0 pb-3 text-sm font-semibold transition-colors ${
+                active ? 'text-slate-900 dark:text-white' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+              }`}
+            >
+              {label}
+              <span className="ml-1.5 text-xs font-medium text-slate-400">{tabCounts[key]}</span>
+              <span className={`absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-brand-500 transition-opacity ${active ? 'opacity-100' : 'opacity-0'}`} />
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* Search */}
+      <label className="relative block max-w-md">
+        <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by role, company, location or skill"
+          className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 py-2.5 pl-10 pr-3 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+        />
+      </label>
 
       {loading ? (
         <div className="flex h-64 items-center justify-center">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-500 border-t-transparent" />
         </div>
+      ) : drives.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 p-12 text-center">
+          <Briefcase className="mx-auto mb-2 h-10 w-10 text-slate-300 dark:text-slate-600" />
+          <p className="text-sm font-bold text-slate-900 dark:text-white">
+            {activeTab === 'applied' ? "You haven't applied to any drives yet" : 'No drives found'}
+          </p>
+          <p className="mt-0.5 text-xs text-slate-500">
+            {search ? 'Try a different search term.' : 'New placement drives will appear here as soon as they are posted.'}
+          </p>
+        </div>
       ) : (
-        <div className="space-y-5">
-          {jobs.map((job: any) => {
-            const matchScore = job.matchScore || 92;
-            const company = job.companyId || {};
-            const companyName = company.name || 'Partner Company';
-            const isApplied = !!job.appliedStatus;
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+          {drives.map((job: any) => {
+            const open = isDriveOpen(job, now);
+            const deadline = new Date(job.deadline).getTime();
+            const branches: string[] = job.eligibilityCriteria?.allowedBranches || [];
+            const years: number[] = job.eligibilityCriteria?.passoutYears || [];
+            const endsSoon = open && deadline - now < 24 * 60 * 60 * 1000;
 
             return (
-              <div
+              <article
                 key={job._id}
-                className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6 hover:border-brand-500/50 transition-colors"
+                className={`flex flex-col rounded-2xl border bg-white dark:bg-slate-900 p-5 transition-all ${
+                  open
+                    ? 'border-slate-200 dark:border-slate-700 shadow-md hover:-translate-y-0.5 hover:shadow-lg'
+                    : 'border-slate-100 dark:border-slate-800 shadow-sm'
+                }`}
               >
-                <div className="space-y-3 flex-1">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <Badge variant={matchScore >= 85 ? 'green' : 'amber'}>
-                      Skill Match: {matchScore}%
-                    </Badge>
-                    <span className="text-xs font-bold text-brand-600 dark:text-brand-400 font-mono">{job.type}</span>
-                    {company.verificationStatus === 'VERIFIED' && (
-                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
-                        <ShieldCheck className="h-3 w-3" /> Official Company Careers Verified
-                      </span>
-                    )}
-                  </div>
-
-                  <div>
-                    <h3 className="font-extrabold text-xl text-slate-900 dark:text-white">{job.title}</h3>
-                    <p className="text-xs text-slate-500 font-semibold flex flex-wrap items-center gap-4 mt-1">
-                      <span className="flex items-center gap-1.5"><Building className="h-3.5 w-3.5 text-brand-500" /> {companyName}</span>
-                      <span className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5 text-slate-400" /> {job.location}</span>
-                      <span className="flex items-center gap-1.5"><DollarSign className="h-3.5 w-3.5 text-emerald-500" /> {job.salaryPackage}</span>
-                    </p>
-                  </div>
-
-                  <p className="text-xs text-slate-600 dark:text-slate-400 line-clamp-2 leading-relaxed">{job.description}</p>
-
-                  {/* Skills tags */}
-                  <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                    <span className="text-[11px] font-bold text-slate-400">Required Skills:</span>
-                    {(job.requiredSkills || []).map((sk: string) => (
-                      <span key={sk} className="px-2.5 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-[10px] font-bold text-slate-700 dark:text-slate-300">
-                        {sk}
-                      </span>
-                    ))}
-                  </div>
+                <div className="flex items-start justify-between gap-3">
+                  <span className="font-mono text-[11px] font-semibold tracking-wider text-slate-400">{driveCode(job._id)}</span>
+                  {job.appliedStatus ? (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-950/50 px-2 py-0.5 text-[10px] font-bold uppercase text-brand-700 dark:text-brand-300">
+                      <CheckCircle2 className="h-3 w-3" /> {job.appliedStatus.replace(/_/g, ' ')}
+                    </span>
+                  ) : open ? (
+                    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 text-[10px] font-bold uppercase text-emerald-600 dark:text-emerald-400">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 motion-safe:animate-pulse" /> Open
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-rose-200 dark:border-rose-900 px-2 py-0.5 text-[10px] font-bold uppercase text-rose-500">
+                      <Ban className="h-3 w-3" /> Closed
+                    </span>
+                  )}
                 </div>
 
-                <div className="flex flex-col items-end justify-between gap-4 md:border-l md:border-slate-100 md:dark:border-slate-800 md:pl-6 shrink-0">
-                  <div className="text-right text-xs">
-                    <span className="block font-bold text-slate-600 dark:text-slate-300">Min CGPA: {job.eligibilityCriteria?.minCgpa || 6.0}</span>
-                    <span className="block text-[10px] text-slate-400 mt-0.5 font-mono">Deadline: {new Date(job.deadline).toLocaleDateString()}</span>
-                  </div>
+                <h3 className={`mt-1.5 text-base font-bold ${open ? 'text-slate-900 dark:text-white' : 'text-slate-700 dark:text-slate-300'}`}>
+                  {job.title}
+                </h3>
+                <p className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500">
+                  <Building className="h-3.5 w-3.5" /> {job.companyId?.name || 'Partner Company'}
+                  <span className="text-slate-300 dark:text-slate-600">•</span>
+                  {JOB_TYPE_LABEL[job.type] || job.type}
+                </p>
 
-                  <div className="flex items-center gap-2">
-                    {/* View JD Button */}
-                    <button
-                      onClick={() => openViewJd(job)}
-                      className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors flex items-center gap-1.5"
-                    >
-                      <Eye className="h-3.5 w-3.5" /> View JD
-                    </button>
+                <dl className="mt-5 grid flex-1 grid-cols-2 gap-x-4 gap-y-4">
+                  <DriveFact icon={MapPin} label="Location" value={job.location || '—'} />
+                  <DriveFact icon={Wallet} label="Salary" value={job.salaryPackage || '—'} />
+                  <DriveFact
+                    icon={GraduationCap}
+                    label="Eligibility"
+                    value={
+                      <>
+                        Min CGPA {job.eligibilityCriteria?.minCgpa ?? 6}
+                        {branches.length > 0 && <span className="block text-slate-500 dark:text-slate-400">{branches.join(', ')}</span>}
+                      </>
+                    }
+                  />
+                  <DriveFact icon={CalendarDays} label="Passing year" value={years.length ? years.join(', ') : 'Any'} />
+                </dl>
 
-                    {/* Apply Now Button */}
-                    {isApplied ? (
-                      <span className="px-4 py-2 rounded-xl bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 text-xs font-extrabold flex items-center gap-1.5 border border-emerald-200 dark:border-emerald-800">
-                        <CheckCircle2 className="h-4 w-4" /> Applied ({job.appliedStatus})
-                      </span>
-                    ) : (
-                      <button
-                        onClick={() => openApplyWizard(job)}
-                        className="inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-gradient-to-r from-brand-600 to-indigo-600 text-white text-xs font-extrabold shadow-md shadow-brand-500/20 hover:opacity-95 transition-opacity"
-                      >
-                        <Send className="h-3.5 w-3.5" /> Apply Now
-                      </button>
-                    )}
-                  </div>
+                <div className="mt-5 flex items-center justify-between gap-3 border-t border-slate-100 dark:border-slate-800 pt-4">
+                  <span
+                    className={`inline-flex items-center gap-1.5 text-xs font-semibold ${
+                      !open ? 'text-slate-500' : endsSoon ? 'text-rose-500' : 'text-slate-600 dark:text-slate-300'
+                    }`}
+                  >
+                    <CalendarClock className="h-4 w-4" />
+                    {deadlineLabel(job, now)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => openViewJd(job)}
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-brand-600 px-3.5 py-2 text-xs font-bold text-white shadow-sm hover:bg-brand-700 transition-colors"
+                  >
+                    Know more <ArrowRight className="h-3.5 w-3.5" />
+                  </button>
                 </div>
-              </div>
+              </article>
             );
           })}
+        </div>
+      )}
+
+      {externalNote && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-2 text-emerald-600">
+              <CheckCircle2 className="h-6 w-6" />
+              <h2 className="text-lg font-black text-slate-900 dark:text-white">Application recorded</h2>
+            </div>
+            <p className="text-sm text-slate-600 dark:text-slate-300">
+              The placement team can now see that you applied for <b>{externalNote.job.title}</b> at <b>{externalNote.job.companyId?.name || 'the company'}</b>.
+              {externalNote.popupBlocked
+                ? ' Your browser blocked the new tab, so open the company page with the button below and finish your application there.'
+                : ' The company page opened in a new tab. Finish your application there.'}
+            </p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setExternalNote(null)} className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold">
+                Close
+              </button>
+              <a
+                href={externalNote.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-4 py-2 rounded-xl bg-brand-600 text-white text-xs font-extrabold hover:bg-brand-700 inline-flex items-center gap-1.5"
+              >
+                <Globe className="h-3.5 w-3.5" /> Open company page
+              </a>
+            </div>
+          </div>
         </div>
       )}
 
@@ -321,17 +509,37 @@ export const StudentJobs: React.FC = () => {
                 >
                   Close
                 </button>
-                {!viewJdJob.appliedStatus && (
-                  <button
-                    onClick={() => {
-                      const j = viewJdJob;
-                      setViewJdJob(null);
-                      openApplyWizard(j);
-                    }}
-                    className="px-5 py-2 rounded-xl bg-brand-600 text-white text-xs font-extrabold hover:bg-brand-700 flex items-center gap-1.5"
-                  >
-                    <Send className="h-3.5 w-3.5" /> Apply Now
-                  </button>
+                {viewJdJob.applyUrl ? (
+                  viewJdJob.appliedStatus ? (
+                    <a
+                      href={viewJdJob.applyUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-5 py-2 rounded-xl border border-brand-200 dark:border-brand-800 text-brand-700 dark:text-brand-300 text-xs font-extrabold hover:bg-brand-50 dark:hover:bg-brand-950/40 flex items-center gap-1.5"
+                    >
+                      <Globe className="h-3.5 w-3.5" /> Open company application page
+                    </a>
+                  ) : (
+                    <button
+                      onClick={() => applyOnCompanySite(viewJdJob)}
+                      className="px-5 py-2 rounded-xl bg-brand-600 text-white text-xs font-extrabold hover:bg-brand-700 flex items-center gap-1.5"
+                    >
+                      <Globe className="h-3.5 w-3.5" /> Apply on {viewJdJob.companyId?.name || 'company'} website
+                    </button>
+                  )
+                ) : (
+                  !viewJdJob.appliedStatus && (
+                    <button
+                      onClick={() => {
+                        const j = viewJdJob;
+                        setViewJdJob(null);
+                        openApplyWizard(j);
+                      }}
+                      className="px-5 py-2 rounded-xl bg-brand-600 text-white text-xs font-extrabold hover:bg-brand-700 flex items-center gap-1.5"
+                    >
+                      <Send className="h-3.5 w-3.5" /> Apply Now
+                    </button>
+                  )
                 )}
               </div>
             </div>

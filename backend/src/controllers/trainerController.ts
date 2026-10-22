@@ -20,6 +20,8 @@ import { Notification } from '../models/Notification';
 import { supabaseStorageService } from '../services/storage/SupabaseStorageService';
 import { zohoMeetingService } from '../services/zohoMeetingService';
 import { AppError } from '../middleware/errorHandler';
+import { Batch } from '../models/tracking/Batch';
+import mongoose from 'mongoose';
 
 // Helper to fetch course IDs assigned to trainer
 async function getAssignedCourseIds(trainerUserId: string): Promise<any[]> {
@@ -189,10 +191,26 @@ export const createTrainerLesson = async (req: AuthRequest, res: Response): Prom
 
 export const uploadLessonMedia = async (req: AuthRequest, res: Response): Promise<void> => {
   const { lessonId } = req.params;
-  const { type, fileBuffer, fileName, mimeType, courseSlug } = req.body;
+  const { type, fileBuffer, fileName, mimeType, courseSlug, batchIds } = req.body;
 
   const lesson = await Lesson.findById(lessonId);
   if (!lesson) throw new AppError('Lesson not found', 404, 'NOT_FOUND');
+
+  // Which batches receive these notes. Omitted = keep the current choice; [] = everyone in the course
+  let targetBatchIds: mongoose.Types.ObjectId[] | undefined;
+  if (type !== 'VIDEO' && batchIds !== undefined) {
+    if (!Array.isArray(batchIds) || batchIds.some((id) => !mongoose.isValidObjectId(id))) {
+      throw new AppError('batchIds must be a list of batch IDs', 400, 'INVALID_BATCHES');
+    }
+    const unique = [...new Set(batchIds.map(String))];
+    const batches = await Batch.find({ _id: { $in: unique } }).select('trainerId batchCode').lean();
+    if (batches.length !== unique.length) throw new AppError('One or more batches were not found', 404, 'NOT_FOUND');
+    const notMine = req.user!.role === 'TRAINER' ? batches.filter((b) => String(b.trainerId) !== String(req.user!.userId)) : [];
+    if (notMine.length) {
+      throw new AppError(`You can only send notes to your own batches (${notMine.map((b) => b.batchCode).join(', ')})`, 403, 'FORBIDDEN');
+    }
+    targetBatchIds = unique.map((id) => new mongoose.Types.ObjectId(id));
+  }
 
   const bucket = type === 'VIDEO' ? 'course-videos' : 'course-notes';
   const filePath = `${courseSlug || 'course'}/mod-${lesson.moduleId}/file-${Date.now()}-${fileName}`;
@@ -207,6 +225,7 @@ export const uploadLessonMedia = async (req: AuthRequest, res: Response): Promis
     lesson.notesFileUrl = uploadResult.publicUrl || `https://scholarlogic.edu/notes/${filePath}`;
     lesson.notesFileType = mimeType?.includes('pdf') ? 'PDF' : 'DOCX';
     lesson.type = 'NOTES';
+    if (targetBatchIds) lesson.batchIds = targetBatchIds;
   }
 
   await lesson.save();

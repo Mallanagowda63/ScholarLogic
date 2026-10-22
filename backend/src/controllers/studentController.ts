@@ -191,6 +191,7 @@ export const updateStudentProfile = async (req: AuthRequest, res: Response): Pro
     'skills',
     'projects',
     'certifications',
+    'experiences',
     'githubUrl',
     'linkedInUrl',
     'portfolioUrl',
@@ -204,7 +205,16 @@ export const updateStudentProfile = async (req: AuthRequest, res: Response): Pro
     }
   });
 
+  // Display name lives on the User record
+  const fullName = typeof req.body.fullName === 'string' ? req.body.fullName.trim() : undefined;
+  if (fullName === '') {
+    throw new AppError('Name cannot be empty', 400, 'VALIDATION_ERROR');
+  }
+
   await student.save();
+  if (fullName) {
+    await User.updateOne({ _id: req.user.userId }, { fullName });
+  }
 
   res.json({
     success: true,

@@ -4,7 +4,7 @@ const COURSE_TITLE = 'Python Full Stack Development';
 
 async function login(page: Page, email: string, password: string, landing: RegExp) {
   await page.goto('/login');
-  await page.fill('input[type="email"]', email);
+  await page.fill('input[autocomplete="username"]', email);
   await page.fill('input[type="password"]', password);
   await page.click('button[type="submit"]');
   await expect(page).toHaveURL(landing);

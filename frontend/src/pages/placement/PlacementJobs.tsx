@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../../services/api';
 import { Badge } from '../../components/Badge';
-import { Briefcase, PlusCircle, ExternalLink, Globe, MapPin, Clock, Building, CheckCircle2 } from 'lucide-react';
+import { Briefcase, PlusCircle, ExternalLink, Globe, MapPin, Clock, Building, CheckCircle2, Link2, Users } from 'lucide-react';
 
 export const PlacementJobs: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -17,12 +17,19 @@ export const PlacementJobs: React.FC = () => {
 
   // Form states
   const [title, setTitle] = useState('');
-  const [companyId, setCompanyId] = useState('');
+  // Typed company name: matched to an existing company, or added as a new one when the job is published
+  const [companyName, setCompanyName] = useState('');
   const [description, setDescription] = useState('');
   const [location, setLocation] = useState('Bangalore');
   const [salaryPackage, setSalaryPackage] = useState('12.0 - 15.0 LPA');
   const [postingType, setPostingType] = useState<'SCHOLARLOGIC_POSTING' | 'OFFICIAL_COMPANY_POSTING'>('SCHOLARLOGIC_POSTING');
   const [skillsStr, setSkillsStr] = useState('Python, SQL, React, REST API');
+  const [applyUrl, setApplyUrl] = useState('');
+  // Add / change the company's application link on an existing job
+  const [linkJob, setLinkJob] = useState<any | null>(null);
+  const [linkValue, setLinkValue] = useState('');
+  const [linkError, setLinkError] = useState('');
+  const [savingLink, setSavingLink] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -34,10 +41,7 @@ export const PlacementJobs: React.FC = () => {
     Promise.all([api.get('/placements/jobs'), api.get('/placements/companies')])
       .then(([res1, res2]: any) => {
         if (res1.success) setJobs(res1.data.jobs || []);
-        if (res2.success && res2.data.companies.length > 0) {
-          setCompanies(res2.data.companies);
-          setCompanyId(res2.data.companies[0]._id);
-        }
+        if (res2.success) setCompanies(res2.data.companies || []);
       })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -47,21 +51,47 @@ export const PlacementJobs: React.FC = () => {
     e.preventDefault();
     try {
       const skillsArray = skillsStr.split(',').map((s) => s.trim()).filter(Boolean);
+      const typed = companyName.trim();
+      const known = companies.find((c) => c.name.trim().toLowerCase() === typed.toLowerCase());
       await api.post('/placements/jobs', {
         title,
-        companyId,
+        ...(known ? { companyId: known._id } : { companyName: typed }),
         description,
         location,
         salaryPackage,
         postingType,
         requiredSkills: skillsArray,
+        applyUrl: applyUrl.trim(),
       });
       alert('Job posting published successfully!');
       setShowCreateModal(false);
       setTitle('');
+      setApplyUrl('');
+      setCompanyName('');
       fetchData();
     } catch (err: any) {
       alert(err.message || 'Failed to publish job');
+    }
+  };
+
+  const openLinkEditor = (job: any) => {
+    setLinkJob(job);
+    setLinkValue(job.applyUrl || '');
+    setLinkError('');
+  };
+  const saveLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!linkJob) return;
+    setSavingLink(true);
+    setLinkError('');
+    try {
+      await api.put(`/placements/jobs/${linkJob._id}`, { applyUrl: linkValue.trim() });
+      setLinkJob(null);
+      fetchData();
+    } catch (err: any) {
+      setLinkError(err.message || 'Could not save the link');
+    } finally {
+      setSavingLink(false);
     }
   };
 
@@ -151,6 +181,28 @@ export const PlacementJobs: React.FC = () => {
                 </div>
               </div>
 
+              <div className="rounded-xl bg-slate-50 dark:bg-slate-800/60 p-3 text-[11px]">
+                {j.applyUrl ? (
+                  <p className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300 min-w-0">
+                    <Link2 className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                    <span className="shrink-0 font-semibold">Students apply at:</span>
+                    <a href={j.applyUrl} target="_blank" rel="noopener noreferrer" className="truncate text-brand-600 hover:underline">
+                      {j.applyUrl}
+                    </a>
+                  </p>
+                ) : (
+                  <p className="text-slate-500">No company application link. Students apply through the ScholarLogic form.</p>
+                )}
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button type="button" onClick={() => openLinkEditor(j)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-700 px-2 py-1 font-bold text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-900">
+                    <Link2 className="h-3 w-3" /> {j.applyUrl ? 'Edit apply link' : 'Add apply link'}
+                  </button>
+                  <Link to={`/placement/applications?jobId=${j._id}`} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-700 px-2 py-1 font-bold text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-900">
+                    <Users className="h-3 w-3" /> View applicants
+                  </Link>
+                </div>
+              </div>
+
               <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800 text-xs">
                 <span className="text-[10px] text-slate-400 font-mono">
                   Verified: {new Date(j.lastVerifiedAt || Date.now()).toLocaleDateString()}
@@ -189,16 +241,26 @@ export const PlacementJobs: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">Company</label>
-                <select
-                  value={companyId}
-                  onChange={(e) => setCompanyId(e.target.value)}
-                  className="w-full rounded-xl border border-slate-800 bg-slate-800 p-2.5 text-white font-bold"
-                >
+                <label htmlFor="job-company" className="block text-slate-300 font-semibold mb-1">Company</label>
+                <input
+                  id="job-company"
+                  type="text"
+                  required
+                  list="job-company-list"
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                  placeholder="Type a company name, e.g. TCS"
+                  autoComplete="off"
+                  className="w-full rounded-xl border border-slate-800 bg-slate-800 p-2.5 text-white font-bold placeholder:font-normal placeholder:text-slate-500"
+                />
+                <datalist id="job-company-list">
                   {companies.map((c) => (
-                    <option key={c._id} value={c._id}>{c.name}</option>
+                    <option key={c._id} value={c.name} />
                   ))}
-                </select>
+                </datalist>
+                {companyName.trim() && !companies.some((c) => c.name.trim().toLowerCase() === companyName.trim().toLowerCase()) && (
+                  <p className="mt-1 text-[10px] text-emerald-400">New company: "{companyName.trim()}" will be added when you publish.</p>
+                )}
               </div>
 
               <div>
@@ -245,6 +307,18 @@ export const PlacementJobs: React.FC = () => {
               </div>
 
               <div>
+                <label className="block text-slate-300 font-semibold mb-1">Company application link (optional)</label>
+                <input
+                  type="url"
+                  value={applyUrl}
+                  onChange={(e) => setApplyUrl(e.target.value)}
+                  placeholder="https://careers.company.com/jobs/12345"
+                  className="w-full rounded-xl border border-slate-800 bg-slate-800 p-2.5 text-white"
+                />
+                <p className="mt-1 text-[10px] text-slate-400">If set, the student's Apply button opens this page and their name is recorded under Applications.</p>
+              </div>
+
+              <div>
                 <label className="block text-slate-300 font-semibold mb-1">Job Description</label>
                 <textarea
                   rows={3}
@@ -266,6 +340,42 @@ export const PlacementJobs: React.FC = () => {
                 </button>
                 <button type="submit" className="flex-1 py-2.5 rounded-xl bg-brand-600 text-white font-bold hover:bg-brand-700">
                   Publish Job
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {linkJob && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900 p-6 space-y-4">
+            <div>
+              <h3 className="font-bold text-base text-white">Company application link</h3>
+              <p className="text-xs text-slate-400">
+                {linkJob.title} • {(linkJob.companyId as any)?.name || 'Company'}
+              </p>
+            </div>
+            <form onSubmit={saveLink} className="space-y-3 text-xs">
+              <input
+                id="apply-link"
+                type="url"
+                value={linkValue}
+                onChange={(e) => setLinkValue(e.target.value)}
+                placeholder="https://careers.company.com/jobs/12345"
+                className="w-full rounded-xl border border-slate-700 bg-slate-800 p-2.5 text-white"
+                autoFocus
+              />
+              <p className="text-[11px] text-slate-400">
+                Students who click Apply go to this page, and their name is saved under Applications. Leave it empty to go back to the ScholarLogic application form.
+              </p>
+              {linkError && <p className="rounded-lg bg-rose-950/60 p-2 text-rose-300">{linkError}</p>}
+              <div className="flex items-center gap-3 pt-1">
+                <button type="button" onClick={() => setLinkJob(null)} className="flex-1 py-2.5 rounded-xl border border-slate-800 bg-slate-800 text-slate-300 font-bold">
+                  Cancel
+                </button>
+                <button type="submit" disabled={savingLink} className="flex-1 py-2.5 rounded-xl bg-brand-600 text-white font-bold hover:bg-brand-700 disabled:opacity-60">
+                  {savingLink ? 'Saving…' : 'Save link'}
                 </button>
               </div>
             </form>

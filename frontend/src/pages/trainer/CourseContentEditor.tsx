@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { api } from '../../services/api';
 import { Course, Module } from '../../types';
@@ -43,23 +43,59 @@ export const CourseContentEditor: React.FC = () => {
   const [zohoMetadata, setZohoMetadata] = useState<any>(null);
   const [zohoError, setZohoError] = useState('');
 
+  // Which batches receive uploaded notes (a trainer usually runs several batches)
+  const [myBatches, setMyBatches] = useState<any[]>([]);
+  const [notesAudience, setNotesAudience] = useState<'BATCHES' | 'ALL'>('BATCHES');
+  const [notesBatchIds, setNotesBatchIds] = useState<string[]>([]);
+
+  // Tracks the user's current pick so a late (or StrictMode-duplicated) course list load can't overwrite it
+  const selectedCourseRef = useRef(selectedCourseId);
+  selectedCourseRef.current = selectedCourseId;
+  // Only the most recently requested course hierarchy may update modules
+  const latestHierarchyRequest = useRef('');
+
   useEffect(() => {
     api.get('/trainer/courses')
       .then((res: any) => {
         if (res.success && res.data.courses.length > 0) {
           setCourses(res.data.courses);
-          const activeId = courseIdParam || res.data.courses[0]._id;
+          const activeId = courseIdParam || selectedCourseRef.current || res.data.courses[0]._id;
           setSelectedCourseId(activeId);
-          fetchCourseHierarchy(activeId);
+          if (latestHierarchyRequest.current !== activeId) fetchCourseHierarchy(activeId);
         }
       })
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [courseIdParam]);
 
+  useEffect(() => {
+    // Trainers get their own batches; admins (403 on the trainer route) get every batch
+    api.get('/tracking/trainer/batches')
+      .catch(() => api.get('/tracking/batches'))
+      .then((res: any) => {
+        const list = (res?.data?.batches || []).filter((b: any) => b.status !== 'CANCELLED');
+        const rank = (s: string) => (s === 'COMPLETED' ? 1 : 0);
+        setMyBatches(list.sort((a: any, b: any) => rank(a.status) - rank(b.status) || String(a.batchCode).localeCompare(String(b.batchCode))));
+      })
+      .catch(() => setMyBatches([]));
+  }, []);
+
+  const openNotesModal = (lesson?: any) => {
+    if (lesson) setTargetLessonId(lesson._id);
+    const sentTo: string[] = (lesson?.batchIds || []).map(String);
+    setNotesAudience(lesson && sentTo.length === 0 ? 'ALL' : 'BATCHES');
+    setNotesBatchIds(sentTo);
+    setShowNotesModal(true);
+  };
+  const toggleNotesBatch = (id: string) =>
+    setNotesBatchIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
+  const batchLabel = (id: string) => myBatches.find((b) => String(b._id) === String(id))?.batchCode || 'Other batch';
+
   const fetchCourseHierarchy = (cId: string) => {
+    latestHierarchyRequest.current = cId;
     api.get(`/courses/${cId}`)
       .then((res: any) => {
+        if (latestHierarchyRequest.current !== cId) return;
         if (res.success && res.data) {
           setCourseDetail(res.data.course);
           setModules(res.data.modules || []);
@@ -77,6 +113,9 @@ export const CourseContentEditor: React.FC = () => {
   const handleUploadMediaSubmit = async (e: React.FormEvent, type: 'VIDEO' | 'NOTES') => {
     e.preventDefault();
     if (!selectedFile) return alert('Please choose a file to upload');
+    if (type === 'NOTES' && notesAudience === 'BATCHES' && notesBatchIds.length === 0) {
+      return alert('Choose at least one batch to send these notes to');
+    }
 
     setUploading(true);
     setUploadProgress(20);
@@ -121,10 +160,15 @@ export const CourseContentEditor: React.FC = () => {
           mimeType: selectedFile.type,
           courseSlug: courseDetail?.slug || 'python-course',
           status: uploadStatus,
+          ...(type === 'NOTES' ? { batchIds: notesAudience === 'ALL' ? [] : notesBatchIds } : {}),
         });
 
         setUploadProgress(100);
-        setUploadSuccess(`✓ ${type === 'VIDEO' ? 'Video' : 'Notes'} uploaded to Supabase Storage & published to Student LMS!`);
+        setUploadSuccess(
+          type === 'NOTES'
+            ? `✓ Notes sent to ${notesAudience === 'ALL' ? 'everyone in this course' : notesBatchIds.map(batchLabel).join(', ')}`
+            : '✓ Video uploaded to Supabase Storage & published to Student LMS!'
+        );
         setShowVideoModal(false);
         setShowNotesModal(false);
         setSelectedFile(null);
@@ -221,7 +265,7 @@ export const CourseContentEditor: React.FC = () => {
           </button>
 
           <button
-            onClick={() => setShowNotesModal(true)}
+            onClick={() => openNotesModal()}
             className="px-4 py-2.5 rounded-xl bg-brand-600 text-white font-bold text-xs hover:bg-brand-700 transition-colors shadow-md flex items-center gap-2"
           >
             <Upload className="h-4 w-4" /> + Upload Notes
@@ -339,6 +383,7 @@ export const CourseContentEditor: React.FC = () => {
               <tr>
                 <th className="p-4">Lesson Title</th>
                 <th className="p-4">File Name / Path</th>
+                <th className="p-4">Sent To</th>
                 <th className="p-4">Type</th>
                 <th className="p-4">Status</th>
                 <th className="p-4">Actions</th>
@@ -352,6 +397,19 @@ export const CourseContentEditor: React.FC = () => {
                   </td>
                   <td className="p-4 font-mono text-[11px] text-brand-600 truncate max-w-[200px]">
                     {les.notesFileUrl || 'course-notes/sample.pdf'}
+                  </td>
+                  <td className="p-4">
+                    {les.batchIds?.length ? (
+                      <div className="flex flex-wrap gap-1">
+                        {les.batchIds.map((id) => (
+                          <span key={id} className="rounded-md bg-brand-50 dark:bg-brand-950/50 px-1.5 py-0.5 text-[10px] font-bold text-brand-700 dark:text-brand-300">
+                            {batchLabel(id)}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-[11px] text-slate-500">Whole course</span>
+                    )}
                   </td>
                   <td className="p-4 font-bold uppercase">{les.notesFileType || 'PDF'}</td>
                   <td className="p-4">
@@ -367,10 +425,7 @@ export const CourseContentEditor: React.FC = () => {
                       Preview
                     </a>
                     <button
-                      onClick={() => {
-                        setTargetLessonId(les._id);
-                        setShowNotesModal(true);
-                      }}
+                      onClick={() => openNotesModal(les)}
                       className="px-3 py-1 rounded-lg bg-brand-600 text-white text-[11px] font-bold hover:bg-brand-700"
                     >
                       Replace Notes
@@ -710,6 +765,62 @@ export const CourseContentEditor: React.FC = () => {
                     ))}
                   </select>
                 )}
+              </div>
+
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1">Send To</label>
+                <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-slate-800 border border-slate-700">
+                  {(['BATCHES', 'ALL'] as const).map((a) => (
+                    <button
+                      key={a}
+                      type="button"
+                      onClick={() => setNotesAudience(a)}
+                      className={`py-2 rounded-lg font-bold text-xs transition-colors ${notesAudience === a ? 'bg-brand-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'}`}
+                    >
+                      {a === 'BATCHES' ? 'Selected batches' : 'Whole course'}
+                    </button>
+                  ))}
+                </div>
+                {notesAudience === 'BATCHES' && (
+                  <div className="mt-2 rounded-xl border border-slate-700 bg-slate-800/60">
+                    {myBatches.length === 0 ? (
+                      <p className="p-3 text-slate-400">No batches are assigned to you yet. Ask the admin to assign one, or send to the whole course.</p>
+                    ) : (
+                      <>
+                        <div className="flex items-center justify-between border-b border-slate-700 px-3 py-2">
+                          <span className="text-slate-400">{notesBatchIds.length} of {myBatches.length} selected</span>
+                          <button
+                            type="button"
+                            onClick={() => setNotesBatchIds(notesBatchIds.length === myBatches.length ? [] : myBatches.map((b) => String(b._id)))}
+                            className="text-brand-400 hover:underline text-[11px] font-bold"
+                          >
+                            {notesBatchIds.length === myBatches.length ? 'Clear all' : 'Select all'}
+                          </button>
+                        </div>
+                        <div className="max-h-48 overflow-y-auto p-1">
+                          {myBatches.map((b) => (
+                            <label key={b._id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-slate-700/60">
+                              <input
+                                type="checkbox"
+                                checked={notesBatchIds.includes(String(b._id))}
+                                onChange={() => toggleNotesBatch(String(b._id))}
+                                className="h-4 w-4 accent-brand-500"
+                              />
+                              <span className="font-bold text-white">{b.batchCode}</span>
+                              <span className="truncate text-slate-400">
+                                {[b.subject?.name, b.timing, b.mode === 'ONLINE' ? 'Online' : 'Offline'].filter(Boolean).join(' • ')}
+                              </span>
+                              <span className="ml-auto shrink-0 text-[10px] text-slate-500">
+                                {b.studentCount} students{b.status === 'COMPLETED' ? ' • completed' : ''}
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+                {notesAudience === 'ALL' && <p className="mt-1.5 text-[11px] text-slate-400">Every student in this course will see these notes.</p>}
               </div>
 
               <div>

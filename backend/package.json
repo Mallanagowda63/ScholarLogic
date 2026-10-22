@@ -9,6 +9,11 @@
     "dev": "tsx watch src/server.ts",
     "seed": "tsx src/scripts/seed.ts",
     "seed:supabase": "tsx src/scripts/seedSupabase.ts",
+    "seed:tracking": "tsx src/scripts/seedTracking.ts",
+    "seed:test": "tsx src/scripts/seedTestData.ts",
+    "seed:courses": "tsx src/scripts/seedCourses.ts",
+    "dev:test": "tsx src/scripts/devTest.ts",
+    "biometric:punch": "tsx src/scripts/simulatePunch.ts",
     "test": "vitest run"
   },
   "dependencies": {
@@ -25,6 +30,7 @@
     "mongoose": "^8.9.5",
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^9.0.6",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "zod": "^3.24.1"
   },
   "devDependencies": {

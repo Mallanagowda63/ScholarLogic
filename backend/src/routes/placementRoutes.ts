@@ -11,6 +11,9 @@ import {
   getJobDetail,
   checkEligibility,
   applyToJob,
+  recordExternalApplication,
+  updateJobPosting,
+  listAllApplications,
   getStudentApplications,
   getApplicationDetail,
   createJobPosting,
@@ -45,9 +48,12 @@ router.get('/jobs/hiring-now', asyncHandler(getHiringNowJobs));
 router.get('/jobs/:id', asyncHandler(getJobDetail));
 router.get('/jobs/:id/eligibility', asyncHandler(checkEligibility));
 router.post('/jobs/:id/apply', asyncHandler(applyToJob));
+router.post('/jobs/:id/apply-external', asyncHandler(recordExternalApplication));
+router.put('/jobs/:id', authorizeRoles('ADMIN', 'SUPER_ADMIN', 'PLACEMENT_MANAGER'), asyncHandler(updateJobPosting));
 router.post('/jobs', authorizeRoles('ADMIN', 'SUPER_ADMIN', 'PLACEMENT_MANAGER'), asyncHandler(createJobPosting));
 
 router.get('/applications', asyncHandler(getStudentApplications));
+router.get('/applications/all', authorizeRoles('ADMIN', 'SUPER_ADMIN', 'PLACEMENT_MANAGER'), asyncHandler(listAllApplications));
 router.get('/applications/export', authorizeRoles('ADMIN', 'SUPER_ADMIN', 'PLACEMENT_MANAGER'), asyncHandler(exportApplicantsCSV));
 router.get('/applications/:id/ics', asyncHandler(getInterviewICS));
 router.put('/applications/:id/status', authorizeRoles('ADMIN', 'SUPER_ADMIN', 'PLACEMENT_MANAGER'), asyncHandler(updateApplicationStatus));

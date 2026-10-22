@@ -261,7 +261,15 @@ export const Navbar: React.FC<{ isDashboard?: boolean }> = ({ isDashboard = fals
                         notifications.map((n) => (
                           <div
                             key={n._id}
-                            onClick={() => markRead(n._id)}
+                            onClick={() => {
+                              markRead(n._id);
+                              // Open the page the notification is about (e.g. a student pushed to placement)
+                              const link = (n as any).linkUrl;
+                              if (typeof link === 'string' && link.startsWith('/')) {
+                                setShowNotifications(false);
+                                navigate(link);
+                              }
+                            }}
                             className={`p-2.5 rounded-xl border text-xs cursor-pointer transition-colors ${
                               n.read
                                 ? 'bg-slate-50 dark:bg-slate-800/40 border-slate-100 dark:border-slate-800 text-slate-600 dark:text-slate-400'

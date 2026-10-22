@@ -29,6 +29,7 @@ export interface IJob extends Document {
   status: JobStatus;
   jdAttachmentUrl?: string;
   sourceUrl?: string;
+  applyUrl?: string; // the company's own application page; students apply there and ScholarLogic records it
   sourceType: 'OFFICIAL_CAREERS_PAGE' | 'SCHOLARLOGIC_INTERNAL';
   lastVerifiedAt?: Date;
   discoveredAt?: Date;
@@ -64,6 +65,7 @@ const JobSchema = new Schema<IJob>(
     status: { type: String, enum: ['OPEN', 'CLOSED', 'DRAFT'], default: 'OPEN' },
     jdAttachmentUrl: { type: String, default: '' },
     sourceUrl: { type: String, default: '' },
+    applyUrl: { type: String, default: '', trim: true },
     sourceType: {
       type: String,
       enum: ['OFFICIAL_CAREERS_PAGE', 'SCHOLARLOGIC_INTERNAL'],

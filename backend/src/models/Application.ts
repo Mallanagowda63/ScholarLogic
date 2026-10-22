@@ -48,6 +48,8 @@ export interface IApplication extends Document {
   documents?: IApplicationDocument[];
   interviewDetails?: IInterviewDetails;
   notes?: string;
+  appliedVia: 'PORTAL' | 'COMPANY_SITE'; // COMPANY_SITE = student clicked Apply and was sent to the company's own page
+  externalApplyUrl?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -57,7 +59,10 @@ const ApplicationSchema = new Schema<IApplication>(
     jobId: { type: Schema.Types.ObjectId, ref: 'Job', required: true, index: true },
     companyId: { type: Schema.Types.ObjectId, ref: 'Company' },
     studentId: { type: Schema.Types.ObjectId, ref: 'Student', required: true, index: true },
-    resumeId: { type: Schema.Types.ObjectId, ref: 'Resume', required: true },
+    // Applications made on the company's own site don't go through a ScholarLogic resume
+    resumeId: { type: Schema.Types.ObjectId, ref: 'Resume', required: function (this: any) { return this.appliedVia !== 'COMPANY_SITE'; } },
+    appliedVia: { type: String, enum: ['PORTAL', 'COMPANY_SITE'], default: 'PORTAL', index: true },
+    externalApplyUrl: { type: String, default: '' },
     appliedAt: { type: Date, default: Date.now },
     interviewDate: { type: Date },
     status: {

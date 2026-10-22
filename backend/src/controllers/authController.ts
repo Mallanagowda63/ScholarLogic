@@ -9,6 +9,7 @@ import { getNextStudentId } from '../models/Counter';
 import { env } from '../config/env';
 import { AuthRequest } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
+import { assignENumberQuietly } from '../services/esslService';
 
 function generateTokens(payload: any) {
   const accessToken = jwt.sign(payload, env.JWT_SECRET, { expiresIn: '1d' });
@@ -115,6 +116,9 @@ export const register = async (req: AuthRequest, res: Response): Promise<void> =
     await session.endSession();
   }
 
+  // E Number = Biometric ID on the eSSL machine, assigned once the account exists
+  if (studentDoc) await assignENumberQuietly(studentDoc._id);
+
   const tokenPayload = {
     userId: newUser._id.toString(),
     email: newUser.email,
@@ -149,14 +153,22 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
   const { email, password } = req.body;
 
   if (!email || !password) {
-    throw new AppError('Email and password are required', 400, 'MISSING_FIELDS');
+    throw new AppError('Email / Student ID and password are required', 400, 'MISSING_FIELDS');
   }
 
-  const normalizedEmail = email.trim().toLowerCase();
-
-  const user = await User.findOne({ email: normalizedEmail });
+  // The identifier may be an email, a Student ID, or the student's machine code from eSSL (e.g. SCLR245)
+  const identifier = String(email).trim();
+  let user;
+  if (identifier.includes('@')) {
+    user = await User.findOne({ email: identifier.toLowerCase() });
+  } else {
+    const student =
+      (await Student.findOne({ studentId: identifier.toUpperCase() }).select('userId')) ||
+      (await Student.findOne({ biometricId: { $in: [identifier, identifier.toUpperCase()] } }).select('userId'));
+    user = student ? await User.findById(student.userId) : null;
+  }
   if (!user) {
-    throw new AppError('No account found with this email address. Please register a new account.', 401, 'INVALID_CREDENTIALS');
+    throw new AppError('No account found with this email, Student ID or machine code.', 401, 'INVALID_CREDENTIALS');
   }
 
   const isMatch = await user.comparePassword(password);

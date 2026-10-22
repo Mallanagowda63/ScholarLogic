@@ -1,4 +1,13 @@
 {
+  "name": "scholarlogic-root",
+  "private": true,
+  "scripts": {
+    "dev": "npm run dev --prefix frontend",
+    "dev:all": "npm run dev --prefix backend & npm run dev --prefix frontend",
+    "dev:backend": "npm run dev --prefix backend",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "seed": "npm run seed --prefix backend"
+  },
   "devDependencies": {
     "@playwright/test": "^1.62.1"
   }

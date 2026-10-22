@@ -4,7 +4,7 @@ test.describe('Placement Portal & Job Application E2E Flow', () => {
   test('should allow student to browse jobs and view applications', async ({ page }) => {
     // Login
     await page.goto('/login');
-    await page.fill('input[type="email"]', 'student@scholarlogic.edu');
+    await page.fill('input[autocomplete="username"]', 'student@scholarlogic.edu');
     await page.fill('input[type="password"]', 'Student@123');
     await page.click('button[type="submit"]');
 

@@ -9,6 +9,7 @@ import { Submission } from '../models/Submission';
 import { Quiz } from '../models/Quiz';
 import { Student } from '../models/Student';
 import { AppError } from '../middleware/errorHandler';
+import { batchIdsForStudentUser, filterLessonsForBatches } from '../services/lessonVisibility';
 
 export const getCourses = async (req: AuthRequest, res: Response): Promise<void> => {
   const { search, category, level, status = 'PUBLISHED' } = req.query;
@@ -43,7 +44,11 @@ export const getCourseById = async (req: AuthRequest, res: Response): Promise<vo
   const modules = await Module.find({ courseId: course._id }).sort({ order: 1 });
   const moduleIds = modules.map((m) => m._id);
 
-  const lessons = await Lesson.find({ moduleId: { $in: moduleIds }, isPublished: true }).sort({ order: 1 });
+  let lessons = await Lesson.find({ moduleId: { $in: moduleIds }, isPublished: true }).sort({ order: 1 });
+  // Students see batch-targeted notes only for their own batches; signed-out visitors see none of them
+  if (!req.user || req.user.role === 'STUDENT') {
+    lessons = filterLessonsForBatches(lessons, req.user ? await batchIdsForStudentUser(req.user.userId) : new Set());
+  }
 
   let progressMap: Record<string, any> = {};
   if (req.user && req.user.role === 'STUDENT') {

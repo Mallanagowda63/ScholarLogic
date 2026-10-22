@@ -6,7 +6,7 @@ const QUESTION_COUNT = 4;
 test.describe('Voice AI Mock Interview E2E Flow', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/login');
-    await page.fill('input[type="email"]', 'student@scholarlogic.edu');
+    await page.fill('input[autocomplete="username"]', 'student@scholarlogic.edu');
     await page.fill('input[type="password"]', 'Student@123');
     await page.click('button[type="submit"]');
     await expect(page).toHaveURL(/\/student\/dashboard/);

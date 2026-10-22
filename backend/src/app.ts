@@ -18,7 +18,13 @@ import certificateRoutes from './routes/certificateRoutes';
 import notificationRoutes from './routes/notificationRoutes';
 import adminRoutes from './routes/adminRoutes';
 import trainerRoutes from './routes/trainerRoutes';
+import trackingRoutes from './routes/trackingRoutes';
+import bannerRoutes from './routes/bannerRoutes';
+import placementReferralRoutes from './routes/placementReferralRoutes';
+import integrationRoutes from './routes/integrationRoutes';
 import mockInterviewRoutes from './routes/mockInterviewRoutes';
+import attendanceRoutes from './routes/attendanceRoutes';
+import admsRoutes from './routes/admsRoutes';
 
 const app = express();
 
@@ -78,6 +84,9 @@ const corsOptions: cors.CorsOptions = {
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
   optionsSuccessStatus: 200,
 };
+
+// eSSL biometric machine push (ADMS). Mounted before the JSON/urlencoded parsers: the body is raw text
+app.use('/iclock', admsRoutes);
 
 // Enable CORS and Preflight OPTIONS Requests Across All Routes
 app.use(cors(corsOptions));
@@ -139,7 +148,12 @@ app.use('/api/certificates', certificateRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/trainer', trainerRoutes);
+app.use('/api/tracking', trackingRoutes);
+app.use('/api/integrations', integrationRoutes);
 app.use('/api/ai/mock-interview', mockInterviewRoutes);
+app.use('/api/attendance', attendanceRoutes);
+app.use('/api/banners', bannerRoutes);
+app.use('/api/placement-referrals', placementReferralRoutes);
 
 // Health check endpoint
 app.get('/api/health', (_req, res) => {

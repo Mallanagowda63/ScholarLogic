@@ -28,6 +28,14 @@ export interface StudentProfile {
   skills: string[];
   projects: Array<{ title: string; description: string; technologies: string[]; link?: string }>;
   certifications: Array<{ name: string; issuer: string; issueDate?: string; credentialId?: string }>;
+  experiences?: Array<{
+    company: string;
+    role: string;
+    startDate?: string;
+    endDate?: string;
+    currentlyWorking?: boolean;
+    description?: string;
+  }>;
   githubUrl?: string;
   linkedInUrl?: string;
   portfolioUrl?: string;
@@ -65,6 +73,7 @@ export interface Lesson {
   durationMinutes?: number;
   notesFileUrl?: string;
   notesFileType?: string;
+  batchIds?: string[]; // batches the notes were sent to; empty = whole course
   assignmentId?: string;
   quizId?: string;
   userProgress?: {

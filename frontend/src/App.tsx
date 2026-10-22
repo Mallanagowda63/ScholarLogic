@@ -41,6 +41,7 @@ const StudentExams = lazyPage(() => import('./pages/student/StudentExams'), 'Stu
 const ExamInstructions = lazyPage(() => import('./pages/student/ExamInstructions'), 'ExamInstructions');
 const ExamRunner = lazyPage(() => import('./pages/student/ExamRunner'), 'ExamRunner');
 const ExamResult = lazyPage(() => import('./pages/student/ExamResult'), 'ExamResult');
+const ExamResults = lazyPage(() => import('./pages/student/ExamResults'), 'ExamResults');
 const ResumeBuilder = lazyPage(() => import('./pages/student/ResumeBuilder'), 'ResumeBuilder');
 const StudentJobs = lazyPage(() => import('./pages/student/StudentJobs'), 'StudentJobs');
 const StudentApplications = lazyPage(() => import('./pages/student/StudentApplications'), 'StudentApplications');
@@ -51,6 +52,21 @@ const VoiceMockInterview = lazyPage(() => import('./pages/student/VoiceMockInter
 // Admin Pages
 const AdminDashboard = lazyPage(() => import('./pages/admin/AdminDashboard'), 'AdminDashboard');
 const AdminStudents = lazyPage(() => import('./pages/admin/AdminStudents'), 'AdminStudents');
+const AdminStudentJourney = lazyPage(() => import('./pages/admin/AdminStudentJourney'), 'AdminStudentJourney');
+const AdminRegistrations = lazyPage(() => import('./pages/admin/AdminRegistrations'), 'AdminRegistrations');
+const AdminBanners = lazyPage(() => import('./pages/admin/AdminBanners'), 'AdminBanners');
+const AdminBatches = lazyPage(() => import('./pages/admin/AdminBatches'), 'AdminBatches');
+const AdminBatchDetail = lazyPage(() => import('./pages/admin/AdminOperations'), 'AdminBatchDetail');
+const AdminTrainers = lazyPage(() => import('./pages/admin/AdminOperations'), 'AdminTrainers');
+const AdminAttendance = lazyPage(() => import('./pages/admin/AdminOperations'), 'AdminAttendance');
+const AdminHistory = lazyPage(() => import('./pages/admin/AdminOperations'), 'AdminHistory');
+const AdminBiometric = lazyPage(() => import('./pages/admin/AdminBiometric'), 'AdminBiometric');
+const AdminEssl = lazyPage(() => import('./pages/admin/AdminEssl'), 'AdminEssl');
+const AdminNextAllocations = lazyPage(() => import('./pages/admin/AdminPlanning'), 'AdminNextAllocations');
+const AdminMonthlyPlanning = lazyPage(() => import('./pages/admin/AdminPlanning'), 'AdminMonthlyPlanning');
+const AdminCourses = lazyPage(() => import('./pages/admin/AdminCourses'), 'AdminCourses');
+const TrainerBatches = lazyPage(() => import('./pages/trainer/TrainerBatches'), 'TrainerBatches');
+const TrainerBatchDetail = lazyPage(() => import('./pages/trainer/TrainerBatches'), 'TrainerBatchDetail');
 
 // Upgraded Trainer Workspace Pages
 const TrainerDashboard = lazyPage(() => import('./pages/trainer/TrainerDashboard'), 'TrainerDashboard');
@@ -78,6 +94,8 @@ const CompanyComparison = lazyPage(() => import('./pages/placement/CompanyCompar
 const PlacementJobs = lazyPage(() => import('./pages/placement/PlacementJobs'), 'PlacementJobs');
 const HiringIntelligence = lazyPage(() => import('./pages/placement/HiringIntelligence'), 'HiringIntelligence');
 const PlacementReports = lazyPage(() => import('./pages/placement/PlacementReports'), 'PlacementReports');
+const PlacementApplications = lazyPage(() => import('./pages/placement/PlacementApplications'), 'PlacementApplications');
+const PlacementReadyStudents = lazyPage(() => import('./pages/placement/PlacementReadyStudents'), 'PlacementReadyStudents');
 
 export const App: React.FC = () => {
   return (
@@ -113,7 +131,7 @@ export const App: React.FC = () => {
                 <Route path="/student/exams" element={<StudentExams />} />
                 <Route path="/student/exams/:id/instructions" element={<ExamInstructions />} />
                 <Route path="/student/results/:id" element={<ExamResult />} />
-                <Route path="/student/results" element={<StudentDashboard />} />
+                <Route path="/student/results" element={<ExamResults />} />
                 <Route path="/student/resume" element={<ResumeBuilder />} />
                 <Route path="/student/jobs" element={<StudentJobs />} />
                 <Route path="/student/applications" element={<StudentApplications />} />
@@ -127,6 +145,8 @@ export const App: React.FC = () => {
             <Route element={<RoleGuard allowedRoles={['TRAINER', 'ADMIN', 'SUPER_ADMIN']} />}>
               <Route element={<TrainerLayout />}>
                 <Route path="/trainer/dashboard" element={<TrainerDashboard />} />
+                <Route path="/trainer/batches" element={<TrainerBatches />} />
+                <Route path="/trainer/batches/:id" element={<TrainerBatchDetail />} />
                 <Route path="/trainer/courses" element={<TrainerCourses />} />
                 <Route path="/trainer/content" element={<CourseContentEditor />} />
                 <Route path="/trainer/students" element={<TrainerStudents />} />
@@ -154,12 +174,14 @@ export const App: React.FC = () => {
                 <Route path="/placement/comparison" element={<CompanyComparison />} />
                 <Route path="/placement/jobs" element={<PlacementJobs />} />
                 <Route path="/placement/jobs/official" element={<PlacementJobs />} />
-                <Route path="/placement/applications" element={<StudentApplications />} />
+                <Route path="/placement/applications" element={<PlacementApplications />} />
+                <Route path="/placement/ready-students" element={<PlacementReadyStudents />} />
                 <Route path="/placement/hiring-intelligence" element={<HiringIntelligence />} />
                 <Route path="/placement/hiring-intelligence/skills" element={<HiringIntelligence />} />
                 <Route path="/placement/hiring-intelligence/locations" element={<HiringIntelligence />} />
                 <Route path="/placement/hiring-intelligence/trends" element={<HiringIntelligence />} />
                 <Route path="/placement/reports" element={<PlacementReports />} />
+                <Route path="/placement/banners" element={<AdminBanners />} />
               </Route>
             </Route>
 
@@ -168,7 +190,20 @@ export const App: React.FC = () => {
               <Route element={<AdminLayout />}>
                 <Route path="/admin/dashboard" element={<AdminDashboard />} />
                 <Route path="/admin/students" element={<AdminStudents />} />
-                <Route path="/admin/courses" element={<StudentCourses />} />
+                <Route path="/admin/students/:id" element={<AdminStudentJourney />} />
+                <Route path="/admin/registrations" element={<AdminRegistrations />} />
+                <Route path="/admin/banners" element={<AdminBanners />} />
+                <Route path="/admin/batches" element={<AdminBatches />} />
+                <Route path="/admin/batches/:id" element={<AdminBatchDetail />} />
+                <Route path="/admin/next-allocations" element={<AdminNextAllocations />} />
+                <Route path="/admin/planning" element={<AdminMonthlyPlanning />} />
+                <Route path="/admin/courses" element={<AdminCourses />} />
+                <Route path="/admin/trainers" element={<AdminTrainers />} />
+                <Route path="/admin/attendance" element={<AdminAttendance />} />
+                <Route path="/admin/biometric" element={<AdminBiometric />} />
+                <Route path="/admin/essl" element={<AdminEssl />} />
+                <Route path="/admin/history" element={<AdminHistory />} />
+                <Route path="/admin/lms" element={<StudentCourses />} />
                 <Route path="/admin/exams" element={<StudentExams />} />
                 <Route path="/admin/audit-logs" element={<AdminDashboard />} />
               </Route>

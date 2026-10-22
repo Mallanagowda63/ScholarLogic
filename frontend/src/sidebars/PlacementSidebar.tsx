@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
+  UserCheck,
+  GalleryHorizontal,
   LayoutDashboard,
   Building,
   Briefcase,
@@ -106,6 +108,7 @@ export const PlacementSidebar: React.FC = () => {
           </div>
 
           <NavLink to="/placement/applications" className={({ isActive }) => `flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold ${isActive ? 'bg-brand-600 text-white' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100'}`}><Send className="h-4 w-4 text-blue-500" /> Applications</NavLink>
+          <NavLink to="/placement/ready-students" className={({ isActive }) => `flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold ${isActive ? 'bg-brand-600 text-white' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100'}`}><UserCheck className="h-4 w-4 text-emerald-500" /> Students from Trainers</NavLink>
 
           {/* Hiring Intelligence Submenu */}
           <div>
@@ -129,6 +132,8 @@ export const PlacementSidebar: React.FC = () => {
           </div>
 
           <NavLink to="/placement/reports" className={({ isActive }) => `flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold ${isActive ? 'bg-brand-600 text-white' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100'}`}><FileSpreadsheet className="h-4 w-4 text-teal-500" /> Reports & Analytics</NavLink>
+
+          <NavLink to="/placement/banners" className={({ isActive }) => `flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold ${isActive ? 'bg-brand-600 text-white' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100'}`}><GalleryHorizontal className="h-4 w-4 text-indigo-500" /> Student Banners</NavLink>
         </div>
       </div>
 
