@@ -7,6 +7,10 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import { User } from '../models/User';
 import { AuditLog } from '../models/AuditLog';
+import { Notification } from '../models/Notification';
+import { ProfilePhoto } from '../models/ProfilePhoto';
+import { Course } from '../models/Course';
+import { Batch } from '../models/tracking/Batch';
 
 // Admin → Staff Access: admins create trainer and placement-team logins. The password is generated here,
 // shown to the admin once, and only an admin can reset it. Staff cannot change their own password.
@@ -139,6 +143,28 @@ router.put(
     }
     const message = changes.isActive === false ? `${user.fullName} can no longer log in` : changes.isActive === true ? `${user.fullName} can log in again` : 'Saved';
     res.json({ success: true, message, data: { staff: view(user) } });
+  })
+);
+
+// Permanently delete a staff login. Only after their access was removed, so an active account can't be
+// deleted by a mis-click. Their history (jobs, banners, attendance taken, pushed students) stays.
+router.delete(
+  '/:id',
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const user = await staffAccount(String(req.params.id));
+    if (String(user._id) === req.user?.userId) throw new AppError('You cannot delete your own account', 400, 'SELF_DELETE');
+    if (user.isActive !== false) throw new AppError('Remove their access first, then delete the account', 409, 'STILL_ACTIVE');
+    const id = user._id;
+    await Promise.all([
+      Notification.deleteMany({ userId: id }),
+      ProfilePhoto.deleteOne({ userId: id }),
+      Batch.updateMany({ trainerId: id }, { $unset: { trainerId: 1 } }),
+      Course.updateMany({ assignedTrainerIds: id }, { $pull: { assignedTrainerIds: id } }),
+    ]);
+    await user.deleteOne();
+    forgetStaffCheck(String(id));
+    await audit(req, 'STAFF_DELETED', user, { fullName: user.fullName });
+    res.json({ success: true, message: `${user.fullName}'s login was deleted` });
   })
 );
 

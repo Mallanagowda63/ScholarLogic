@@ -91,6 +91,26 @@ describe('Admin → Staff Access', () => {
     expect((await login('priya@campus.com', password)).status).toBe(200);
   });
 
+  it('delete: refused while active, works after access is removed, batches lose the link', async () => {
+    const res = await as(admin).post('/api/admin/staff').send({ fullName: 'Temp Trainer', email: 'temp.trainer@campus.com', role: 'TRAINER' });
+    const id = res.body.data.staff._id;
+    const pw = res.body.data.password;
+    const { Batch } = await import('../src/models/tracking/Batch');
+    const { Subject } = await import('../src/models/tracking/Subject');
+    const subj = await Subject.create({ name: 'Temp Subject', code: 'TMPS', expectedDurationDays: 10 });
+    const batch = await Batch.create({ batchCode: 'TMPS-B01', subjectId: subj._id, trainerId: id, timing: '9-10', startDate: new Date(), expectedEndDate: new Date() });
+
+    expect((await request(app).delete(`/api/admin/staff/${id}`).set('Authorization', `Bearer ${admin}`)).status).toBe(409);
+    await as(admin).put(`/api/admin/staff/${id}`).send({ isActive: false });
+    expect((await request(app).delete(`/api/admin/staff/${id}`).set('Authorization', `Bearer ${trainer}`)).status).toBe(403);
+    const del = await request(app).delete(`/api/admin/staff/${id}`).set('Authorization', `Bearer ${admin}`);
+    expect(del.status).toBe(200);
+    expect(await User.exists({ _id: id })).toBeNull();
+    expect((await Batch.findById(batch._id))!.trainerId).toBeUndefined();
+    expect((await login('temp.trainer@campus.com', pw)).status).toBe(401);
+    expect(await AuditLog.exists({ action: 'STAFF_DELETED', 'metadata.targetEmail': 'temp.trainer@campus.com' })).toBeTruthy();
+  });
+
   it('admins cannot use this screen to touch admin or student accounts', async () => {
     const adminUser = await User.findOne({ email: 'admin@scholarlogic.edu' });
     expect((await as(admin).post(`/api/admin/staff/${adminUser!._id}/reset-password`)).status).toBe(404);

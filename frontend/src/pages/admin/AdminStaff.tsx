@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Copy, KeyRound, Search, ShieldCheck, ShieldOff, UserPlus } from 'lucide-react';
+import { Copy, KeyRound, Search, ShieldCheck, ShieldOff, Trash2, UserPlus } from 'lucide-react';
 import { api } from '../../services/api';
 import { Card, EmptyRow, ErrorNote, Field, Modal, PageHeader, Spinner, inputClass, primaryBtn, secondaryBtn, useToast } from './tracking/shared';
 
@@ -73,7 +73,7 @@ export const AdminStaff: React.FC = () => {
   const [formError, setFormError] = useState('');
   const [busy, setBusy] = useState('');
   const [reveal, setReveal] = useState<{ staff: Staff; password: string } | null>(null);
-  const [confirm, setConfirm] = useState<{ kind: 'reset' | 'remove'; staff: Staff } | null>(null);
+  const [confirm, setConfirm] = useState<{ kind: 'reset' | 'remove' | 'delete'; staff: Staff } | null>(null);
 
   const load = () =>
     api
@@ -124,6 +124,20 @@ export const AdminStaff: React.FC = () => {
     setBusy(s._id);
     try {
       const res: any = await api.put(`/admin/staff/${s._id}`, { isActive });
+      setConfirm(null);
+      toast.show(res.message);
+      load();
+    } catch (e: any) {
+      toast.show(e.message);
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const deleteAccount = async (s: Staff) => {
+    setBusy(s._id);
+    try {
+      const res: any = await api.delete(`/admin/staff/${s._id}`);
       setConfirm(null);
       toast.show(res.message);
       load();
@@ -246,9 +260,19 @@ export const AdminStaff: React.FC = () => {
                               </button>
                             </>
                           ) : (
-                            <button type="button" className={`${secondaryBtn} !px-2.5 !py-1`} disabled={busy === s._id} onClick={() => setActive(s, true)}>
-                              <ShieldCheck className="h-3.5 w-3.5" /> Restore access
-                            </button>
+                            <>
+                              <button type="button" className={`${secondaryBtn} !px-2.5 !py-1`} disabled={busy === s._id} onClick={() => setActive(s, true)}>
+                                <ShieldCheck className="h-3.5 w-3.5" /> Restore access
+                              </button>
+                              <button
+                                type="button"
+                                className={`${secondaryBtn} !px-2.5 !py-1 !text-rose-600`}
+                                disabled={busy === s._id}
+                                onClick={() => setConfirm({ kind: 'delete', staff: s })}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" /> Delete
+                              </button>
+                            </>
                           )}
                         </div>
                       </td>
@@ -291,11 +315,19 @@ export const AdminStaff: React.FC = () => {
 
       {confirm && (
         <Modal
-          title={confirm.kind === 'reset' ? `Reset ${confirm.staff.fullName}'s password?` : `Remove ${confirm.staff.fullName}'s access?`}
+          title={
+            confirm.kind === 'reset'
+              ? `Reset ${confirm.staff.fullName}'s password?`
+              : confirm.kind === 'delete'
+                ? `Delete ${confirm.staff.fullName}'s login permanently?`
+                : `Remove ${confirm.staff.fullName}'s access?`
+          }
           subtitle={
             confirm.kind === 'reset'
               ? 'A new password is generated and their old one stops working. Anyone signed in with the old password is signed out.'
-              : 'They are signed out within seconds and cannot log in again until you restore access. Their batches and history stay.'
+              : confirm.kind === 'delete'
+                ? `${confirm.staff.email} will be deleted and cannot be restored. Batches they taught will show no trainer. Things they created (jobs, banners, attendance taken) are kept.`
+                : 'They are signed out within seconds and cannot log in again until you restore access. Their batches and history stay.'
           }
           onClose={() => setConfirm(null)}
         >
@@ -305,11 +337,13 @@ export const AdminStaff: React.FC = () => {
             </button>
             <button
               type="button"
-              className={`${primaryBtn} ${confirm.kind === 'remove' ? '!bg-rose-600 hover:!bg-rose-700' : ''}`}
+              className={`${primaryBtn} ${confirm.kind !== 'reset' ? '!bg-rose-600 hover:!bg-rose-700' : ''}`}
               disabled={busy === confirm.staff._id}
-              onClick={() => (confirm.kind === 'reset' ? resetPassword(confirm.staff) : setActive(confirm.staff, false))}
+              onClick={() =>
+                confirm.kind === 'reset' ? resetPassword(confirm.staff) : confirm.kind === 'delete' ? deleteAccount(confirm.staff) : setActive(confirm.staff, false)
+              }
             >
-              {confirm.kind === 'reset' ? 'Generate new password' : 'Remove access'}
+              {confirm.kind === 'reset' ? 'Generate new password' : confirm.kind === 'delete' ? 'Delete permanently' : 'Remove access'}
             </button>
           </div>
         </Modal>
