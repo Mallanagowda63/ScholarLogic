@@ -95,15 +95,6 @@ export const Home: React.FC = () => {
             matching.
           </p>
 
-          <div className="flex flex-wrap items-center gap-4 pt-2">
-
-            <Link
-              to="/login"
-              className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-6 py-3 text-sm font-semibold text-white hover:bg-white/20 transition-colors backdrop-blur-md"
-            >
-              Student & Admin Sign In
-            </Link>
-          </div>
 
           <div className="flex items-center gap-2 pt-2 text-xs text-slate-400">
             <ShieldCheck className="h-4 w-4 text-emerald-400" />
