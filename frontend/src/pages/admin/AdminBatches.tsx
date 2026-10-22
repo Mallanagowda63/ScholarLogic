@@ -20,9 +20,20 @@ import {
   statusTone,
 } from './tracking/shared';
 
+// Short, unique code for a new subject (used in batch IDs): initials for several words, else the first letters
+const suggestCode = (name: string, taken: Set<string>) => {
+  const words = name.toUpperCase().replace(/[^A-Z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
+  const base = (words.length > 1 ? words.map((w) => w[0]).join('') : words[0] || 'SUB').slice(0, 4) || 'SUB';
+  let code = base;
+  for (let i = 2; taken.has(code); i += 1) code = `${base}${i}`;
+  return code;
+};
+
 const CreateBatchModal: React.FC<{ onClose: () => void; onDone: (id: string) => void }> = ({ onClose, onDone }) => {
   const [subjects, setSubjects] = useState<any[]>([]);
   const [trainers, setTrainers] = useState<any[]>([]);
+  // Subject is typed: an existing one is picked by name (or "Name (CODE)"), a new name is created on submit
+  const [subjectText, setSubjectText] = useState('');
   const [form, setForm] = useState({ subjectId: '', trainerId: '', mode: 'OFFLINE', timing: '', startDate: new Date().toISOString().slice(0, 10), expectedEndDate: '', capacity: '25', batchCode: '', remarks: '' });
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -31,12 +42,25 @@ const CreateBatchModal: React.FC<{ onClose: () => void; onDone: (id: string) => 
     api.get('/tracking/trainers').then((r: any) => setTrainers(r.data?.trainers || [])).catch(() => {});
   }, []);
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const typed = subjectText.trim();
+  const matched = subjects.find((s) => {
+    const t = typed.toLowerCase();
+    return s.name.toLowerCase() === t || `${s.name} (${s.code})`.toLowerCase() === t || s.code.toLowerCase() === t;
+  });
+  const newCode = typed && !matched ? suggestCode(typed, new Set(subjects.map((s) => s.code))) : '';
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!typed) return setError('Type or pick a subject');
     setSaving(true);
     setError('');
     try {
-      const res: any = await api.post('/tracking/batches', { ...form, capacity: Number(form.capacity), expectedEndDate: form.expectedEndDate || undefined });
+      let subjectId = matched?._id;
+      if (!subjectId) {
+        const created: any = await api.post('/tracking/subjects', { name: typed, code: newCode, expectedDurationDays: 30, topics: [] });
+        subjectId = created.data.subject._id;
+      }
+      const res: any = await api.post('/tracking/batches', { ...form, subjectId, capacity: Number(form.capacity), expectedEndDate: form.expectedEndDate || undefined });
       onDone(res.data.batch._id);
     } catch (err: any) {
       setError(err.message);
@@ -49,14 +73,28 @@ const CreateBatchModal: React.FC<{ onClose: () => void; onDone: (id: string) => 
       <ErrorNote text={error} />
       <form onSubmit={submit} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Subject" required>
-          <select className={inputClass} value={form.subjectId} onChange={set('subjectId')} required>
-            <option value="">Select subject</option>
+          <input
+            id="batch-subject"
+            className={inputClass}
+            list="batch-subject-list"
+            value={subjectText}
+            onChange={(e) => setSubjectText(e.target.value)}
+            placeholder="Type or pick, e.g. Python"
+            autoComplete="off"
+            required
+          />
+          <datalist id="batch-subject-list">
             {subjects.map((s) => (
-              <option key={s._id} value={s._id}>
-                {s.name} ({s.code})
+              <option key={s._id} value={s.name}>
+                {s.code}
               </option>
             ))}
-          </select>
+          </datalist>
+          {newCode && (
+            <span className="mt-1 block text-[11px] text-emerald-600">
+              New subject "{typed}" (code {newCode}, 30 days) will be added. Add its topics later under Subjects.
+            </span>
+          )}
         </Field>
         <Field label="Trainer">
           <select className={inputClass} value={form.trainerId} onChange={set('trainerId')}>
