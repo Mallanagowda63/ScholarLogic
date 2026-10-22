@@ -54,6 +54,8 @@ const AdminStudents = lazyPage(() => import('./pages/admin/AdminStudents'), 'Adm
 const AdminStudentJourney = lazyPage(() => import('./pages/admin/AdminStudentJourney'), 'AdminStudentJourney');
 const AdminRegistrations = lazyPage(() => import('./pages/admin/AdminRegistrations'), 'AdminRegistrations');
 const AdminBanners = lazyPage(() => import('./pages/admin/AdminBanners'), 'AdminBanners');
+const OnlineCheckIn = lazyPage(() => import('./pages/public/OnlineCheckIn'), 'OnlineCheckIn');
+const AdminOnlineAttendance = lazyPage(() => import('./pages/admin/AdminOnlineAttendance'), 'AdminOnlineAttendance');
 const AdminStaff = lazyPage(() => import('./pages/admin/AdminStaff'), 'AdminStaff');
 const AdminAccount = lazyPage(() => import('./pages/admin/AdminAccount'), 'AdminAccount');
 const AdminBatches = lazyPage(() => import('./pages/admin/AdminBatches'), 'AdminBatches');
@@ -116,6 +118,8 @@ export const App: React.FC = () => {
               <Route path="/placement" element={<PlacementDrive />} />
               <Route path="/about" element={<About />} />
               <Route path="/verify/:certificateId" element={<VerifyCertificate />} />
+              {/* Opened on a phone by scanning an online student's dashboard QR code */}
+              <Route path="/attendance/check-in" element={<OnlineCheckIn />} />
             </Route>
 
             {/* Exam Runner View (Full Screen Canvas Layout for Enrolled Students) */}
@@ -195,6 +199,7 @@ export const App: React.FC = () => {
                 <Route path="/admin/registrations" element={<AdminRegistrations />} />
                 <Route path="/admin/banners" element={<AdminBanners />} />
                 <Route path="/admin/staff" element={<AdminStaff />} />
+                <Route path="/admin/online-attendance" element={<AdminOnlineAttendance />} />
                 <Route path="/admin/account" element={<AdminAccount />} />
                 <Route path="/admin/batches" element={<AdminBatches />} />
                 <Route path="/admin/batches/:id" element={<AdminBatchDetail />} />

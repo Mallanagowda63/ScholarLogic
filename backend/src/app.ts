@@ -22,6 +22,7 @@ import trackingRoutes from './routes/trackingRoutes';
 import bannerRoutes from './routes/bannerRoutes';
 import staffRoutes from './routes/staffRoutes';
 import esslAgentRoutes from './routes/esslAgentRoutes';
+import onlineAttendanceRoutes from './routes/onlineAttendanceRoutes';
 import placementReferralRoutes from './routes/placementReferralRoutes';
 import integrationRoutes from './routes/integrationRoutes';
 import mockInterviewRoutes from './routes/mockInterviewRoutes';
@@ -160,6 +161,7 @@ app.use('/api/ai/mock-interview', mockInterviewRoutes);
 app.use('/api/attendance', attendanceRoutes);
 app.use('/api/banners', bannerRoutes);
 app.use('/api/placement-referrals', placementReferralRoutes);
+app.use('/api/online-attendance', onlineAttendanceRoutes);
 
 // Health check endpoint
 app.get('/api/health', (_req, res) => {

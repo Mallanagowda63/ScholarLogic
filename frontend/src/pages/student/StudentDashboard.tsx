@@ -6,6 +6,7 @@ import { StatCard } from '../../components/StatCard';
 import { Leaderboard } from '../../components/Leaderboard';
 import { CourseJourneyCard } from '../../components/CourseJourneyCard';
 import { AttendanceCalendar } from '../../components/AttendanceCalendar';
+import { OnlineAttendanceCard } from '../../components/OnlineAttendanceCard';
 import { BannerCarousel, BannerSlide } from '../../components/BannerCarousel';
 
 import {
@@ -23,6 +24,7 @@ import {
 
 export const StudentDashboard: React.FC = () => {
   const { user, studentProfile } = useAuth();
+  const isOnlineStudent = (studentProfile as any)?.enrollment?.mode === 'ONLINE';
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   // Placement banners are managed by admins / the placement team (Banners page) and stored in the database
@@ -220,8 +222,8 @@ export const StudentDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Daily attendance: biometric IN/OUT punches + trainer-marked online classes */}
-      <AttendanceCalendar />
+      {/* Online students mark attendance with the QR code; everyone else gets the eSSL / classroom calendar */}
+      {isOnlineStudent ? <OnlineAttendanceCard /> : <AttendanceCalendar />}
     </div>
   );
 };
