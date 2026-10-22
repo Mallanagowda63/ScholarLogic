@@ -210,3 +210,48 @@ export const updateMyCredentials = async (req: AuthRequest, res: Response): Prom
     data: { user: { id: user._id, email: user.email, fullName: user.fullName, role: user.role }, tokens },
   });
 };
+
+// ---------------------------------------------------------------------------
+// My Profile (admins, trainers, placement team): name and contact/work details only.
+// Email (the login ID), password and role are never changed here.
+// ---------------------------------------------------------------------------
+const PROFILE_FIELDS = ['phone', 'designation', 'department', 'specialization', 'experience', 'bio'] as const;
+const PROFILE_LIMITS: Record<(typeof PROFILE_FIELDS)[number], number> = { phone: 20, designation: 80, department: 80, specialization: 120, experience: 40, bio: 600 };
+
+const profileView = (u: any) => ({
+  fullName: u.fullName,
+  email: u.email,
+  role: u.role,
+  profile: Object.fromEntries(PROFILE_FIELDS.map((k) => [k, u.profile?.[k] || ''])),
+});
+
+export const getMyProfile = async (req: AuthRequest, res: Response): Promise<void> => {
+  const user = await User.findById(req.user!.userId).select('fullName email role profile').lean();
+  if (!user) throw new AppError('Account not found', 404, 'NOT_FOUND');
+  res.json({ success: true, data: profileView(user) });
+};
+
+export const updateMyProfile = async (req: AuthRequest, res: Response): Promise<void> => {
+  const user = await User.findById(req.user!.userId);
+  if (!user) throw new AppError('Account not found', 404, 'NOT_FOUND');
+  const body = req.body || {};
+  if (body.email !== undefined || body.password !== undefined || body.newPassword !== undefined || body.role !== undefined) {
+    throw new AppError('Your login email, password and role can only be changed by an admin', 403, 'NOT_ALLOWED');
+  }
+  if (body.fullName !== undefined) {
+    const name = String(body.fullName).trim();
+    if (name.length < 2 || name.length > 80) throw new AppError('Enter your full name (2 to 80 characters)', 400, 'INVALID_NAME');
+    user.fullName = name;
+  }
+  const profile: any = user.profile ? { ...(user.profile as any).toObject?.() ?? user.profile } : {};
+  for (const k of PROFILE_FIELDS) {
+    if (body[k] === undefined) continue;
+    const v = String(body[k] ?? '').trim();
+    if (v.length > PROFILE_LIMITS[k]) throw new AppError(`${k} is too long (max ${PROFILE_LIMITS[k]} characters)`, 400, 'TOO_LONG');
+    if (k === 'phone' && v && !/^[+\d][\d\s-]{6,19}$/.test(v)) throw new AppError('Enter a valid phone number', 400, 'INVALID_PHONE');
+    profile[k] = v;
+  }
+  user.profile = profile;
+  await user.save();
+  res.json({ success: true, message: 'Profile saved', data: profileView(user) });
+};

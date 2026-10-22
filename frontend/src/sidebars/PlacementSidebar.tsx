@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
+  UserCircle,
   UserCheck,
   GalleryHorizontal,
   LayoutDashboard,
@@ -134,6 +135,7 @@ export const PlacementSidebar: React.FC = () => {
           <NavLink to="/placement/reports" className={({ isActive }) => `flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold ${isActive ? 'bg-brand-600 text-white' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100'}`}><FileSpreadsheet className="h-4 w-4 text-teal-500" /> Reports & Analytics</NavLink>
 
           <NavLink to="/placement/banners" className={({ isActive }) => `flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold ${isActive ? 'bg-brand-600 text-white' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100'}`}><GalleryHorizontal className="h-4 w-4 text-indigo-500" /> Student Banners</NavLink>
+          <NavLink to="/placement/profile" className={({ isActive }) => `flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold ${isActive ? 'bg-brand-600 text-white' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100'}`}><UserCircle className="h-4 w-4 text-slate-500" /> My Profile</NavLink>
         </div>
       </div>
 

@@ -86,7 +86,7 @@ const TrainerCalendar = lazyPage(() => import('./pages/trainer/TrainerCalendar')
 const TrainerAnnouncements = lazyPage(() => import('./pages/trainer/TrainerAnnouncements'), 'TrainerAnnouncements');
 const TrainerMessages = lazyPage(() => import('./pages/trainer/TrainerMessages'), 'TrainerMessages');
 const TrainerAnalytics = lazyPage(() => import('./pages/trainer/TrainerAnalytics'), 'TrainerAnalytics');
-const TrainerProfile = lazyPage(() => import('./pages/trainer/TrainerProfile'), 'TrainerProfile');
+const StaffProfile = lazyPage(() => import('./pages/shared/StaffProfile'), 'StaffProfile');
 const TrainerGradingPanel = lazyPage(() => import('./pages/trainer/TrainerGradingPanel'), 'TrainerGradingPanel');
 const QuestionBankImporter = lazyPage(() => import('./pages/trainer/QuestionBankImporter'), 'QuestionBankImporter');
 
@@ -167,7 +167,7 @@ export const App: React.FC = () => {
                 <Route path="/trainer/announcements" element={<TrainerAnnouncements />} />
                 <Route path="/trainer/messages" element={<TrainerMessages />} />
                 <Route path="/trainer/analytics" element={<TrainerAnalytics />} />
-                <Route path="/trainer/profile" element={<TrainerProfile />} />
+                <Route path="/trainer/profile" element={<StaffProfile />} />
               </Route>
             </Route>
 
@@ -186,6 +186,7 @@ export const App: React.FC = () => {
                 <Route path="/placement/hiring-intelligence/locations" element={<HiringIntelligence />} />
                 <Route path="/placement/hiring-intelligence/trends" element={<HiringIntelligence />} />
                 <Route path="/placement/reports" element={<PlacementReports />} />
+                <Route path="/placement/profile" element={<StaffProfile />} />
                 <Route path="/placement/banners" element={<AdminBanners />} />
               </Route>
             </Route>
@@ -201,6 +202,7 @@ export const App: React.FC = () => {
                 <Route path="/admin/staff" element={<AdminStaff />} />
                 <Route path="/admin/online-attendance" element={<AdminOnlineAttendance />} />
                 <Route path="/admin/account" element={<AdminAccount />} />
+                <Route path="/admin/profile" element={<StaffProfile />} />
                 <Route path="/admin/batches" element={<AdminBatches />} />
                 <Route path="/admin/batches/:id" element={<AdminBatchDetail />} />
                 <Route path="/admin/next-allocations" element={<AdminNextAllocations />} />

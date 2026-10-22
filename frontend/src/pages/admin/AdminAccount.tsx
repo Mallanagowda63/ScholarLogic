@@ -67,7 +67,7 @@ export const AdminAccount: React.FC = () => {
 
   return (
     <div className="space-y-5 pb-12 max-w-2xl">
-      <PageHeader title="My Account" subtitle="Change the email and password you use to log in as admin." />
+      <PageHeader title="Login & Password" subtitle="Change the email and password you use to log in as admin." />
 
       {done && (
         <div className="flex items-center gap-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 p-3 text-sm font-semibold text-emerald-700 dark:text-emerald-300">
