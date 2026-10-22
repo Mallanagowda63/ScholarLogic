@@ -59,10 +59,10 @@ describe('Admin → Staff Access', () => {
     expect(list.body.data.staff.some((s: any) => s.email === 'priya@campus.com')).toBe(true);
   });
 
-  it('rejects duplicates, bad emails and roles other than trainer / placement', async () => {
+  it('rejects duplicates, bad emails and roles other than admin / trainer / placement', async () => {
     expect((await as(admin).post('/api/admin/staff').send({ fullName: 'P', email: 'priya@campus.com', role: 'TRAINER' })).status).toBe(409);
     expect((await as(admin).post('/api/admin/staff').send({ fullName: 'P', email: 'nope', role: 'TRAINER' })).status).toBe(400);
-    expect((await as(admin).post('/api/admin/staff').send({ fullName: 'P', email: 'p2@campus.com', role: 'ADMIN' })).status).toBe(400);
+    expect((await as(admin).post('/api/admin/staff').send({ fullName: 'P', email: 'p2@campus.com', role: 'STUDENT' })).status).toBe(400);
   });
 
   it('reset: new password works, the old one and old sessions stop', async () => {
@@ -111,10 +111,35 @@ describe('Admin → Staff Access', () => {
     expect(await AuditLog.exists({ action: 'STAFF_DELETED', 'metadata.targetEmail': 'temp.trainer@campus.com' })).toBeTruthy();
   });
 
-  it('admins cannot use this screen to touch admin or student accounts', async () => {
+  it('admin accounts: create one, but never remove yourself or the last admin', async () => {
     const adminUser = await User.findOne({ email: 'admin@scholarlogic.edu' });
-    expect((await as(admin).post(`/api/admin/staff/${adminUser!._id}/reset-password`)).status).toBe(404);
+    // Yourself: no reset, demotion or removal here
+    expect((await as(admin).post(`/api/admin/staff/${adminUser!._id}/reset-password`)).status).toBe(400);
+    expect((await as(admin).put(`/api/admin/staff/${adminUser!._id}`).send({ isActive: false })).status).toBe(400);
+    expect((await as(admin).put(`/api/admin/staff/${adminUser!._id}`).send({ role: 'TRAINER' })).status).toBe(400);
+
+    // A second admin can be created, logs in with full admin access
+    const res = await as(admin).post('/api/admin/staff').send({ fullName: 'Second Admin', email: 'second.admin@campus.com', role: 'ADMIN' });
+    expect(res.status).toBe(201);
+    const second = (await login('second.admin@campus.com', res.body.data.password)).body.data.tokens.accessToken;
+    expect((await as(second).get('/api/admin/staff')).status).toBe(200);
+
+    // The second admin may remove the first; then the first's session ends and the second becomes the last admin
+    expect((await as(second).put(`/api/admin/staff/${adminUser!._id}`).send({ isActive: false })).status).toBe(200);
+    expect((await as(admin).get('/api/admin/staff')).status).toBe(401);
+    const id2 = res.body.data.staff._id;
+    // No one else left to remove the second admin, and it cannot remove itself
+    expect((await as(second).put(`/api/admin/staff/${id2}`).send({ isActive: false })).status).toBe(400);
+    // Restore the original admin for the remaining tests
+    expect((await as(second).put(`/api/admin/staff/${adminUser!._id}`).send({ isActive: true })).status).toBe(200);
+    admin = (await login('admin@scholarlogic.edu', 'Admin@123')).body.data.tokens.accessToken;
+    // Now the first admin can demote the second (another admin remains)
+    expect((await as(admin).put(`/api/admin/staff/${id2}`).send({ role: 'TRAINER' })).status).toBe(200);
+  });
+
+  it('this screen never touches student accounts', async () => {
     const studentUser = await User.findOne({ role: 'STUDENT' });
     expect((await as(admin).put(`/api/admin/staff/${studentUser!._id}`).send({ isActive: false })).status).toBe(404);
+    expect((await as(admin).post('/api/admin/staff').send({ fullName: 'S', email: 's@campus.com', role: 'SUPER_ADMIN' })).status).toBe(400);
   });
 });

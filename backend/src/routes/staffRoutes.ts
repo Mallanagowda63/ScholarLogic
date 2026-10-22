@@ -17,7 +17,7 @@ import { Batch } from '../models/tracking/Batch';
 const router = Router();
 router.use(authenticateUser, authorizeRoles('ADMIN', 'SUPER_ADMIN'));
 
-const STAFF_ROLES = ['TRAINER', 'PLACEMENT_MANAGER'] as const;
+const STAFF_ROLES = ['TRAINER', 'PLACEMENT_MANAGER', 'ADMIN'] as const;
 type StaffRole = (typeof STAFF_ROLES)[number];
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -33,6 +33,15 @@ const oid = (raw: unknown) => {
   if (!mongoose.isValidObjectId(id)) throw new AppError('Invalid account', 400, 'INVALID_ID');
   return id;
 };
+
+const isSelf = (req: AuthRequest, user: { _id: unknown }) => String(user._id) === req.user?.userId;
+
+// The LMS must always keep at least one admin who can log in
+async function assertAnotherActiveAdmin(user: { _id: unknown; role: string }) {
+  if (user.role !== 'ADMIN') return;
+  const others = await User.countDocuments({ _id: { $ne: user._id }, role: { $in: ['ADMIN', 'SUPER_ADMIN'] }, isActive: { $ne: false } });
+  if (!others) throw new AppError('This is the only admin who can log in. Add another admin first.', 409, 'LAST_ADMIN');
+}
 
 async function staffAccount(id: string) {
   const user = await User.findById(oid(id));
@@ -83,7 +92,7 @@ router.post(
     const role = String(req.body?.role || '') as StaffRole;
     if (!fullName) throw new AppError('Enter the full name', 400, 'MISSING_FIELDS');
     if (!EMAIL_RE.test(email)) throw new AppError('Enter a valid email address; it is their login ID', 400, 'INVALID_EMAIL');
-    if (!STAFF_ROLES.includes(role)) throw new AppError('Choose Trainer or Placement team', 400, 'INVALID_ROLE');
+    if (!STAFF_ROLES.includes(role)) throw new AppError('Choose Admin, Trainer or Placement team', 400, 'INVALID_ROLE');
     if (await User.exists({ email })) throw new AppError('An account with this email already exists', 409, 'DUPLICATE');
 
     const password = generatePassword();
@@ -107,6 +116,7 @@ router.post(
   '/:id/reset-password',
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const user = await staffAccount(String(req.params.id));
+    if (isSelf(req, user)) throw new AppError('Change your own password on Login & Password', 400, 'SELF_RESET');
     const password = generatePassword();
     user.passwordHash = await bcrypt.hash(password, 10);
     user.passwordChangedAt = new Date();
@@ -125,11 +135,15 @@ router.put(
     const user = await staffAccount(String(req.params.id));
     const { fullName, role, isActive } = req.body || {};
     const changes: Record<string, unknown> = {};
+    const demoting = role !== undefined && role !== user.role && user.role === 'ADMIN';
+    const disabling = isActive === false && user.isActive !== false;
+    if ((demoting || disabling) && isSelf(req, user)) throw new AppError('You cannot remove your own admin access', 400, 'SELF_CHANGE');
+    if (demoting || disabling) await assertAnotherActiveAdmin(user);
     if (typeof fullName === 'string' && fullName.trim() && fullName.trim() !== user.fullName) {
       changes.fullName = user.fullName = fullName.trim();
     }
     if (role !== undefined && role !== user.role) {
-      if (!STAFF_ROLES.includes(role)) throw new AppError('Choose Trainer or Placement team', 400, 'INVALID_ROLE');
+      if (!STAFF_ROLES.includes(role)) throw new AppError('Choose Admin, Trainer or Placement team', 400, 'INVALID_ROLE');
       changes.role = user.role = role;
     }
     if (typeof isActive === 'boolean' && isActive !== (user.isActive !== false)) {
