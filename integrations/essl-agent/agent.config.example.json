@@ -1,5 +1,5 @@
 {
-  "serverUrl": "https://srv2027745.hstgr.cloud",
+  "serverUrl": "https://scholarlogiclms.in",
   "secret": "PASTE THE ESSL_AGENT_SECRET FROM THE SERVER HERE",
   "deviceHost": "192.168.1.35",
   "devicePort": 4370,

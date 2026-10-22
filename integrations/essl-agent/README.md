@@ -17,7 +17,7 @@ If the computer or the internet is off, punches stay on the machine and are sent
 2. Copy `agent.config.example.json` to `agent.config.json` and fill in:
    - `secret`: the `ESSL_AGENT_SECRET` value from the server's `backend/.env` (ask the admin)
    - `deviceHost`: the machine's IP (Menu → COMM. → Ethernet on the machine, e.g. `192.168.1.35`)
-   - `serverUrl`: the LMS address, e.g. `https://srv2027745.hstgr.cloud`
+   - `serverUrl`: the LMS address, e.g. `https://scholarlogiclms.in`
 3. Right-click `install-windows.bat` and choose **Run as administrator**.
    It tests one read and one send, then sets the helper to start whenever the computer starts.
 
