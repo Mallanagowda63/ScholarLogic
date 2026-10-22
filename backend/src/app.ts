@@ -20,6 +20,7 @@ import adminRoutes from './routes/adminRoutes';
 import trainerRoutes from './routes/trainerRoutes';
 import trackingRoutes from './routes/trackingRoutes';
 import bannerRoutes from './routes/bannerRoutes';
+import staffRoutes from './routes/staffRoutes';
 import placementReferralRoutes from './routes/placementReferralRoutes';
 import integrationRoutes from './routes/integrationRoutes';
 import mockInterviewRoutes from './routes/mockInterviewRoutes';
@@ -146,6 +147,8 @@ app.use('/api/resumes', resumeRoutes);
 app.use('/api/placements', placementRoutes);
 app.use('/api/certificates', certificateRoutes);
 app.use('/api/notifications', notificationRoutes);
+// Before /api/admin so its routes aren't shadowed
+app.use('/api/admin/staff', staffRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/trainer', trainerRoutes);
 app.use('/api/tracking', trackingRoutes);

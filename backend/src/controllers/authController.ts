@@ -18,7 +18,9 @@ function generateTokens(payload: any) {
 }
 
 export const register = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { email, password, fullName, role = 'STUDENT', college, degree, branch, preferredRole } = req.body;
+  const { email, password, fullName, college, degree, branch, preferredRole } = req.body;
+  // Public sign-up only ever creates students. Staff accounts are created by an admin (Admin → Staff Access)
+  const role = 'STUDENT';
 
   if (!email || !password || !fullName) {
     throw new AppError('Email, password, and full name are required', 400, 'MISSING_FIELDS');
@@ -171,6 +173,10 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
     throw new AppError('No account found with this email, Student ID or machine code.', 401, 'INVALID_CREDENTIALS');
   }
 
+  if (user.isActive === false) {
+    throw new AppError('Your access has been removed. Please contact the admin.', 403, 'ACCESS_REMOVED');
+  }
+
   const isMatch = await user.comparePassword(password);
   if (!isMatch) {
     throw new AppError('Incorrect password. Please check your password and try again.', 401, 'INVALID_CREDENTIALS');
@@ -228,7 +234,7 @@ export const refreshToken = async (req: AuthRequest, res: Response): Promise<voi
     const decoded = jwt.verify(token, env.JWT_REFRESH_SECRET) as any;
     const user = await User.findById(decoded.userId);
 
-    if (!user || user.refreshToken !== token) {
+    if (!user || user.refreshToken !== token || user.isActive === false) {
       throw new AppError('Invalid refresh token', 401, 'INVALID_REFRESH_TOKEN');
     }
 

@@ -3,6 +3,7 @@ import { api } from '../services/api';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
+  KeyRound,
   GalleryHorizontal,
   LayoutDashboard,
   Users,
@@ -50,6 +51,7 @@ export const AdminSidebar: React.FC = () => {
     { name: 'Courses', path: '/admin/courses', icon: BookOpen },
     { name: 'Subjects', path: '/admin/courses?tab=subjects', icon: ListOrdered },
     { name: 'Trainers', path: '/admin/trainers', icon: UserCog },
+    { name: 'Staff Access', path: '/admin/staff', icon: KeyRound },
     { name: 'Attendance', path: '/admin/attendance', icon: CheckSquare },
     { name: 'Biometric Live', path: '/admin/biometric', icon: Fingerprint },
     { name: 'eSSL Integration', path: '/admin/essl', icon: IdCard },

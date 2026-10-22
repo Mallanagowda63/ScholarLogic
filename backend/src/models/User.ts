@@ -12,6 +12,9 @@ export interface IUser extends Document {
   avatarUrl?: string;
   isVerified: boolean;
   refreshToken?: string;
+  isActive: boolean; // false = access removed by an admin; login and existing sessions are refused
+  passwordChangedAt?: Date; // sessions issued before this are no longer accepted
+  createdById?: mongoose.Types.ObjectId; // admin who created a staff account
   createdAt: Date;
   updatedAt: Date;
   comparePassword(password: string): Promise<boolean>;
@@ -31,6 +34,9 @@ const UserSchema = new Schema<IUser>(
     avatarUrl: { type: String, default: '' },
     isVerified: { type: Boolean, default: true },
     refreshToken: { type: String },
+    isActive: { type: Boolean, default: true },
+    passwordChangedAt: { type: Date },
+    createdById: { type: Schema.Types.ObjectId, ref: 'User' },
   },
   { timestamps: true }
 );

@@ -30,6 +30,11 @@ api.interceptors.response.use(
       await new Promise((r) => setTimeout(r, 800));
       return api.request(cfg);
     }
+    // An admin removed this person's access or reset their password: sign out and go to the login page
+    if (error.response?.data?.code === 'SESSION_REVOKED' && localStorage.getItem('scholarlogic_token')) {
+      localStorage.removeItem('scholarlogic_token');
+      if (!window.location.pathname.startsWith('/login')) window.location.assign('/login');
+    }
     const message =
       error.response?.data?.message || error.message || 'An unexpected error occurred';
     const code = error.response?.data?.code || 'ERROR';

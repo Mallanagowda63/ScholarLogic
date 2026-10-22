@@ -55,6 +55,7 @@ const AdminStudents = lazyPage(() => import('./pages/admin/AdminStudents'), 'Adm
 const AdminStudentJourney = lazyPage(() => import('./pages/admin/AdminStudentJourney'), 'AdminStudentJourney');
 const AdminRegistrations = lazyPage(() => import('./pages/admin/AdminRegistrations'), 'AdminRegistrations');
 const AdminBanners = lazyPage(() => import('./pages/admin/AdminBanners'), 'AdminBanners');
+const AdminStaff = lazyPage(() => import('./pages/admin/AdminStaff'), 'AdminStaff');
 const AdminBatches = lazyPage(() => import('./pages/admin/AdminBatches'), 'AdminBatches');
 const AdminBatchDetail = lazyPage(() => import('./pages/admin/AdminOperations'), 'AdminBatchDetail');
 const AdminTrainers = lazyPage(() => import('./pages/admin/AdminOperations'), 'AdminTrainers');
@@ -193,6 +194,7 @@ export const App: React.FC = () => {
                 <Route path="/admin/students/:id" element={<AdminStudentJourney />} />
                 <Route path="/admin/registrations" element={<AdminRegistrations />} />
                 <Route path="/admin/banners" element={<AdminBanners />} />
+                <Route path="/admin/staff" element={<AdminStaff />} />
                 <Route path="/admin/batches" element={<AdminBatches />} />
                 <Route path="/admin/batches/:id" element={<AdminBatchDetail />} />
                 <Route path="/admin/next-allocations" element={<AdminNextAllocations />} />
