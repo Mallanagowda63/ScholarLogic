@@ -127,7 +127,6 @@ const examSubmitLimiter = rateLimit({
 
 // Apply Granular Rate Limiters
 app.use('/api/auth/login', authLimiter);
-app.use('/api/auth/register', authLimiter);
 app.use('/api/auth/refresh', authLimiter);
 app.use('/api/resumes/analyze', aiLimiter);
 app.use('/api/exams/attempts/*/submit', examSubmitLimiter);

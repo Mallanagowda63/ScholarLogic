@@ -33,7 +33,7 @@ describe('ScholarLogic End-to-End API Test Suite', () => {
     studentToken = res.body.data.tokens.accessToken;
   });
 
-  it('2. Central Auth — Register New Student & Generate Unique Student ID', async () => {
+  it('2. Central Auth — public self-registration is closed', async () => {
     const res = await request(app)
       .post('/api/auth/register')
       .send({
@@ -45,9 +45,8 @@ describe('ScholarLogic End-to-End API Test Suite', () => {
         branch: 'Computer Science',
       });
 
-    expect(res.status).toBe(201);
-    expect(res.body.success).toBe(true);
-    expect(res.body.data.user.studentId).toBe('SL-2026-00002');
+    // Students come from the Google Form (admin Verify) or the eSSL import; staff from Staff Access
+    expect(res.status).toBe(404);
   });
 
   it('3. Student Dashboard API — Returns Real Data & Student ID', async () => {

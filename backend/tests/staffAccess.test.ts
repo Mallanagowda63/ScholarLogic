@@ -31,10 +31,10 @@ describe('Admin → Staff Access', () => {
     await disconnectDB();
   });
 
-  it('public sign-up can no longer create an admin (or any staff role)', async () => {
+  it('public sign-up is closed, so nobody can make themselves an admin', async () => {
     const res = await request(app).post('/api/auth/register').send({ email: 'sneaky@x.com', password: 'Pass@1234', fullName: 'Sneaky', role: 'ADMIN' });
-    expect(res.status).toBe(201);
-    expect((await User.findOne({ email: 'sneaky@x.com' }))!.role).toBe('STUDENT');
+    expect(res.status).toBe(404);
+    expect(await User.exists({ email: 'sneaky@x.com' })).toBeNull();
   });
 
   it('admin creates a placement-team login with a generated password that works', async () => {

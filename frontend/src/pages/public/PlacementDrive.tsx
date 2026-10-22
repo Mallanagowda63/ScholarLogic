@@ -68,12 +68,6 @@ export const PlacementDrive: React.FC = () => {
 
           <div className="flex flex-wrap items-center gap-4 pt-2">
             <Link
-              to="/register"
-              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-brand-500 to-indigo-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-brand-500/30 hover:shadow-brand-500/50 hover:-translate-y-0.5 transition-all"
-            >
-              Get Placement Ready <ArrowRight className="h-4 w-4" />
-            </Link>
-            <Link
               to="/login"
               className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-6 py-3 text-sm font-semibold text-white hover:bg-white/20 transition-colors backdrop-blur-md"
             >
@@ -161,15 +155,9 @@ export const PlacementDrive: React.FC = () => {
             Ready to enter this placement cycle?
           </h2>
           <p className="relative z-10 mt-3 text-sm text-brand-100 max-w-xl mx-auto">
-            Register your ScholarLogic Student ID today and start matching with verified hiring partners.
+            Sign in with your ScholarLogic Student ID and start matching with verified hiring partners.
           </p>
           <div className="relative z-10 mt-6 flex flex-wrap items-center justify-center gap-4">
-            <Link
-              to="/register"
-              className="inline-flex items-center gap-2 rounded-xl bg-white px-6 py-3 text-sm font-bold text-brand-700 shadow-lg hover:-translate-y-0.5 transition-transform"
-            >
-              Get Started Free <ArrowRight className="h-4 w-4" />
-            </Link>
             <Link
               to="/courses"
               className="inline-flex items-center gap-2 rounded-xl border border-white/30 bg-white/10 px-6 py-3 text-sm font-semibold text-white hover:bg-white/20 transition-colors backdrop-blur-md"

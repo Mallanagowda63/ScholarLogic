@@ -15,7 +15,6 @@ import { AdminLayout } from './layouts/AdminLayout';
 // Public Pages
 import { Home } from './pages/public/Home';
 import { Login } from './pages/public/Login';
-import { Register } from './pages/public/Register';
 import { VerifyCertificate } from './pages/public/VerifyCertificate';
 import { PlacementDrive } from './pages/public/PlacementDrive';
 import { About } from './pages/public/About';
@@ -111,7 +110,7 @@ export const App: React.FC = () => {
               <Route element={<GuestRoute />}>
                 <Route path="/" element={<Home />} />
                 <Route path="/login" element={<Login />} />
-                <Route path="/register" element={<Register />} />
+                <Route path="/register" element={<Navigate to="/login" replace />} />
               </Route>
               <Route path="/courses" element={<StudentCourses />} />
               <Route path="/placement" element={<PlacementDrive />} />

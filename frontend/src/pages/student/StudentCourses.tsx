@@ -15,7 +15,7 @@ export const StudentCourses: React.FC = () => {
   const [courses, setCourses] = useState<Course[]>([]);
   const [registeredProgress, setRegisteredProgress] = useState<any[]>([]);
   const [selectedCourseId, setSelectedCourseId] = useState<string>(courseParam || '');
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(() => searchParams.get('q') || '');
   const [category, setCategory] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -251,10 +251,10 @@ export const StudentCourses: React.FC = () => {
                   </span>
 
                   <Link
-                    to={user ? `/student/courses/${c._id}` : '/register'}
+                    to={user ? `/student/courses/${c._id}` : '/login'}
                     className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-brand-600 text-white text-xs font-bold shadow-md hover:bg-brand-700 transition-colors"
                   >
-                    {user ? 'Open LMS' : 'Enroll Now'} <ArrowRight className="h-3.5 w-3.5" />
+                    {user ? 'Open LMS' : 'Sign in to start'} <ArrowRight className="h-3.5 w-3.5" />
                   </Link>
                 </div>
               </div>

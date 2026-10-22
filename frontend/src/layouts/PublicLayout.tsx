@@ -1,7 +1,17 @@
 import React from 'react';
-import { Outlet } from 'react-router-dom';
+import { Link, Outlet } from 'react-router-dom';
 import { Navbar } from '../components/Navbar';
 import { Heart, Mail, Phone, MapPin } from 'lucide-react';
+
+// Footer program links open the course catalogue searched for that program
+const PROGRAMS: [string, string][] = [
+  ['Python Full Stack Development', 'Python'],
+  ['Java Full Stack Development', 'Java'],
+  ['Cloud Computing (AWS)', 'Cloud'],
+  ['Data Analytics & Power BI', 'Data Analytics'],
+  ['Digital Marketing', 'Digital Marketing'],
+  ['DevOps Engineering', 'DevOps'],
+];
 
 export const PublicLayout: React.FC = () => {
   return (
@@ -26,31 +36,43 @@ export const PublicLayout: React.FC = () => {
             <div>
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white mb-3">Core Modules</h4>
               <ul className="space-y-2 text-xs text-slate-600 dark:text-slate-400">
-                <li>ScholarLogic LMS</li>
-                <li>Online Assessment Engine</li>
-                <li>AI Resume Builder & ATS</li>
-                <li>Placement Portal</li>
+                <li><Link to="/courses" className="hover:text-brand-600 dark:hover:text-brand-400 hover:underline transition-colors">ScholarLogic LMS</Link></li>
+                <li><Link to="/login" className="hover:text-brand-600 dark:hover:text-brand-400 hover:underline transition-colors">Online Assessment Engine</Link></li>
+                <li><Link to="/login" className="hover:text-brand-600 dark:hover:text-brand-400 hover:underline transition-colors">AI Resume Builder & ATS</Link></li>
+                <li><Link to="/placement" className="hover:text-brand-600 dark:hover:text-brand-400 hover:underline transition-colors">Placement Portal</Link></li>
               </ul>
             </div>
 
             <div>
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white mb-3">Popular Programs</h4>
               <ul className="space-y-2 text-xs text-slate-600 dark:text-slate-400">
-                <li>Python Full Stack Development</li>
-                <li>Java Full Stack Development</li>
-                <li>Cloud Computing (AWS)</li>
-                <li>Data Analytics & Power BI</li>
-                <li>Digital Marketing</li>
-                <li>DevOps Engineering</li>
+                {PROGRAMS.map(([label, q]) => (
+                  <li key={label}>
+                    <Link to={`/courses?q=${encodeURIComponent(q)}`} className="hover:text-brand-600 dark:hover:text-brand-400 hover:underline transition-colors">
+                      {label}
+                    </Link>
+                  </li>
+                ))}
               </ul>
             </div>
 
             <div>
               <h4 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white mb-3">Contact Hub</h4>
               <div className="space-y-2 text-xs text-slate-600 dark:text-slate-400">
-                <p className="flex items-center gap-2"><Mail className="h-4 w-4 text-brand-500" /> support@scholarlogic.edu</p>
-                <p className="flex items-center gap-2"><Phone className="h-4 w-4 text-brand-500" /> +91 80 4567 8900</p>
-                <p className="flex items-center gap-2"><MapPin className="h-4 w-4 text-brand-500" /> ScholarLogic Tech Park, Bangalore</p>
+                <a href="mailto:tech@scholarlogic.net" className="flex items-center gap-2 hover:text-brand-600 dark:hover:text-brand-400 hover:underline transition-colors">
+                  <Mail className="h-4 w-4 shrink-0 text-brand-500" /> tech@scholarlogic.net
+                </a>
+                <a href="tel:+919008625716" className="flex items-center gap-2 hover:text-brand-600 dark:hover:text-brand-400 hover:underline transition-colors">
+                  <Phone className="h-4 w-4 shrink-0 text-brand-500" /> +91 90086 25716
+                </a>
+                <a
+                  href="https://www.google.com/maps/search/?api=1&query=ScholarLogic%2C%20BTM%202nd%20Stage%2C%20Bengaluru"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-start gap-2 hover:text-brand-600 dark:hover:text-brand-400 hover:underline transition-colors"
+                >
+                  <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-brand-500" /> ScholarLogic, BTM 2nd Stage, Bengaluru
+                </a>
               </div>
             </div>
           </div>

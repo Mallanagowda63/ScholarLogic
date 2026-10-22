@@ -355,12 +355,6 @@ export const Navbar: React.FC<{ isDashboard?: boolean }> = ({ isDashboard = fals
               >
                 Sign In
               </Link>
-              <Link
-                to="/register"
-                className="rounded-xl bg-gradient-to-r from-brand-600 to-indigo-600 px-4 py-2 text-xs font-semibold text-white shadow-md shadow-brand-500/20 hover:opacity-95 transition-opacity"
-              >
-                Join ScholarLogic
-              </Link>
             </div>
           )}
         </div>

@@ -61,7 +61,7 @@ const features = [
 ];
 
 const journey = [
-  { icon: GraduationCap, title: 'Get Your Student ID', description: 'Register once and receive a verified ScholarLogic Student ID linked to every module.' },
+  { icon: GraduationCap, title: 'Get Your Student ID', description: 'Join through the ScholarLogic admission team and receive a verified Student ID linked to every module.' },
   { icon: BookOpen, title: 'Learn on the LMS', description: 'Progress through video lessons, assignments, and quizzes at your own pace.' },
   { icon: Award, title: 'Certify Your Skills', description: 'Sit proctored exams and earn verifiable certificates recognized by hiring partners.' },
   { icon: Briefcase, title: 'Get Placed', description: 'Match with roles via AI resume scoring and apply directly through the placement portal.' },
@@ -96,12 +96,6 @@ export const Home: React.FC = () => {
           </p>
 
           <div className="flex flex-wrap items-center gap-4 pt-2">
-            <Link
-              to="/register"
-              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-brand-500 to-indigo-600 px-6 py-3 text-sm font-bold text-white shadow-lg shadow-brand-500/30 hover:shadow-brand-500/50 hover:-translate-y-0.5 transition-all"
-            >
-              Get Your ScholarLogic ID <ArrowRight className="h-4 w-4" />
-            </Link>
 
             <Link
               to="/login"
@@ -219,12 +213,6 @@ export const Home: React.FC = () => {
             Join thousands of students learning, certifying, and getting placed through one connected platform.
           </p>
           <div className="relative z-10 mt-6 flex flex-wrap items-center justify-center gap-4">
-            <Link
-              to="/register"
-              className="inline-flex items-center gap-2 rounded-xl bg-white px-6 py-3 text-sm font-bold text-brand-700 shadow-lg hover:-translate-y-0.5 transition-transform"
-            >
-              Get Started Free <ArrowRight className="h-4 w-4" />
-            </Link>
             <Link
               to="/courses"
               className="inline-flex items-center gap-2 rounded-xl border border-white/30 bg-white/10 px-6 py-3 text-sm font-semibold text-white hover:bg-white/20 transition-colors backdrop-blur-md"

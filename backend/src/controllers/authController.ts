@@ -1,16 +1,12 @@
 import { Response } from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
-import mongoose from 'mongoose';
 import { User } from '../models/User';
 import { Student } from '../models/Student';
-import { Resume } from '../models/Resume';
-import { getNextStudentId } from '../models/Counter';
 import { env } from '../config/env';
 import { AuthRequest, forgetStaffCheck } from '../middleware/auth';
 import { AuditLog } from '../models/AuditLog';
 import { AppError } from '../middleware/errorHandler';
-import { assignENumberQuietly } from '../services/esslService';
 
 function generateTokens(payload: any) {
   const accessToken = jwt.sign(payload, env.JWT_SECRET, { expiresIn: '1d' });
@@ -18,139 +14,8 @@ function generateTokens(payload: any) {
   return { accessToken, refreshToken };
 }
 
-export const register = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { email, password, fullName, college, degree, branch, preferredRole } = req.body;
-  // Public sign-up only ever creates students. Staff accounts are created by an admin (Admin → Staff Access)
-  const role = 'STUDENT';
-
-  if (!email || !password || !fullName) {
-    throw new AppError('Email, password, and full name are required', 400, 'MISSING_FIELDS');
-  }
-
-  const normalizedEmail = email.trim().toLowerCase();
-
-  const existingUser = await User.findOne({ email: normalizedEmail });
-  if (existingUser) {
-    throw new AppError('An account with this email already exists. Please Sign In using your password, or use a different email.', 400, 'USER_EXISTS');
-  }
-
-  const salt = await bcrypt.genSalt(10);
-  const passwordHash = await bcrypt.hash(password, salt);
-
-  let newUser: any;
-  let studentId: string | undefined;
-  let studentDoc: any;
-
-  // Wrap User + Student + Resume creation in a transaction so a mid-way failure
-  // (e.g. a transient DB blip) can never leave an orphaned User with no Student profile.
-  const session = await mongoose.startSession();
-  try {
-    await session.withTransaction(async () => {
-      const createdUsers = await User.create(
-        [
-          {
-            email: normalizedEmail,
-            passwordHash,
-            fullName,
-            role: role as any,
-            isVerified: true,
-          },
-        ],
-        { session }
-      );
-      newUser = createdUsers[0];
-
-      if (newUser.role === 'STUDENT') {
-        studentId = await getNextStudentId(session);
-        const createdStudents = await Student.create(
-          [
-            {
-              userId: newUser._id,
-              studentId,
-              college: college || '',
-              degree: degree || 'B.Tech',
-              branch: branch || '',
-              preferredRole: preferredRole || 'DevOps & Infrastructure',
-              graduationYear: 2026,
-              cgpa: 8.5,
-            },
-          ],
-          { session }
-        );
-        studentDoc = createdStudents[0];
-
-        // Auto-create default ATS Resume record for student
-        await Resume.create(
-          [
-            {
-              studentId: studentDoc._id,
-              title: `${newUser.fullName} Profile Resume`,
-              versionName: 'Primary Profile Version',
-              template: 'MODERN',
-              isDefault: true,
-              data: {
-                fullName: newUser.fullName,
-                email: newUser.email,
-                phone: '+91 98765 43210',
-                location: 'India',
-                summary: `Student pursuing ${degree || 'B.Tech'}${branch ? ` in ${branch}` : ''}${college ? ` at ${college}` : ''}.`,
-                skills: ['Python', 'JavaScript', 'React', 'SQL', 'Git'],
-                experience: [],
-                education: [
-                  {
-                    institution: college || '',
-                    degree: degree || 'B.Tech',
-                    fieldOfStudy: branch || '',
-                    startDate: '2022',
-                    endDate: '2026',
-                    grade: 'CGPA: 8.5',
-                  },
-                ],
-                projects: [],
-                certifications: [],
-              },
-            },
-          ],
-          { session }
-        );
-      }
-    });
-  } finally {
-    await session.endSession();
-  }
-
-  // E Number = Biometric ID on the eSSL machine, assigned once the account exists
-  if (studentDoc) await assignENumberQuietly(studentDoc._id);
-
-  const tokenPayload = {
-    userId: newUser._id.toString(),
-    email: newUser.email,
-    role: newUser.role,
-    fullName: newUser.fullName,
-    studentId,
-    studentMongoId: studentDoc?._id?.toString(),
-  };
-
-  const tokens = generateTokens(tokenPayload);
-
-  newUser.refreshToken = tokens.refreshToken;
-  await newUser.save();
-
-  res.status(201).json({
-    success: true,
-    message: 'Registration successful',
-    data: {
-      user: {
-        id: newUser._id,
-        email: newUser.email,
-        fullName: newUser.fullName,
-        role: newUser.role,
-        studentId,
-      },
-      tokens,
-    },
-  });
-};
+// Public self-registration was removed: students are created from the Google Form (admin Verify) or the
+// eSSL machine import, and staff by an admin on Staff Access.
 
 export const login = async (req: AuthRequest, res: Response): Promise<void> => {
   const { email, password } = req.body;

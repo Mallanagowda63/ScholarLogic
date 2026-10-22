@@ -90,10 +90,10 @@ export const Login: React.FC = () => {
           </button>
 
           <div className="pt-2 text-center text-xs text-slate-500">
-            Don't have a Student ID yet?{' '}
-            <Link to="/register" className="font-semibold text-brand-600 dark:text-brand-400 hover:underline">
-              Register here
-            </Link>
+            New student? Your login is given by the ScholarLogic team. Call{' '}
+            <a href="tel:+919008625716" className="font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+              +91 90086 25716
+            </a>
           </div>
         </form>
 
