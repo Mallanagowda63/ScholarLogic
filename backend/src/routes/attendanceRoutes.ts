@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import { env } from '../config/env';
 import { authenticateUser, authorizeRoles, AuthRequest } from '../middleware/auth';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
@@ -199,7 +200,8 @@ router.get(
   '/biometric/machine/status',
   admins,
   asyncHandler(async (_req: AuthRequest, res: Response) => {
-    res.json({ success: true, data: { configured: isMachinePullConfigured(), lastPull: getLastPull() } });
+    const mode = isMachinePullConfigured() ? 'direct' : env.ESSL_AGENT_SECRET ? 'agent' : 'off';
+    res.json({ success: true, data: { configured: mode !== 'off', mode, lastPull: getLastPull() } });
   })
 );
 

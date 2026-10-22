@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
-import { GraduationCap, LogIn, Key, UserCheck, ShieldCheck, Briefcase } from 'lucide-react';
+import { GraduationCap } from 'lucide-react';
 
 export const Login: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -36,11 +36,6 @@ export const Login: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleDemoLogin = (demoEmail: string, demoPass: string) => {
-    setEmail(demoEmail);
-    setPassword(demoPass);
   };
 
   return (
@@ -102,45 +97,6 @@ export const Login: React.FC = () => {
           </div>
         </form>
 
-        {/* Quick Demo Login Credentials Buttons */}
-        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/60 dark:bg-slate-900/60 p-4 space-y-3">
-          <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 text-center">
-            ⚡ Quick Demo Accounts (Click to Auto-fill)
-          </p>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              onClick={() => handleDemoLogin('student@scholarlogic.edu', 'Student@123')}
-              className="p-2 rounded-xl border border-brand-200 dark:border-brand-900 bg-brand-50/50 dark:bg-brand-950/40 text-[11px] font-semibold text-brand-700 dark:text-brand-300 text-left hover:bg-brand-100 transition-colors"
-            >
-              <div className="font-bold flex items-center gap-1"><UserCheck className="h-3 w-3" /> Student Demo</div>
-              <div className="text-[10px] opacity-80">SL-2026-00001</div>
-            </button>
-
-            <button
-              onClick={() => handleDemoLogin('admin@scholarlogic.edu', 'Admin@123')}
-              className="p-2 rounded-xl border border-purple-200 dark:border-purple-900 bg-purple-50/50 dark:bg-purple-950/40 text-[11px] font-semibold text-purple-700 dark:text-purple-300 text-left hover:bg-purple-100 transition-colors"
-            >
-              <div className="font-bold flex items-center gap-1"><ShieldCheck className="h-3 w-3" /> Admin Demo</div>
-              <div className="text-[10px] opacity-80">Full Platform Access</div>
-            </button>
-
-            <button
-              onClick={() => handleDemoLogin('trainer@scholarlogic.edu', 'Trainer@123')}
-              className="p-2 rounded-xl border border-emerald-200 dark:border-emerald-900 bg-emerald-50/50 dark:bg-emerald-950/40 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300 text-left hover:bg-emerald-100 transition-colors"
-            >
-              <div className="font-bold flex items-center gap-1"><GraduationCap className="h-3 w-3" /> Trainer Demo</div>
-              <div className="text-[10px] opacity-80">Manage LMS Courses</div>
-            </button>
-
-            <button
-              onClick={() => handleDemoLogin('placement@scholarlogic.edu', 'Placement@123')}
-              className="p-2 rounded-xl border border-amber-200 dark:border-amber-900 bg-amber-50/50 dark:bg-amber-950/40 text-[11px] font-semibold text-amber-700 dark:text-amber-300 text-left hover:bg-amber-100 transition-colors"
-            >
-              <div className="font-bold flex items-center gap-1"><Briefcase className="h-3 w-3" /> Placement Demo</div>
-              <div className="text-[10px] opacity-80">Jobs & Shortlisting</div>
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   );

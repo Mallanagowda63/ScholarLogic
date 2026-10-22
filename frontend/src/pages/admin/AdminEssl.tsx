@@ -851,16 +851,24 @@ const ReviewTab: React.FC<{ onDone: (msg: string) => void; onError: (msg: string
             {!machine ? (
               <p className="text-slate-500">Checking…</p>
             ) : !machine.configured ? (
-              <p className="text-amber-600">Off. Set ESSL_DEVICE_HOST in the backend .env to read users and punches from the machine.</p>
+              <p className="text-amber-600">Off. Run the campus helper on a computer at the campus, or set ESSL_DEVICE_HOST in the backend .env.</p>
             ) : machine.lastPull ? (
               <p className={machine.lastPull.ok ? 'text-slate-500' : 'text-rose-600'}>
-                Last read {new Date(machine.lastPull.at).toLocaleTimeString()}: {machine.lastPull.message}
+                {machine.mode === 'agent' ? 'Campus helper, last report' : 'Last read'} {new Date(machine.lastPull.at).toLocaleString()}: {machine.lastPull.message}
               </p>
+            ) : machine.mode === 'agent' ? (
+              <p className="text-slate-500">The campus helper reads the machine every few minutes and sends new punches here. Waiting for its first report since the server started.</p>
             ) : (
               <p className="text-slate-500">Reads automatically every few minutes. Nothing is changed on the machine.</p>
             )}
           </div>
-          <button type="button" disabled={busy || !machine?.configured} onClick={readMachine} className={primaryBtn}>
+          <button
+            type="button"
+            disabled={busy || machine?.mode !== 'direct'}
+            title={machine?.mode === 'agent' ? 'Readings come from the campus helper automatically' : undefined}
+            onClick={readMachine}
+            className={primaryBtn}
+          >
             <RefreshCw className={`h-3.5 w-3.5 ${busy ? 'animate-spin' : ''}`} /> Read from machine now
           </button>
         </div>

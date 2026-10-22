@@ -7,7 +7,8 @@ import { Student } from '../models/Student';
 import { Resume } from '../models/Resume';
 import { getNextStudentId } from '../models/Counter';
 import { env } from '../config/env';
-import { AuthRequest } from '../middleware/auth';
+import { AuthRequest, forgetStaffCheck } from '../middleware/auth';
+import { AuditLog } from '../models/AuditLog';
 import { AppError } from '../middleware/errorHandler';
 import { assignENumberQuietly } from '../services/esslService';
 
@@ -286,5 +287,61 @@ export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
       user,
       studentProfile,
     },
+  });
+};
+
+/**
+ * Admins change their own login email and/or password (current password required).
+ * Trainers, the placement team and students cannot change theirs; an admin resets those.
+ * A new password signs out the admin's other sessions; this one gets fresh tokens.
+ */
+export const updateMyCredentials = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { currentPassword, newEmail, newPassword } = req.body || {};
+  const user = await User.findById(req.user!.userId);
+  if (!user || !['ADMIN', 'SUPER_ADMIN'].includes(user.role)) throw new AppError('Only admins can change their login here', 403, 'FORBIDDEN');
+  if (!currentPassword || !(await user.comparePassword(String(currentPassword)))) {
+    throw new AppError('Your current password is not correct', 400, 'WRONG_PASSWORD');
+  }
+
+  const changed: string[] = [];
+  const email = typeof newEmail === 'string' ? newEmail.trim().toLowerCase() : '';
+  if (email && email !== user.email) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new AppError('Enter a valid email address', 400, 'INVALID_EMAIL');
+    if (await User.exists({ email, _id: { $ne: user._id } })) throw new AppError('Another account already uses this email', 409, 'DUPLICATE');
+    user.email = email;
+    changed.push('email');
+  }
+  if (typeof newPassword === 'string' && newPassword) {
+    const pw = newPassword;
+    if (pw.length < 10 || !/[A-Za-z]/.test(pw) || !/\d/.test(pw)) {
+      throw new AppError('The new password needs at least 10 characters, with letters and numbers', 400, 'WEAK_PASSWORD');
+    }
+    if (pw === String(currentPassword)) throw new AppError('The new password must be different from the current one', 400, 'SAME_PASSWORD');
+    if (/^(admin|password|scholarlogic)@?123/i.test(pw)) throw new AppError('Choose a password that is harder to guess', 400, 'WEAK_PASSWORD');
+    user.passwordHash = await bcrypt.hash(pw, 10);
+    user.passwordChangedAt = new Date();
+    changed.push('password');
+  }
+  if (!changed.length) throw new AppError('Enter a new email or a new password', 400, 'NOTHING_TO_CHANGE');
+
+  const payload = { userId: user._id.toString(), email: user.email, role: user.role, fullName: user.fullName };
+  const tokens = generateTokens(payload);
+  user.refreshToken = tokens.refreshToken;
+  await user.save();
+  forgetStaffCheck(user._id.toString());
+  await AuditLog.create({
+    userId: user._id,
+    userEmail: user.email,
+    userRole: user.role,
+    action: 'ADMIN_CREDENTIALS_CHANGED',
+    resource: 'ACCOUNT',
+    metadata: { changed },
+    ipAddress: req.ip,
+  }).catch(() => undefined);
+
+  res.json({
+    success: true,
+    message: `Your ${changed.join(' and ')} ${changed.length > 1 ? 'were' : 'was'} changed`,
+    data: { user: { id: user._id, email: user.email, fullName: user.fullName, role: user.role }, tokens },
   });
 };

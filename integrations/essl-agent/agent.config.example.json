@@ -1,0 +1,8 @@
+{
+  "serverUrl": "https://srv2027745.hstgr.cloud",
+  "secret": "PASTE THE ESSL_AGENT_SECRET FROM THE SERVER HERE",
+  "deviceHost": "192.168.1.35",
+  "devicePort": 4370,
+  "commKey": 0,
+  "intervalMinutes": 5
+}

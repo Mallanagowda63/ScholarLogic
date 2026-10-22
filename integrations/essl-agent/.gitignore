@@ -1,0 +1,4 @@
+# Holds the server secret; never commit it
+agent.config.json
+agent.log
+agent.log.old

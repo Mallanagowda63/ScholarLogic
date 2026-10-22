@@ -57,4 +57,6 @@ export const env = {
   ESSL_DEVICE_PORT: Number(process.env.ESSL_DEVICE_PORT || 4370),
   ESSL_COMM_KEY: Number(process.env.ESSL_COMM_KEY || 0),
   ESSL_PULL_INTERVAL_MINUTES: Number(process.env.ESSL_PULL_INTERVAL_MINUTES || 5),
+  // Shared secret for the campus helper that reads the machine on the campus network and posts here. Empty = off
+  ESSL_AGENT_SECRET: (process.env.ESSL_AGENT_SECRET || '').trim(),
 };

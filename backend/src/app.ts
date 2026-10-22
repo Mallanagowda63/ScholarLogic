@@ -21,6 +21,7 @@ import trainerRoutes from './routes/trainerRoutes';
 import trackingRoutes from './routes/trackingRoutes';
 import bannerRoutes from './routes/bannerRoutes';
 import staffRoutes from './routes/staffRoutes';
+import esslAgentRoutes from './routes/esslAgentRoutes';
 import placementReferralRoutes from './routes/placementReferralRoutes';
 import integrationRoutes from './routes/integrationRoutes';
 import mockInterviewRoutes from './routes/mockInterviewRoutes';
@@ -130,6 +131,9 @@ app.use('/api/auth/register', authLimiter);
 app.use('/api/auth/refresh', authLimiter);
 app.use('/api/resumes/analyze', aiLimiter);
 app.use('/api/exams/attempts/*/submit', examSubmitLimiter);
+
+// Campus eSSL helper: secret-protected, with its own larger body limit, so it goes before the 2 MB parser
+app.use('/api/integrations/essl-agent', esslAgentRoutes);
 
 // Payload Size Restrictions (Protects against 10MB DoS payloads)
 app.use(express.json({ limit: '2mb' }));

@@ -3,7 +3,7 @@ import { BiometricDevice, BiometricPunch } from '../models/BiometricPunch';
 import { BiometricDeviceUser } from '../models/BiometricIntegration';
 import { ingestAttlog } from './biometricService';
 import { logSync } from './biometricShared';
-import { readDevice } from './zkDeviceClient';
+import { readDevice, DeviceSnapshot } from './zkDeviceClient';
 
 /**
  * Reads users and punches straight from the eSSL machine over its PC-connection port (read-only)
@@ -14,7 +14,7 @@ import { readDevice } from './zkDeviceClient';
 export interface PullResult {
   at: Date;
   ok: boolean;
-  trigger: 'manual' | 'auto';
+  trigger: 'manual' | 'auto' | 'agent';
   message: string;
   serialNumber?: string;
   users?: number;
@@ -30,6 +30,75 @@ let running: Promise<PullResult> | null = null;
 
 export const isMachinePullConfigured = () => !!env.ESSL_DEVICE_HOST;
 export const getLastPull = () => lastPull;
+
+/**
+ * Stores one reading of the machine, whoever made it: this server (direct read) or the campus helper
+ * (agent push). Same rules either way: known serial only, users re-saved when changed, punches from
+ * 2 days before the newest stored one, each punch once.
+ */
+export async function storeSnapshot(
+  snap: Pick<DeviceSnapshot, 'serialNumber' | 'users' | 'punches'>,
+  trigger: PullResult['trigger'],
+  source: string
+): Promise<PullResult> {
+  const at = new Date();
+  const serial = snap.serialNumber || 'UNKNOWN';
+  if (env.BIOMETRIC_DEVICE_SERIALS.length && !env.BIOMETRIC_DEVICE_SERIALS.includes(serial)) {
+    throw new Error(`The machine reports serial ${serial}, which is not in BIOMETRIC_DEVICE_SERIALS`);
+  }
+
+  // The machine's user list (code + name) feeds the review screen's name suggestions
+  const usersSignature = JSON.stringify(snap.users.map((u) => [u.userId, u.name, u.card, u.privilege]));
+  if (snap.users.length && usersSignature !== lastUsersSignature) {
+    await BiometricDeviceUser.bulkWrite(
+      snap.users.map((u) => ({
+        updateOne: {
+          filter: { deviceSerial: serial, pin: u.userId },
+          update: { $set: { name: u.name, card: u.card, privilege: String(u.privilege), rawLine: trigger === 'agent' ? 'Campus helper' : 'TCP pull', reportedAt: at } },
+          upsert: true,
+        },
+      })),
+      { ordered: false }
+    );
+    lastUsersSignature = usersSignature;
+  }
+
+  // The machine always hands over its whole log. Only punches from 2 days before the newest one already
+  // stored are sent on (the rest are stored already), so a routine read writes a handful of rows, not thousands
+  const cutoff = await punchCutoff(serial);
+  const fresh = cutoff ? snap.punches.filter((p) => p.localTime.slice(0, 10) >= cutoff) : snap.punches;
+  const body = fresh.map((p) => [p.userId, p.localTime, p.state, p.verify].join('\t')).join('\n');
+  const counts = await ingestAttlog(serial, body);
+  await BiometricDevice.updateOne({ serialNumber: serial }, { $set: { lastSeenAt: at, lastIp: source } }, { upsert: true });
+
+  const message = `Read ${snap.users.length} users and ${snap.punches.length} punches; ${counts.inserted} new${
+    counts.unknown ? `, ${counts.unknown} new from codes not linked to a student yet` : ''
+  }`;
+  if (counts.inserted) await logSync('DEVICE', 'INFO', `Machine read (${trigger}): ${message}`, { deviceSerial: serial, meta: { ...counts } });
+  const result: PullResult = {
+    at,
+    ok: true,
+    trigger,
+    message,
+    serialNumber: serial,
+    users: snap.users.length,
+    punchesRead: snap.punches.length,
+    newPunches: counts.inserted,
+    unlinkedPunches: counts.unknown,
+  };
+  lastPull = result;
+  return result;
+}
+
+/** First date (YYYY-MM-DD) worth sending: 2 days before the newest punch already stored; '' = send everything */
+export async function punchCutoff(serial: string) {
+  const newest: any = await BiometricPunch.findOne({ deviceSerial: serial }).sort({ punchTime: -1 }).select('localDate').lean();
+  return newest?.localDate ? new Date(Date.parse(`${newest.localDate}T00:00:00Z`) - 2 * 86400000).toISOString().slice(0, 10) : '';
+}
+
+export const recordAgentFailure = (message: string) => {
+  lastPull = { at: new Date(), ok: false, trigger: 'agent', message };
+};
 
 async function doPull(trigger: 'manual' | 'auto'): Promise<PullResult> {
   const at = new Date();
@@ -53,58 +122,7 @@ async function doPull(trigger: 'manual' | 'auto'): Promise<PullResult> {
         await new Promise((r) => setTimeout(r, attempt * 5000));
       }
     }
-    const serial = snap.serialNumber || 'UNKNOWN';
-    if (env.BIOMETRIC_DEVICE_SERIALS.length && !env.BIOMETRIC_DEVICE_SERIALS.includes(serial)) {
-      throw new Error(`The machine at ${env.ESSL_DEVICE_HOST} reports serial ${serial}, which is not in BIOMETRIC_DEVICE_SERIALS`);
-    }
-
-    // The machine's user list (code + name) feeds the review screen's name suggestions
-    const usersSignature = JSON.stringify(snap.users.map((u) => [u.userId, u.name, u.card, u.privilege]));
-    if (snap.users.length && usersSignature !== lastUsersSignature) {
-      await BiometricDeviceUser.bulkWrite(
-        snap.users.map((u) => ({
-          updateOne: {
-            filter: { deviceSerial: serial, pin: u.userId },
-            update: { $set: { name: u.name, card: u.card, privilege: String(u.privilege), rawLine: 'TCP pull', reportedAt: at } },
-            upsert: true,
-          },
-        })),
-        { ordered: false }
-      );
-      lastUsersSignature = usersSignature;
-    }
-
-    // The machine always hands over its whole log. Only punches from 2 days before the newest one already
-    // stored are sent on (the rest are stored already), so a routine read writes a handful of rows, not thousands
-    const newest: any = await BiometricPunch.findOne({ deviceSerial: serial }).sort({ punchTime: -1 }).select('localDate').lean();
-    let fresh = snap.punches;
-    if (newest?.localDate) {
-      const cutoff = new Date(Date.parse(`${newest.localDate}T00:00:00Z`) - 2 * 86400000).toISOString().slice(0, 10);
-      fresh = snap.punches.filter((p) => p.localTime.slice(0, 10) >= cutoff);
-    }
-    const body = fresh.map((p) => `${p.userId}\t${p.localTime}\t${p.state}\t${p.verify}`).join('\n');
-    const counts = await ingestAttlog(serial, body);
-    await BiometricDevice.updateOne(
-      { serialNumber: serial },
-      { $set: { lastSeenAt: at, lastIp: `${env.ESSL_DEVICE_HOST}:${env.ESSL_DEVICE_PORT} (read)` } },
-      { upsert: true }
-    );
-
-    const message = `Read ${snap.users.length} users and ${snap.punches.length} punches; ${counts.inserted} new${
-      counts.unknown ? `, ${counts.unknown} new from codes not linked to a student yet` : ''
-    }`;
-    if (counts.inserted) await logSync('DEVICE', 'INFO', `Machine read (${trigger}): ${message}`, { deviceSerial: serial, meta: { ...counts } });
-    return {
-      at,
-      ok: true,
-      trigger,
-      message,
-      serialNumber: serial,
-      users: snap.users.length,
-      punchesRead: snap.punches.length,
-      newPunches: counts.inserted,
-      unlinkedPunches: counts.unknown,
-    };
+    return await storeSnapshot(snap, trigger, `${env.ESSL_DEVICE_HOST}:${env.ESSL_DEVICE_PORT} (read)`);
   } catch (err: any) {
     const message = String(err?.message || err);
     await logSync('DEVICE', 'ERROR', `Machine read failed (${trigger}): ${message}`);
