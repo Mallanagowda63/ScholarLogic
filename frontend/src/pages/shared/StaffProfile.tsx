@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Camera, Lock, Save, Trash2, UserRound } from 'lucide-react';
+import { AtSign, Camera, Lock, Save, Trash2, UserRound } from 'lucide-react';
 import { api, assetUrl } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { Card, ErrorNote, Field, PageHeader, Spinner, inputClass, primaryBtn } from '../admin/tracking/shared';
@@ -36,7 +36,27 @@ async function squarePhoto(file: File): Promise<Blob> {
 const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join('') || '?';
 
 export const StaffProfile: React.FC = () => {
-  const { refreshUserData } = useAuth();
+  const { user, login, refreshUserData } = useAuth();
+  // Admins can change their own login email here (password stays the same; current password confirms it's them)
+  const [emailForm, setEmailForm] = useState({ email: '', currentPassword: '' });
+  const [emailMsg, setEmailMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [emailBusy, setEmailBusy] = useState(false);
+  const saveEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setEmailBusy(true);
+    setEmailMsg(null);
+    try {
+      const res: any = await api.put('/auth/my-credentials', { currentPassword: emailForm.currentPassword, newEmail: emailForm.email.trim() });
+      login(res.data.tokens.accessToken, { ...(user as any), ...res.data.user });
+      setData((d) => (d ? { ...d, email: res.data.user.email } : d));
+      setEmailForm({ email: '', currentPassword: '' });
+      setEmailMsg({ ok: true, text: `Saved. From now on you log in with ${res.data.user.email} and the same password.` });
+    } catch (err: any) {
+      setEmailMsg({ ok: false, text: err.message });
+    } finally {
+      setEmailBusy(false);
+    }
+  };
   const [data, setData] = useState<ProfileData | null>(null);
   const [form, setForm] = useState({ fullName: '', phone: '', designation: '', department: '', specialization: '', experience: '', bio: '' });
   const [error, setError] = useState('');
@@ -111,12 +131,16 @@ export const StaffProfile: React.FC = () => {
 
   if (!data) return error ? <ErrorNote text={error} /> : <Spinner />;
   const isTrainer = data.role === 'TRAINER';
+  const isAdmin = data.role === 'ADMIN' || data.role === 'SUPER_ADMIN';
   // Demo accounts point at stock photos of strangers; treat those as no photo
   const photo = data.avatarUrl && !/images\.unsplash\.com/.test(data.avatarUrl) ? data.avatarUrl : '';
 
   return (
     <div className="space-y-5 pb-12 max-w-4xl">
-      <PageHeader title="My Profile" subtitle="Your name and contact details. Your login email and password are managed by the admin." />
+      <PageHeader
+        title="My Profile"
+        subtitle={isAdmin ? 'Your name, contact details and login email.' : 'Your name and contact details. Your login email and password are managed by the admin.'}
+      />
 
       <div className="grid gap-5 lg:grid-cols-[18rem_minmax(0,1fr)]">
         <Card className="p-5 space-y-4 text-center h-fit">
@@ -214,7 +238,8 @@ export const StaffProfile: React.FC = () => {
 
             <div className="sm:col-span-2 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 dark:border-slate-800 pt-4">
               <p className="flex items-center gap-1.5 text-xs text-slate-500">
-                <Lock className="h-3.5 w-3.5" /> Login email and password can only be changed by the admin.
+                <Lock className="h-3.5 w-3.5" />{' '}
+                {isAdmin ? 'Change your login email below; your password on Login & Password.' : 'Login email and password can only be changed by the admin.'}
               </p>
               <button type="submit" className={primaryBtn} disabled={saving}>
                 <Save className="h-4 w-4" /> {saving ? 'Saving…' : 'Save profile'}
@@ -223,6 +248,49 @@ export const StaffProfile: React.FC = () => {
           </form>
         </Card>
       </div>
+
+      {isAdmin && (
+        <Card className="p-5">
+          <form onSubmit={saveEmail} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <p className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white">
+                <AtSign className="h-4 w-4 text-brand-600" /> Login email
+              </p>
+              <p className="text-xs text-slate-500">
+                Now: <span className="font-mono">{data.email}</span>. Your password stays the same.
+              </p>
+            </div>
+            <Field label="New login email" required>
+              <input id="sp-new-email" type="email" className={inputClass} value={emailForm.email} onChange={(e) => setEmailForm((f) => ({ ...f, email: e.target.value }))} autoComplete="username" required />
+            </Field>
+            <Field label="Your current password" required hint="Confirms it is you">
+              <input
+                id="sp-email-pw"
+                type="password"
+                className={inputClass}
+                value={emailForm.currentPassword}
+                onChange={(e) => setEmailForm((f) => ({ ...f, currentPassword: e.target.value }))}
+                autoComplete="current-password"
+                required
+              />
+            </Field>
+            {emailMsg && (
+              <p
+                className={`sm:col-span-2 rounded-xl p-3 text-xs font-semibold ${
+                  emailMsg.ok ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' : 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300'
+                }`}
+              >
+                {emailMsg.text}
+              </p>
+            )}
+            <div className="sm:col-span-2 flex justify-end">
+              <button type="submit" className={primaryBtn} disabled={emailBusy || !emailForm.email.trim() || !emailForm.currentPassword}>
+                <AtSign className="h-4 w-4" /> {emailBusy ? 'Saving…' : 'Change login email'}
+              </button>
+            </div>
+          </form>
+        </Card>
+      )}
     </div>
   );
 };

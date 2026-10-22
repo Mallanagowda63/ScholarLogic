@@ -43,6 +43,16 @@ describe('Admin changes their own login', () => {
     expect((await request(app).get('/api/admin/staff').set('Authorization', `Bearer ${res.body.data.tokens.accessToken}`)).status).toBe(200);
   });
 
+  it('changing only the email keeps the same password', async () => {
+    const token = (await login('owner@institute.in', 'Kv9#mountain2026')).body.data.tokens.accessToken;
+    const res = await request(app).put('/api/auth/my-credentials').set('Authorization', `Bearer ${token}`).send({ currentPassword: 'Kv9#mountain2026', newEmail: 'head@institute.in' });
+    expect(res.status).toBe(200);
+    expect((await login('head@institute.in', 'Kv9#mountain2026')).status).toBe(200);
+    expect((await login('owner@institute.in', 'Kv9#mountain2026')).status).toBe(401);
+    // This browser's session keeps working
+    expect((await request(app).get('/api/auth/my-profile').set('Authorization', `Bearer ${token}`)).status).toBe(200);
+  });
+
   it('trainers and the placement team cannot change their own password', async () => {
     const t = (await login('trainer@scholarlogic.edu', 'Trainer@123')).body.data.tokens.accessToken;
     const res = await request(app).put('/api/auth/my-credentials').set('Authorization', `Bearer ${t}`).send({ currentPassword: 'Trainer@123', newPassword: 'Trainer2026strong' });
