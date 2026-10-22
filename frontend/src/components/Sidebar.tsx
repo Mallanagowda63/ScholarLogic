@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { UserAvatar } from './UserAvatar';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -56,11 +57,7 @@ export const Sidebar: React.FC = () => {
         {user.role === 'STUDENT' ? (
           <div className="mb-6 p-4 rounded-2xl bg-gradient-to-br from-brand-600 to-indigo-700 text-white shadow-xl shadow-brand-500/20">
             <div className="flex items-center gap-3">
-              <img
-                src={user.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
-                alt={user.fullName}
-                className="h-10 w-10 rounded-full border-2 border-white/40 object-cover"
-              />
+              <UserAvatar user={user} className="h-10 w-10 rounded-full border-2 border-white/40" />
               <div className="overflow-hidden">
                 <h4 className="font-bold text-sm truncate">{user.fullName}</h4>
                 <p className="text-[11px] font-mono text-brand-200">
@@ -72,11 +69,7 @@ export const Sidebar: React.FC = () => {
         ) : user.role === 'TRAINER' ? (
           <div className="mb-6 p-4 rounded-2xl bg-gradient-to-br from-slate-900 via-indigo-950 to-brand-950 text-white border border-brand-500/30 shadow-xl">
             <div className="flex items-center gap-3">
-              <img
-                src={user.avatarUrl || 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=100'}
-                alt={user.fullName}
-                className="h-10 w-10 rounded-xl border border-brand-400/40 object-cover"
-              />
+              <UserAvatar user={user} className="h-10 w-10 rounded-xl border border-brand-400/40" />
               <div className="overflow-hidden">
                 <h4 className="font-bold text-xs truncate text-white">{user.fullName}</h4>
                 <span className="inline-block mt-0.5 px-2 py-0.5 rounded bg-brand-500/30 text-brand-300 text-[10px] font-bold uppercase tracking-wider">

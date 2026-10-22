@@ -23,11 +23,15 @@ export const errorHandler = (
   const dbDown =
     /^Mongo(Network|ServerSelection|NotConnected|PoolCleared|NetworkTimeout)/.test(String(err?.name || '')) ||
     /connection .* (closed|timed out)|ECONNRESET|buffering timed out|Topology is closed/i.test(String(err?.message || ''));
-  const statusCode = dbDown ? 503 : err.statusCode || 500;
-  const code = dbDown ? 'DB_UNAVAILABLE' : err.code || 'INTERNAL_SERVER_ERROR';
+  // Upload problems (file too big, too many files) are the user's to fix, not a server error
+  const uploadErr = err?.name === 'MulterError';
+  const statusCode = dbDown ? 503 : uploadErr ? 400 : err.statusCode || 500;
+  const code = dbDown ? 'DB_UNAVAILABLE' : uploadErr ? 'UPLOAD_REJECTED' : err.code || 'INTERNAL_SERVER_ERROR';
   const message = dbDown
     ? 'The server lost its database connection for a moment. Please try again.'
-    : err.message || 'An unexpected error occurred';
+    : uploadErr && err.code === 'LIMIT_FILE_SIZE'
+      ? 'That file is too large. Please choose a smaller one.'
+      : err.message || 'An unexpected error occurred';
   if (dbDown) console.warn(`⚠️ Database connection problem on ${req.method} ${req.originalUrl}: ${err?.message}`);
 
   if (env.NODE_ENV !== 'production' && statusCode === 500) {

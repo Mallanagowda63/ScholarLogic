@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { UserAvatar } from './UserAvatar';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -293,11 +294,7 @@ export const Navbar: React.FC<{ isDashboard?: boolean }> = ({ isDashboard = fals
                   onClick={() => setShowProfileMenu(!showProfileMenu)}
                   className="flex items-center gap-2 rounded-xl p-1 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                 >
-                  <img
-                    src={user.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
-                    alt={user.fullName}
-                    className="h-9 w-9 rounded-xl object-cover ring-2 ring-brand-500/30"
-                  />
+                  <UserAvatar user={user} className="h-9 w-9 rounded-xl ring-2 ring-brand-500/30" />
                   <div className="hidden lg:block text-left text-xs">
                     <p className="font-semibold text-slate-900 dark:text-white leading-tight">{user.fullName}</p>
                     <p className="text-[10px] font-medium uppercase tracking-wider text-brand-600 dark:text-brand-400">{user.role}</p>

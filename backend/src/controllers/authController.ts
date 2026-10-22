@@ -6,6 +6,7 @@ import { Student } from '../models/Student';
 import { env } from '../config/env';
 import { AuthRequest, forgetStaffCheck } from '../middleware/auth';
 import { AuditLog } from '../models/AuditLog';
+import { ProfilePhoto } from '../models/ProfilePhoto';
 import { AppError } from '../middleware/errorHandler';
 
 function generateTokens(payload: any) {
@@ -220,13 +221,14 @@ const PROFILE_LIMITS: Record<(typeof PROFILE_FIELDS)[number], number> = { phone:
 
 const profileView = (u: any) => ({
   fullName: u.fullName,
+  avatarUrl: u.avatarUrl || '',
   email: u.email,
   role: u.role,
   profile: Object.fromEntries(PROFILE_FIELDS.map((k) => [k, u.profile?.[k] || ''])),
 });
 
 export const getMyProfile = async (req: AuthRequest, res: Response): Promise<void> => {
-  const user = await User.findById(req.user!.userId).select('fullName email role profile').lean();
+  const user = await User.findById(req.user!.userId).select('fullName email role profile avatarUrl').lean();
   if (!user) throw new AppError('Account not found', 404, 'NOT_FOUND');
   res.json({ success: true, data: profileView(user) });
 };
@@ -254,4 +256,36 @@ export const updateMyProfile = async (req: AuthRequest, res: Response): Promise<
   user.profile = profile;
   await user.save();
   res.json({ success: true, message: 'Profile saved', data: profileView(user) });
+};
+
+// ---------------------------------------------------------------------------
+// Profile photo (staff): stored in the database, served publicly by user id (an <img> sends no token)
+// ---------------------------------------------------------------------------
+const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+
+export const uploadMyPhoto = async (req: AuthRequest, res: Response): Promise<void> => {
+  const file = (req as any).file as Express.Multer.File | undefined;
+  if (!file) throw new AppError('Choose a photo', 400, 'MISSING_FILE');
+  if (!PHOTO_TYPES.includes(file.mimetype)) throw new AppError('Use a JPG, PNG or WEBP photo', 400, 'INVALID_FILE');
+  const userId = req.user!.userId;
+  await ProfilePhoto.updateOne({ userId }, { $set: { data: file.buffer, type: file.mimetype, size: file.size } }, { upsert: true });
+  const avatarUrl = `/api/auth/photo/${userId}?v=${Date.now()}`;
+  await User.updateOne({ _id: userId }, { $set: { avatarUrl } });
+  res.json({ success: true, message: 'Photo updated', data: { avatarUrl } });
+};
+
+export const removeMyPhoto = async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  await ProfilePhoto.deleteOne({ userId });
+  await User.updateOne({ _id: userId }, { $set: { avatarUrl: '' } });
+  res.json({ success: true, message: 'Photo removed', data: { avatarUrl: '' } });
+};
+
+export const getPhoto = async (req: AuthRequest, res: Response): Promise<void> => {
+  const id = String(req.params.userId || '');
+  const photo = /^[a-f\d]{24}$/i.test(id) ? await ProfilePhoto.findOne({ userId: id }).lean() : null;
+  if (!photo) throw new AppError('No photo', 404, 'NOT_FOUND');
+  res.setHeader('Content-Type', photo.type);
+  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  res.send(Buffer.from((photo.data as any).buffer ?? photo.data));
 };

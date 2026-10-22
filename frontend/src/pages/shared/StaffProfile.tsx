@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from 'react';
-import { Lock, Save, UserRound } from 'lucide-react';
-import { api } from '../../services/api';
+import React, { useEffect, useRef, useState } from 'react';
+import { Camera, Lock, Save, Trash2, UserRound } from 'lucide-react';
+import { api, assetUrl } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { Card, ErrorNote, Field, PageHeader, Spinner, inputClass, primaryBtn } from '../admin/tracking/shared';
 
@@ -10,12 +10,29 @@ import { Card, ErrorNote, Field, PageHeader, Spinner, inputClass, primaryBtn } f
 type Role = 'ADMIN' | 'SUPER_ADMIN' | 'TRAINER' | 'PLACEMENT_MANAGER';
 interface ProfileData {
   fullName: string;
+  avatarUrl: string;
   email: string;
   role: Role;
   profile: { phone: string; designation: string; department: string; specialization: string; experience: string; bio: string };
 }
 
 const ROLE_LABEL: Record<Role, string> = { ADMIN: 'Admin', SUPER_ADMIN: 'Super admin', TRAINER: 'Trainer', PLACEMENT_MANAGER: 'Placement team' };
+// Centre-crop to a square and shrink to 400 px JPEG before upload, so phone photos stay small
+async function squarePhoto(file: File): Promise<Blob> {
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const i = new Image();
+    i.onload = () => resolve(i);
+    i.onerror = () => reject(new Error('That file could not be read as a photo'));
+    i.src = URL.createObjectURL(file);
+  });
+  const side = Math.min(img.naturalWidth, img.naturalHeight);
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 400;
+  canvas.getContext('2d')!.drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, 400, 400);
+  URL.revokeObjectURL(img.src);
+  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Could not prepare the photo'))), 'image/jpeg', 0.85));
+}
+
 const initials = (name: string) => name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join('') || '?';
 
 export const StaffProfile: React.FC = () => {
@@ -25,6 +42,41 @@ export const StaffProfile: React.FC = () => {
   const [error, setError] = useState('');
   const [saved, setSaved] = useState('');
   const [saving, setSaving] = useState(false);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  const changePhoto = async (file?: File) => {
+    if (!file) return;
+    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return setError('Choose a JPG, PNG or WEBP photo');
+    setPhotoBusy(true);
+    setError('');
+    try {
+      const form = new FormData();
+      form.append('photo', await squarePhoto(file), 'photo.jpg');
+      const res: any = await api.put('/auth/my-photo', form, { headers: { 'Content-Type': 'multipart/form-data' } });
+      setData((d) => (d ? { ...d, avatarUrl: res.data.avatarUrl } : d));
+      setSaved('Photo updated');
+      await refreshUserData();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setPhotoBusy(false);
+      if (fileInput.current) fileInput.current.value = '';
+    }
+  };
+  const removePhoto = async () => {
+    setPhotoBusy(true);
+    try {
+      await api.delete('/auth/my-photo');
+      setData((d) => (d ? { ...d, avatarUrl: '' } : d));
+      setSaved('Photo removed');
+      await refreshUserData();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setPhotoBusy(false);
+    }
+  };
 
   useEffect(() => {
     api
@@ -59,6 +111,8 @@ export const StaffProfile: React.FC = () => {
 
   if (!data) return error ? <ErrorNote text={error} /> : <Spinner />;
   const isTrainer = data.role === 'TRAINER';
+  // Demo accounts point at stock photos of strangers; treat those as no photo
+  const photo = data.avatarUrl && !/images\.unsplash\.com/.test(data.avatarUrl) ? data.avatarUrl : '';
 
   return (
     <div className="space-y-5 pb-12 max-w-4xl">
@@ -66,8 +120,33 @@ export const StaffProfile: React.FC = () => {
 
       <div className="grid gap-5 lg:grid-cols-[18rem_minmax(0,1fr)]">
         <Card className="p-5 space-y-4 text-center h-fit">
-          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-2xl bg-gradient-to-tr from-brand-600 to-indigo-600 text-2xl font-extrabold text-white shadow-md">
-            {initials(form.fullName || data.fullName)}
+          {photo ? (
+            <img src={assetUrl(photo)} alt={data.fullName} className="mx-auto h-24 w-24 rounded-2xl object-cover shadow-md" />
+          ) : (
+            <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-2xl bg-gradient-to-tr from-brand-600 to-indigo-600 text-2xl font-extrabold text-white shadow-md">
+              {initials(form.fullName || data.fullName)}
+            </div>
+          )}
+          <div className="flex flex-wrap justify-center gap-2">
+            <button
+              type="button"
+              disabled={photoBusy}
+              onClick={() => fileInput.current?.click()}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
+            >
+              <Camera className="h-3.5 w-3.5" /> {photoBusy ? 'Saving…' : photo ? 'Change photo' : 'Upload photo'}
+            </button>
+            {photo && (
+              <button
+                type="button"
+                disabled={photoBusy}
+                onClick={removePhoto}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+              >
+                <Trash2 className="h-3.5 w-3.5" /> Remove
+              </button>
+            )}
+            <input ref={fileInput} id="sp-photo" type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => changePhoto(e.target.files?.[0])} />
           </div>
           <div>
             <p className="text-lg font-extrabold text-slate-900 dark:text-white">{data.fullName}</p>
