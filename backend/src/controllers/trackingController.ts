@@ -206,6 +206,7 @@ export const getTrackedStudent = async (req: AuthRequest, res: Response) => {
         enrollment: s.enrollment,
         statusHistory: s.statusHistory,
         modeHistory: s.modeHistory,
+        classRecords: s.classRecords || [],
       },
       journey: result.journey,
       timeline,

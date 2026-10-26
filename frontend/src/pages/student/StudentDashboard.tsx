@@ -5,6 +5,7 @@ import { api, assetUrl } from '../../services/api';
 import { StatCard } from '../../components/StatCard';
 import { Leaderboard } from '../../components/Leaderboard';
 import { CourseJourneyCard } from '../../components/CourseJourneyCard';
+import { ClassRecordCard } from '../../components/ClassRecordCard';
 import { AttendanceCalendar } from '../../components/AttendanceCalendar';
 import { OnlineAttendanceCard } from '../../components/OnlineAttendanceCard';
 import { BannerCarousel, BannerSlide } from '../../components/BannerCarousel';
@@ -144,6 +145,7 @@ export const StudentDashboard: React.FC = () => {
       </div>
 
       <CourseJourneyCard />
+      <ClassRecordCard records={data?.student?.classRecords} />
 
       {/* Analytics & Continue Learning Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

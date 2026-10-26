@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../../services/api';
+import { ClassRecordCard } from '../../components/ClassRecordCard';
 import {
   ArrowLeft,
   ArrowRight,
@@ -253,6 +254,7 @@ export const AdminStudentJourney: React.FC = () => {
 
       {tab === 'journey' && (
         <>
+          <ClassRecordCard records={student.classRecords} />
           {journey.subjects.length === 0 ? (
             <Card className="p-8 text-center text-sm text-slate-500">No course assigned. Use Edit to assign a course.</Card>
           ) : (
