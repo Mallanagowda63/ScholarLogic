@@ -51,6 +51,8 @@ export const env = {
   // E Numbers (machine codes such as SCLR245) are given by the admins in eSSL Web. Only when this is
   // "true" does ScholarLogic hand out numbers itself (new students, cards, "Assign E Numbers").
   BIOMETRIC_AUTO_ENUMBER: process.env.BIOMETRIC_AUTO_ENUMBER === 'true',
+  // A code that newly appears on the machine becomes a student (login ID = the code, generated password). "false" = review queue only
+  ESSL_AUTO_CREATE_STUDENTS: process.env.ESSL_AUTO_CREATE_STUDENTS !== 'false',
   // Read users and punches straight from the machine over its PC-connection port (read-only).
   // Empty host = off. The machine keeps pushing to eSSL Web as before.
   ESSL_DEVICE_HOST: (process.env.ESSL_DEVICE_HOST || '').trim(),

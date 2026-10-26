@@ -8,6 +8,7 @@ import { AppError } from '../middleware/errorHandler';
 import { AuthUserPayload } from '../middleware/auth';
 import { addTimeline, PLACEHOLDER_EMAIL_DOMAIN } from './trackingService';
 import { assignENumberQuietly } from './esslService';
+import { sealPassword } from '../utils/credentialVault';
 
 /** Two letters from the course name: first letters of the first two words (Data Analytics → DA) */
 export function courseLetters(courseName: string, fallbackCode = ''): string {
@@ -119,6 +120,7 @@ export async function createStudentAccount(input: NewStudentInput, actor?: AuthU
     student = await Student.create({
       userId: user._id,
       studentId,
+      loginPassword: sealPassword(String(input.password)),
       phone: input.phone?.trim() || '',
       address: input.address?.trim() || '',
       college: '',

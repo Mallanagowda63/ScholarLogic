@@ -1,8 +1,11 @@
+import crypto from 'crypto';
 import { env } from '../config/env';
 import { BiometricDevice, BiometricPunch } from '../models/BiometricPunch';
 import { BiometricDeviceUser } from '../models/BiometricIntegration';
+import { Student } from '../models/Student';
 import { ingestAttlog } from './biometricService';
-import { logSync } from './biometricShared';
+import { logSync, normalizeCard } from './biometricShared';
+import { createStudentAccount } from './studentAccountService';
 import { readDevice, DeviceSnapshot } from './zkDeviceClient';
 
 /**
@@ -50,6 +53,7 @@ export async function storeSnapshot(
   // The machine's user list (code + name) feeds the review screen's name suggestions
   const usersSignature = JSON.stringify(snap.users.map((u) => [u.userId, u.name, u.card, u.privilege]));
   if (snap.users.length && usersSignature !== lastUsersSignature) {
+    const knownPins = new Set<string>(await BiometricDeviceUser.distinct('pin', { deviceSerial: serial }));
     await BiometricDeviceUser.bulkWrite(
       snap.users.map((u) => ({
         updateOne: {
@@ -61,6 +65,8 @@ export async function storeSnapshot(
       { ordered: false }
     );
     lastUsersSignature = usersSignature;
+    // The very first read only records what is already there; after that, a code that appears is a new card
+    if (knownPins.size && env.ESSL_AUTO_CREATE_STUDENTS) await createStudentsForNewCodes(snap.users.filter((u) => !knownPins.has(u.userId)));
   }
 
   // The machine always hands over its whole log. Only punches from 2 days before the newest one already
@@ -88,6 +94,43 @@ export async function storeSnapshot(
   };
   lastPull = result;
   return result;
+}
+
+// Same shape as the passwords handed out on 2026-10-14: no look-alike characters, ends with @ and a digit
+const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+const generatePassword = () => `${Array.from({ length: 8 }, () => ALPHABET[crypto.randomInt(ALPHABET.length)]).join('')}@${crypto.randomInt(10)}`;
+const nameKey = (s: string) => (s || '').toLowerCase().replace(/[^a-z]/g, '');
+
+/**
+ * A code that newly appears on the machine (a card or fingerprint just issued in eSSL Web) becomes a
+ * student: Student ID = login ID = the code, with a generated password that Admin → Students shows.
+ * Skipped, and left to the review queue: machine admins, codes already in use, and names that match a
+ * student who has no code yet (most likely the same person, already registered from the Google Form).
+ */
+async function createStudentsForNewCodes(users: DeviceSnapshot['users']) {
+  for (const u of users) {
+    const code = u.userId.trim().toUpperCase();
+    if (!code || Number(u.privilege) > 0) continue;
+    if (await Student.exists({ $or: [{ biometricId: code }, { studentId: code }] })) continue;
+    const fullName = (u.name || '').trim() || code;
+    const key = nameKey(fullName);
+    const unlinked: any[] = key
+      ? await Student.find({ $or: [{ biometricId: { $exists: false } }, { biometricId: '' }] }).select('userId').populate('userId', 'fullName').lean()
+      : [];
+    if (unlinked.some((s) => nameKey(s.userId?.fullName) === key)) {
+      await logSync('DEVICE', 'WARN', `New machine code ${code} (${fullName}) matches a student without a code; confirm the link in the review queue`);
+      continue;
+    }
+    try {
+      const { student } = await createStudentAccount({ fullName, password: generatePassword(), customStudentId: code, joinedDetails: `Added from the eSSL machine (code ${code})` });
+      const card = normalizeCard(u.card);
+      const cardFree = card && /^[1-9]\d{0,19}$/.test(card) && !(await Student.exists({ cardNumber: card }));
+      await Student.updateOne({ _id: student._id }, { $set: { biometricId: code, ...(cardFree ? { cardNumber: card } : {}) } });
+      await logSync('DEVICE', 'INFO', `Created student ${code} (${fullName}) from a new code on the machine`);
+    } catch (err: any) {
+      await logSync('DEVICE', 'ERROR', `Could not create a student for new machine code ${code}: ${err.message}`);
+    }
+  }
 }
 
 /** First date (YYYY-MM-DD) worth sending: 2 days before the newest punch already stored; '' = send everything */

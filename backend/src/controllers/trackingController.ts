@@ -15,6 +15,7 @@ import { Batch, IBatch } from '../models/tracking/Batch';
 import { StudentBatchAllocation, ACTIVE_ALLOCATION_STATUSES } from '../models/tracking/StudentBatchAllocation';
 import { TrainerDailyUpdate } from '../models/tracking/TrainerDailyUpdate';
 import { StudentTimeline } from '../models/tracking/StudentTimeline';
+import { openPassword } from '../utils/credentialVault';
 import {
   addTimeline,
   attendanceForAllocation,
@@ -152,11 +153,15 @@ const summarizeStudent = (student: any, journey: ReturnType<typeof buildJourney>
   expectedCompletion: journey.expectedCompletion,
   overallProgress: journey.overallProgress,
   missedCount: journey.missedCount,
+  // Login details appear once the student is verified on the eSSL machine (machine code linked)
+  login: student.biometricId
+    ? { loginId: student.biometricId, password: student.loginPassword === undefined ? undefined : openPassword(student.loginPassword) }
+    : null,
 });
 
 export const listTrackedStudents = async (_req: AuthRequest, res: Response) => {
   // Only the fields the list and journey need, as plain objects: much faster with hundreds of students
-  const students: any[] = await Student.find({}).select('studentId phone enrollment enrollmentDate registrationSource userId createdAt biometricId cardNumber').populate('userId', 'fullName email').sort({ createdAt: -1 }).lean();
+  const students: any[] = await Student.find({}).select('studentId phone enrollment enrollmentDate registrationSource userId createdAt biometricId cardNumber +loginPassword').populate('userId', 'fullName email').sort({ createdAt: -1 }).lean();
   const ctx = await loadJourneyContext(students.map((s) => s._id));
   res.json({ success: true, data: { students: students.map((s) => summarizeStudent(s, buildJourney(s, ctx))) } });
 };

@@ -67,6 +67,7 @@ export interface IStudent extends Document {
   studentId: string; // Permanent format: SL-2026-00001
   biometricId?: string; // E Number: the User ID the student is enrolled under on the eSSL machine. Punches match on this only
   cardNumber?: string; // RFID card linked to the same Biometric ID (digits, no leading zeros)
+  loginPassword?: string; // password the admin handed out, encrypted (utils/credentialVault); shown on Admin → Students
   essl?: IEsslProfile;
   phone: string;
   dateOfBirth?: string;
@@ -107,6 +108,7 @@ const StudentSchema = new Schema<IStudent>(
     studentId: { type: String, required: true, unique: true, index: true },
     biometricId: { type: String, trim: true, unique: true, sparse: true },
     cardNumber: { type: String, trim: true, unique: true, sparse: true },
+    loginPassword: { type: String, select: false },
     essl: {
       company: { type: String, default: '' },
       department: { type: String, default: '' },

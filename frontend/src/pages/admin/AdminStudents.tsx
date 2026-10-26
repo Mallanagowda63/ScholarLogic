@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
-import { Search, UserPlus, Eye, Pencil, CalendarPlus, ArrowRightLeft, RotateCcw, History, Trash2, X } from 'lucide-react';
+import { Search, UserPlus, Eye, EyeOff, Copy, Pencil, CalendarPlus, ArrowRightLeft, RotateCcw, History, Trash2, X } from 'lucide-react';
 import {
   Card,
   EmptyRow,
@@ -50,6 +50,21 @@ export const AdminStudents: React.FC = () => {
       setDeleteBusy(false);
     }
   };
+  // Passwords stay hidden until the admin reveals a row (or all of them)
+  const [revealed, setRevealed] = useState<Set<string>>(new Set());
+  const [revealAll, setRevealAll] = useState(false);
+  const toggleReveal = (id: string) =>
+    setRevealed((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  const copyLogin = (s: any) =>
+    navigator.clipboard
+      .writeText(`Login ID: ${s.login.loginId}
+Password: ${s.login.password}`)
+      .then(() => toast.show(`Copied ${s.fullName}'s login`))
+      .catch(() => toast.show('Could not copy'));
   const [pendingRegistrations, setPendingRegistrations] = useState(0);
   const [q, setQ] = useState('');
   const [f, setF] = useState({ course: '', subject: '', batch: '', trainer: '', mode: '', status: '', month: '', allocation: '' });
@@ -81,7 +96,7 @@ export const AdminStudents: React.FC = () => {
     const term = q.trim().toLowerCase();
     return students.filter((s) => {
       if (term) {
-        const hay = [s.fullName, s.studentId, s.phone, s.currentBatch?.batchCode].filter(Boolean).join(' ').toLowerCase();
+        const hay = [s.fullName, s.studentId, s.login?.loginId, s.phone, s.currentBatch?.batchCode].filter(Boolean).join(' ').toLowerCase();
         if (!hay.includes(term)) return false;
       }
       if (f.course && (f.course === NONE ? !!s.course?.name : s.course?.name !== f.course)) return false;
@@ -140,9 +155,14 @@ export const AdminStudents: React.FC = () => {
         title="Students"
         subtitle="Where every student is right now — course, subject, batch, trainer and progress."
         action={
-          <button type="button" className={primaryBtn} onClick={() => setShowNew(true)}>
-            <UserPlus className="h-4 w-4" /> New Student
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className={secondaryBtn} onClick={() => setRevealAll((v) => !v)}>
+              {revealAll ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />} {revealAll ? 'Hide passwords' : 'Show all passwords'}
+            </button>
+            <button type="button" className={primaryBtn} onClick={() => setShowNew(true)}>
+              <UserPlus className="h-4 w-4" /> New Student
+            </button>
+          </div>
         }
       />
 
@@ -211,10 +231,10 @@ export const AdminStudents: React.FC = () => {
       ) : (
         <Card className="overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1300px] text-left text-xs">
+            <table className="w-full min-w-[1450px] text-left text-xs">
               <thead className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 text-[10px] font-bold uppercase text-slate-500">
                 <tr>
-                  {['Student ID', 'Name', 'Course', 'Mode', 'Current Subject', 'Current Batch', 'Trainer', 'Progress', 'Next Subject', 'Allocation', 'Joined', 'Expected Completion', 'Status', 'Actions'].map((h) => (
+                  {['Student ID', 'Name', 'Login (after machine verification)', 'Course', 'Mode', 'Current Subject', 'Current Batch', 'Trainer', 'Progress', 'Next Subject', 'Allocation', 'Joined', 'Expected Completion', 'Status', 'Actions'].map((h) => (
                     <th key={h} className="px-3 py-3 whitespace-nowrap">
                       {h}
                     </th>
@@ -223,7 +243,7 @@ export const AdminStudents: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {visible.length === 0 ? (
-                  <EmptyRow colSpan={14} text={students.length ? 'No students match your filters.' : 'No students yet. Add your first student.'} />
+                  <EmptyRow colSpan={15} text={students.length ? 'No students match your filters.' : 'No students yet. Add your first student.'} />
                 ) : (
                   visible.map((s) => (
                     <tr key={s._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
@@ -238,6 +258,35 @@ export const AdminStudents: React.FC = () => {
                           {s.phone || '—'}
                           {s.registrationSource === 'GOOGLE_FORM' && <span className="ml-1.5 rounded bg-emerald-50 px-1 font-semibold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">Google Form</span>}
                         </span>
+                      </td>
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        {!s.login ? (
+                          <span className="text-[10px] text-slate-400">Not verified on machine yet</span>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <div className="font-mono leading-tight">
+                              <span className="block font-bold text-slate-800 dark:text-slate-200">{s.login.loginId}</span>
+                              <span className="block text-[11px] text-slate-500 dark:text-slate-400">
+                                {!s.login.password ? 'Password not on record' : revealAll || revealed.has(s._id) ? s.login.password : '••••••••'}
+                              </span>
+                            </div>
+                            {s.login.password && (
+                              <>
+                                <button
+                                  type="button"
+                                  title={revealAll || revealed.has(s._id) ? 'Hide password' : 'Show password'}
+                                  onClick={() => toggleReveal(s._id)}
+                                  className="rounded p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+                                >
+                                  {revealAll || revealed.has(s._id) ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                                </button>
+                                <button type="button" title="Copy login ID and password" onClick={() => copyLogin(s)} className="rounded p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">
+                                  <Copy className="h-3.5 w-3.5" />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap text-slate-600 dark:text-slate-300">{s.course?.name || '—'}</td>
                       <td className="px-3 py-3 whitespace-nowrap">{fmtMode(s.mode)}</td>
