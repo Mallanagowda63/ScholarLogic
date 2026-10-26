@@ -56,7 +56,8 @@ export const AdminStudents: React.FC = () => {
   const toggleReveal = (id: string) =>
     setRevealed((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   const copyLogin = (s: any) =>
@@ -96,7 +97,7 @@ Password: ${s.login.password}`)
     const term = q.trim().toLowerCase();
     return students.filter((s) => {
       if (term) {
-        const hay = [s.fullName, s.studentId, s.login?.loginId, s.phone, s.currentBatch?.batchCode].filter(Boolean).join(' ').toLowerCase();
+        const hay = [s.fullName, s.studentId, s.login?.loginId, s.phone, s.currentBatch?.batchCode, s.course?.name, s.currentSubject?.name].filter(Boolean).join(' ').toLowerCase();
         if (!hay.includes(term)) return false;
       }
       if (f.course && (f.course === NONE ? !!s.course?.name : s.course?.name !== f.course)) return false;
@@ -181,7 +182,7 @@ Password: ${s.login.password}`)
       <Card className="p-4 space-y-3">
         <label className="relative block">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input className={`${inputClass} pl-9`} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name, Student ID, phone or batch ID" />
+          <input className={`${inputClass} pl-9`} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name, Student ID / login ID (e.g. SCLR245), phone, course or batch ID" />
         </label>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8">
           {select('course', 'All courses', [...options.course, ...(courseTabs.some(([c]) => c === NONE) ? [NONE] : [])], (o) => (o === NONE ? 'No course yet' : o))}
@@ -229,157 +230,174 @@ Password: ${s.login.password}`)
       {loading ? (
         <Spinner />
       ) : (
-        <Card className="overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1450px] text-left text-xs">
-              <thead className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 text-[10px] font-bold uppercase text-slate-500">
-                <tr>
-                  {['Student ID', 'Name', 'Login (after machine verification)', 'Course', 'Mode', 'Current Subject', 'Current Batch', 'Trainer', 'Progress', 'Next Subject', 'Allocation', 'Joined', 'Expected Completion', 'Status', 'Actions'].map((h) => (
-                    <th key={h} className="px-3 py-3 whitespace-nowrap">
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                {visible.length === 0 ? (
-                  <EmptyRow colSpan={15} text={students.length ? 'No students match your filters.' : 'No students yet. Add your first student.'} />
-                ) : (
-                  visible.map((s) => (
-                    <tr key={s._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                      <td className="px-3 py-3 font-mono font-bold text-brand-600 dark:text-brand-400 whitespace-nowrap">
-                        <Link to={`/admin/students/${s._id}`}>{s.studentId}</Link>
-                      </td>
-                      <td className="px-3 py-3 whitespace-nowrap">
-                        <Link to={`/admin/students/${s._id}`} className="font-bold text-slate-900 dark:text-white hover:underline">
-                          {s.fullName}
-                        </Link>
-                        <span className="block text-[10px] text-slate-400">
-                          {s.phone || '—'}
-                          {s.registrationSource === 'GOOGLE_FORM' && <span className="ml-1.5 rounded bg-emerald-50 px-1 font-semibold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">Google Form</span>}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 whitespace-nowrap">
-                        {!s.login ? (
-                          <span className="text-[10px] text-slate-400">Not verified on machine yet</span>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            <div className="font-mono leading-tight">
-                              <span className="block font-bold text-slate-800 dark:text-slate-200">{s.login.loginId}</span>
-                              <span className="block text-[11px] text-slate-500 dark:text-slate-400">
-                                {!s.login.password ? 'Password not on record' : revealAll || revealed.has(s._id) ? s.login.password : '••••••••'}
-                              </span>
-                            </div>
-                            {s.login.password && (
-                              <>
-                                <button
-                                  type="button"
-                                  title={revealAll || revealed.has(s._id) ? 'Hide password' : 'Show password'}
-                                  onClick={() => toggleReveal(s._id)}
-                                  className="rounded p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
-                                >
-                                  {revealAll || revealed.has(s._id) ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                                </button>
-                                <button type="button" title="Copy login ID and password" onClick={() => copyLogin(s)} className="rounded p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">
-                                  <Copy className="h-3.5 w-3.5" />
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-3 py-3 whitespace-nowrap text-slate-600 dark:text-slate-300">{s.course?.name || '—'}</td>
-                      <td className="px-3 py-3 whitespace-nowrap">{fmtMode(s.mode)}</td>
-                      <td className="px-3 py-3 whitespace-nowrap">
-                        {s.currentSubject ? (
-                          <>
-                            <span className="font-semibold text-slate-800 dark:text-slate-200">{s.currentSubject.name}</span>
-                            <StatusBadge status={s.currentSubject.status} className="ml-1.5" />
-                          </>
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                      <td className="px-3 py-3 whitespace-nowrap">
-                        {s.currentBatch ? (
-                          <Link to={`/admin/batches/${s.currentBatch._id}`} className="font-mono font-bold text-slate-800 dark:text-slate-200 hover:text-brand-600">
-                            {s.currentBatch.batchCode}
-                            <span className="block font-sans text-[10px] font-normal text-slate-400">{s.currentBatch.timing}</span>
+        <>
+          {/* Same search as the box above, kept next to the list so it's at hand while scrolling the table */}
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="relative block w-full sm:w-96">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input className={`${inputClass} pl-9 pr-8`} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search students: name, login ID, course…" aria-label="Search students" />
+              {q && (
+                <button type="button" onClick={() => setQ('')} title="Clear search" className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </label>
+            <span className="text-xs text-slate-500">
+              Showing <b className="text-slate-800 dark:text-slate-200">{visible.length}</b> of {students.length} students
+            </span>
+          </div>
+          <Card className="overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1450px] text-left text-xs">
+                <thead className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 text-[10px] font-bold uppercase text-slate-500">
+                  <tr>
+                    {['Student ID', 'Name', 'Login (after machine verification)', 'Course', 'Mode', 'Current Subject', 'Current Batch', 'Trainer', 'Progress', 'Next Subject', 'Allocation', 'Joined', 'Expected Completion', 'Status', 'Actions'].map((h) => (
+                      <th key={h} className="px-3 py-3 whitespace-nowrap">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {visible.length === 0 ? (
+                    <EmptyRow colSpan={15} text={students.length ? 'No students match your filters.' : 'No students yet. Add your first student.'} />
+                  ) : (
+                    visible.map((s) => (
+                      <tr key={s._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                        <td className="px-3 py-3 font-mono font-bold text-brand-600 dark:text-brand-400 whitespace-nowrap">
+                          <Link to={`/admin/students/${s._id}`}>{s.studentId}</Link>
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          <Link to={`/admin/students/${s._id}`} className="font-bold text-slate-900 dark:text-white hover:underline">
+                            {s.fullName}
                           </Link>
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                      <td className="px-3 py-3 whitespace-nowrap">{s.currentBatch?.trainer?.fullName || '—'}</td>
-                      <td className="px-3 py-3 w-32">
-                        {s.currentSubject ? (
-                          <>
-                            <span className="text-[11px] font-bold text-slate-800 dark:text-slate-200">
-                              {s.currentSubject.progress.percentage}%{' '}
-                              <span className="font-normal text-slate-400">
-                                ({s.currentSubject.progress.completed}/{s.currentSubject.progress.total})
+                          <span className="block text-[10px] text-slate-400">
+                            {s.phone || '—'}
+                            {s.registrationSource === 'GOOGLE_FORM' && <span className="ml-1.5 rounded bg-emerald-50 px-1 font-semibold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">Google Form</span>}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          {!s.login ? (
+                            <span className="text-[10px] text-slate-400">Not verified on machine yet</span>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <div className="font-mono leading-tight">
+                                <span className="block font-bold text-slate-800 dark:text-slate-200">{s.login.loginId}</span>
+                                <span className="block text-[11px] text-slate-500 dark:text-slate-400">
+                                  {!s.login.password ? 'Password not on record' : revealAll || revealed.has(s._id) ? s.login.password : '••••••••'}
+                                </span>
+                              </div>
+                              {s.login.password && (
+                                <>
+                                  <button
+                                    type="button"
+                                    title={revealAll || revealed.has(s._id) ? 'Hide password' : 'Show password'}
+                                    onClick={() => toggleReveal(s._id)}
+                                    className="rounded p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800"
+                                  >
+                                    {revealAll || revealed.has(s._id) ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                                  </button>
+                                  <button type="button" title="Copy login ID and password" onClick={() => copyLogin(s)} className="rounded p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">
+                                    <Copy className="h-3.5 w-3.5" />
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap text-slate-600 dark:text-slate-300">{s.course?.name || '—'}</td>
+                        <td className="px-3 py-3 whitespace-nowrap">{fmtMode(s.mode)}</td>
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          {s.currentSubject ? (
+                            <>
+                              <span className="font-semibold text-slate-800 dark:text-slate-200">{s.currentSubject.name}</span>
+                              <StatusBadge status={s.currentSubject.status} className="ml-1.5" />
+                            </>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          {s.currentBatch ? (
+                            <Link to={`/admin/batches/${s.currentBatch._id}`} className="font-mono font-bold text-slate-800 dark:text-slate-200 hover:text-brand-600">
+                              {s.currentBatch.batchCode}
+                              <span className="block font-sans text-[10px] font-normal text-slate-400">{s.currentBatch.timing}</span>
+                            </Link>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap">{s.currentBatch?.trainer?.fullName || '—'}</td>
+                        <td className="px-3 py-3 w-32">
+                          {s.currentSubject ? (
+                            <>
+                              <span className="text-[11px] font-bold text-slate-800 dark:text-slate-200">
+                                {s.currentSubject.progress.percentage}%{' '}
+                                <span className="font-normal text-slate-400">
+                                  ({s.currentSubject.progress.completed}/{s.currentSubject.progress.total})
+                                </span>
                               </span>
-                            </span>
-                            <ProgressBar value={s.currentSubject.progress.percentage} tone={statusTone(s.currentSubject.status)} className="mt-1" />
-                          </>
-                        ) : (
-                          '—'
-                        )}
-                      </td>
-                      <td className="px-3 py-3 whitespace-nowrap">{s.nextSubject?.name || '—'}</td>
-                      <td className="px-3 py-3">
-                        <StatusBadge status={s.allocationStatus} />
-                      </td>
-                      <td className="px-3 py-3 whitespace-nowrap">{fmtDate(s.joiningDate)}</td>
-                      <td className="px-3 py-3 whitespace-nowrap">{s.course ? fmtDate(s.expectedCompletion) : '—'}</td>
-                      <td className="px-3 py-3">
-                        <StatusBadge status={s.trainingStatus} />
-                      </td>
-                      <td className="px-3 py-3">
-                        <div className="flex items-center gap-1.5">
-                          {[
-                            { icon: Eye, label: 'View', action: undefined, tone: 'bg-sky-50 text-sky-600 ring-sky-200 hover:bg-sky-100 dark:bg-sky-950/40 dark:text-sky-300 dark:ring-sky-900' },
-                            { icon: Pencil, label: 'Edit', action: 'edit', tone: 'bg-indigo-50 text-indigo-600 ring-indigo-200 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:text-indigo-300 dark:ring-indigo-900' },
-                            { icon: CalendarPlus, label: 'Allocate', action: 'allocate', tone: 'bg-emerald-50 text-emerald-600 ring-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-900' },
-                            { icon: ArrowRightLeft, label: 'Move', action: 'move', tone: 'bg-amber-50 text-amber-600 ring-amber-200 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900' },
-                            { icon: RotateCcw, label: 'Reallocate', action: 'reallocate', tone: 'bg-violet-50 text-violet-600 ring-violet-200 hover:bg-violet-100 dark:bg-violet-950/40 dark:text-violet-300 dark:ring-violet-900' },
-                            { icon: History, label: 'History', action: 'history', tone: 'bg-slate-100 text-slate-600 ring-slate-200 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700' },
-                          ].map(({ icon: Icon, label, action, tone }) => (
+                              <ProgressBar value={s.currentSubject.progress.percentage} tone={statusTone(s.currentSubject.status)} className="mt-1" />
+                            </>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap">{s.nextSubject?.name || '—'}</td>
+                        <td className="px-3 py-3">
+                          <StatusBadge status={s.allocationStatus} />
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap">{fmtDate(s.joiningDate)}</td>
+                        <td className="px-3 py-3 whitespace-nowrap">{s.course ? fmtDate(s.expectedCompletion) : '—'}</td>
+                        <td className="px-3 py-3">
+                          <StatusBadge status={s.trainingStatus} />
+                        </td>
+                        <td className="px-3 py-3">
+                          <div className="flex items-center gap-1.5">
+                            {[
+                              { icon: Eye, label: 'View', action: undefined, tone: 'bg-sky-50 text-sky-600 ring-sky-200 hover:bg-sky-100 dark:bg-sky-950/40 dark:text-sky-300 dark:ring-sky-900' },
+                              { icon: Pencil, label: 'Edit', action: 'edit', tone: 'bg-indigo-50 text-indigo-600 ring-indigo-200 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:text-indigo-300 dark:ring-indigo-900' },
+                              { icon: CalendarPlus, label: 'Allocate', action: 'allocate', tone: 'bg-emerald-50 text-emerald-600 ring-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-900' },
+                              { icon: ArrowRightLeft, label: 'Move', action: 'move', tone: 'bg-amber-50 text-amber-600 ring-amber-200 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900' },
+                              { icon: RotateCcw, label: 'Reallocate', action: 'reallocate', tone: 'bg-violet-50 text-violet-600 ring-violet-200 hover:bg-violet-100 dark:bg-violet-950/40 dark:text-violet-300 dark:ring-violet-900' },
+                              { icon: History, label: 'History', action: 'history', tone: 'bg-slate-100 text-slate-600 ring-slate-200 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700' },
+                            ].map(({ icon: Icon, label, action, tone }) => (
+                              <button
+                                key={label}
+                                type="button"
+                                title={label}
+                                aria-label={`${label} ${s.fullName}`}
+                                onClick={() => go(s, action)}
+                                className={`rounded-lg p-2 ring-1 transition ${tone}`}
+                              >
+                                <Icon className="h-4 w-4" />
+                              </button>
+                            ))}
                             <button
-                              key={label}
                               type="button"
-                              title={label}
-                              aria-label={`${label} ${s.fullName}`}
-                              onClick={() => go(s, action)}
-                              className={`rounded-lg p-2 ring-1 transition ${tone}`}
+                              title="Delete"
+                              aria-label={`Delete ${s.fullName}`}
+                              onClick={() => {
+                                setDeleteError('');
+                                setDeleting(s);
+                              }}
+                              className="rounded-lg bg-rose-50 p-2 text-rose-600 ring-1 ring-rose-200 transition hover:bg-rose-600 hover:text-white dark:bg-rose-950/40 dark:text-rose-300 dark:ring-rose-900"
                             >
-                              <Icon className="h-4 w-4" />
+                              <Trash2 className="h-4 w-4" />
                             </button>
-                          ))}
-                          <button
-                            type="button"
-                            title="Delete"
-                            aria-label={`Delete ${s.fullName}`}
-                            onClick={() => {
-                              setDeleteError('');
-                              setDeleting(s);
-                            }}
-                            className="rounded-lg bg-rose-50 p-2 text-rose-600 ring-1 ring-rose-200 transition hover:bg-rose-600 hover:text-white dark:bg-rose-950/40 dark:text-rose-300 dark:ring-rose-900"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-          <div className="border-t border-slate-100 dark:border-slate-800 px-4 py-2.5 text-[11px] text-slate-500">
-            Showing {visible.length} of {students.length} students
-          </div>
-        </Card>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div className="border-t border-slate-100 dark:border-slate-800 px-4 py-2.5 text-[11px] text-slate-500">
+              Showing {visible.length} of {students.length} students
+            </div>
+          </Card>
+        </>
       )}
 
       {showNew && (
