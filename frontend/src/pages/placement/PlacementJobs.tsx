@@ -1,387 +1,354 @@
-import React, { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { api } from '../../services/api';
-import { Badge } from '../../components/Badge';
-import { Briefcase, PlusCircle, ExternalLink, Globe, MapPin, Clock, Building, CheckCircle2, Link2, Users } from 'lucide-react';
+import { CheckCircle2, ClipboardPaste, Link2, MousePointerClick, Pencil, PlusCircle, Search, Send, Trash2, Users, XCircle } from 'lucide-react';
+import { Card, ErrorNote, Field, Modal, PageHeader, Spinner, inputClass, primaryBtn, secondaryBtn, useToast } from '../admin/tracking/shared';
+import { parseJobPost } from './jobPostParser';
+
+// Placement team: post a job by pasting the whole post; see who opened the company link and who finished applying
+
+const toDateInput = (d?: string) => (d ? new Date(d).toISOString().slice(0, 10) : '');
+const isOpen = (j: any) => j.status === 'OPEN' && new Date(j.deadline).getTime() > Date.now();
+
+type Form = { post: string; companyName: string; title: string; applyUrl: string; deadline: string };
+const EMPTY: Form = { post: '', companyName: '', title: '', applyUrl: '', deadline: '' };
 
 export const PlacementJobs: React.FC = () => {
-  const [searchParams] = useSearchParams();
-  const typeParam = searchParams.get('type');
-
-  const [jobs, setJobs] = useState<any[]>([]);
+  const toast = useToast();
+  const [jobs, setJobs] = useState<any[] | null>(null);
   const [companies, setCompanies] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'ALL' | 'SCHOLARLOGIC' | 'OFFICIAL'>(
-    typeParam === 'official' ? 'OFFICIAL' : typeParam === 'scholarlogic' ? 'SCHOLARLOGIC' : 'ALL'
-  );
-  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [q, setQ] = useState('');
 
-  // Form states
-  const [title, setTitle] = useState('');
-  // Typed company name: matched to an existing company, or added as a new one when the job is published
-  const [companyName, setCompanyName] = useState('');
-  const [description, setDescription] = useState('');
-  const [location, setLocation] = useState('Bangalore');
-  const [salaryPackage, setSalaryPackage] = useState('12.0 - 15.0 LPA');
-  const [postingType, setPostingType] = useState<'SCHOLARLOGIC_POSTING' | 'OFFICIAL_COMPANY_POSTING'>('SCHOLARLOGIC_POSTING');
-  const [skillsStr, setSkillsStr] = useState('Python, SQL, React, REST API');
-  const [applyUrl, setApplyUrl] = useState('');
-  // Add / change the company's application link on an existing job
-  const [linkJob, setLinkJob] = useState<any | null>(null);
-  const [linkValue, setLinkValue] = useState('');
-  const [linkError, setLinkError] = useState('');
-  const [savingLink, setSavingLink] = useState(false);
-  const [loading, setLoading] = useState(true);
+  // New job
+  const [posting, setPosting] = useState(false);
+  const [form, setForm] = useState<Form>(EMPTY);
+  const [touched, setTouched] = useState<Partial<Record<keyof Form, boolean>>>({});
+  const [formError, setFormError] = useState('');
+  const [busy, setBusy] = useState(false);
 
+  // Edit / delete an existing job
+  const [editing, setEditing] = useState<any | null>(null);
+  const [editForm, setEditForm] = useState({ title: '', description: '', applyUrl: '', deadline: '', status: 'OPEN' });
+  const [deleting, setDeleting] = useState<any | null>(null);
+
+  const load = () =>
+    Promise.all([api.get('/placements/jobs'), api.get('/placements/companies')])
+      .then(([j, c]: any) => {
+        setJobs(j.data.jobs || []);
+        setCompanies(c.data.companies || []);
+      })
+      .catch((e: any) => toast.show(e.message));
   useEffect(() => {
-    fetchData();
+    load();
   }, []);
 
-  const fetchData = () => {
-    setLoading(true);
-    Promise.all([api.get('/placements/jobs'), api.get('/placements/companies')])
-      .then(([res1, res2]: any) => {
-        if (res1.success) setJobs(res1.data.jobs || []);
-        if (res2.success) setCompanies(res2.data.companies || []);
-      })
-      .catch(console.error)
-      .finally(() => setLoading(false));
+  const found = useMemo(() => parseJobPost(form.post), [form.post]);
+
+  // Pasting fills every box the placement team hasn't typed in themselves
+  const onPost = (post: string) => {
+    const p = parseJobPost(post);
+    setForm((f) => ({
+      post,
+      companyName: touched.companyName ? f.companyName : p.companyName,
+      title: touched.title ? f.title : p.title,
+      applyUrl: touched.applyUrl ? f.applyUrl : p.applyUrl,
+      deadline: touched.deadline ? f.deadline : p.deadline,
+    }));
+  };
+  const setField = (key: keyof Form, value: string) => {
+    setTouched((t) => ({ ...t, [key]: true }));
+    setForm((f) => ({ ...f, [key]: value }));
   };
 
-  const handleCreateJob = async (e: React.FormEvent) => {
+  const publish = async (e: React.FormEvent) => {
     e.preventDefault();
+    setBusy(true);
+    setFormError('');
     try {
-      const skillsArray = skillsStr.split(',').map((s) => s.trim()).filter(Boolean);
-      const typed = companyName.trim();
+      const typed = form.companyName.trim();
       const known = companies.find((c) => c.name.trim().toLowerCase() === typed.toLowerCase());
       await api.post('/placements/jobs', {
-        title,
+        title: form.title.trim(),
         ...(known ? { companyId: known._id } : { companyName: typed }),
-        description,
-        location,
-        salaryPackage,
-        postingType,
-        requiredSkills: skillsArray,
-        applyUrl: applyUrl.trim(),
+        description: form.post.trim(),
+        applyUrl: form.applyUrl.trim(),
+        ...(form.deadline ? { deadline: `${form.deadline}T23:59:59` } : {}),
+        location: found.location,
+        salaryPackage: found.salaryPackage,
+        requiredSkills: found.requiredSkills,
+        type: found.type,
       });
-      alert('Job posting published successfully!');
-      setShowCreateModal(false);
-      setTitle('');
-      setApplyUrl('');
-      setCompanyName('');
-      fetchData();
+      setPosting(false);
+      setForm(EMPTY);
+      setTouched({});
+      toast.show('Job posted. Students can see it now.');
+      load();
     } catch (err: any) {
-      alert(err.message || 'Failed to publish job');
-    }
-  };
-
-  const openLinkEditor = (job: any) => {
-    setLinkJob(job);
-    setLinkValue(job.applyUrl || '');
-    setLinkError('');
-  };
-  const saveLink = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!linkJob) return;
-    setSavingLink(true);
-    setLinkError('');
-    try {
-      await api.put(`/placements/jobs/${linkJob._id}`, { applyUrl: linkValue.trim() });
-      setLinkJob(null);
-      fetchData();
-    } catch (err: any) {
-      setLinkError(err.message || 'Could not save the link');
+      setFormError(err.message);
     } finally {
-      setSavingLink(false);
+      setBusy(false);
     }
   };
 
-  const displayedJobs = activeTab === 'SCHOLARLOGIC'
-    ? jobs.filter((j) => j.postingType === 'SCHOLARLOGIC_POSTING')
-    : activeTab === 'OFFICIAL'
-    ? jobs.filter((j) => j.postingType === 'OFFICIAL_COMPANY_POSTING')
-    : jobs;
+  const openEdit = (j: any) => {
+    setEditing(j);
+    setEditForm({ title: j.title, description: j.description, applyUrl: j.applyUrl || '', deadline: toDateInput(j.deadline), status: j.status === 'OPEN' ? 'OPEN' : 'CLOSED' });
+    setFormError('');
+  };
+  const saveEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editing) return;
+    setBusy(true);
+    setFormError('');
+    try {
+      await api.put(`/placements/jobs/${editing._id}`, {
+        title: editForm.title,
+        description: editForm.description,
+        applyUrl: editForm.applyUrl.trim(),
+        status: editForm.status,
+        ...(editForm.deadline ? { deadline: `${editForm.deadline}T23:59:59` } : {}),
+      });
+      setEditing(null);
+      toast.show('Job updated');
+      load();
+    } catch (err: any) {
+      setFormError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    if (!deleting) return;
+    setBusy(true);
+    try {
+      const res: any = await api.delete(`/placements/jobs/${deleting._id}`);
+      setJobs((list) => (list || []).filter((j) => j._id !== deleting._id));
+      setDeleting(null);
+      toast.show(res.message);
+    } catch (err: any) {
+      toast.show(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const term = q.trim().toLowerCase();
+  const visible = (jobs || []).filter((j) => !term || `${j.title} ${j.companyId?.name || ''}`.toLowerCase().includes(term));
+  const newCompany = form.companyName.trim() && !companies.some((c) => c.name.trim().toLowerCase() === form.companyName.trim().toLowerCase());
 
   return (
-    <div className="space-y-8 pb-12">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-4">
-        <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">Job Postings & Official Job Discovery</h1>
-          <p className="text-xs text-slate-500">ScholarLogic campus drives and verified official company career job postings</p>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 bg-white dark:bg-slate-900 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800">
-            <button
-              onClick={() => setActiveTab('ALL')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                activeTab === 'ALL' ? 'bg-brand-600 text-white shadow-md' : 'text-slate-600 dark:text-slate-400'
-              }`}
-            >
-              All Jobs ({jobs.length})
-            </button>
-            <button
-              onClick={() => setActiveTab('SCHOLARLOGIC')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                activeTab === 'SCHOLARLOGIC' ? 'bg-purple-600 text-white shadow-md' : 'text-slate-600 dark:text-slate-400'
-              }`}
-            >
-              ScholarLogic Jobs
-            </button>
-            <button
-              onClick={() => setActiveTab('OFFICIAL')}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                activeTab === 'OFFICIAL' ? 'bg-emerald-600 text-white shadow-md' : 'text-slate-600 dark:text-slate-400'
-              }`}
-            >
-              Official Company Jobs
-            </button>
-          </div>
-
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="px-4 py-2.5 rounded-xl bg-brand-600 text-white font-bold text-xs hover:bg-brand-700 transition-colors shadow-md flex items-center gap-2"
-          >
-            <PlusCircle className="h-4 w-4" /> + Publish Job
+    <div className="space-y-5 pb-12">
+      <PageHeader
+        title="Job Postings"
+        subtitle="Paste a job post to publish it. For company-website and Google Form links you see who opened the link and who finished applying."
+        action={
+          <button type="button" className={primaryBtn} onClick={() => setPosting(true)}>
+            <PlusCircle className="h-4 w-4" /> Post a job
           </button>
-        </div>
-      </div>
+        }
+      />
 
-      {loading ? (
-        <div className="flex h-64 items-center justify-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-500 border-t-transparent" />
-        </div>
+      <label className="relative block max-w-md">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+        <input id="job-search" className={`${inputClass} pl-9`} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search job or company" />
+      </label>
+
+      {!jobs ? (
+        <Spinner />
+      ) : visible.length === 0 ? (
+        <Card className="p-8 text-center text-sm text-slate-500">{jobs.length ? 'No job matches your search.' : 'No jobs yet. Click "Post a job" and paste the job post.'}</Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {displayedJobs.map((j) => (
-            <div key={j._id} className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm flex flex-col justify-between space-y-4">
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <Badge variant={j.postingType === 'SCHOLARLOGIC_POSTING' ? 'purple' : 'green'}>
-                    {j.postingType === 'SCHOLARLOGIC_POSTING' ? 'SCHOLARLOGIC POSTING' : 'OFFICIAL COMPANY POSTING'}
-                  </Badge>
-                  <span className="text-xs font-bold text-emerald-600">{j.salaryPackage}</span>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {visible.map((j) => {
+            const s = j.linkStats || { clicks: 0, students: 0, completed: 0, notCompleted: 0, portal: 0 };
+            const open = isOpen(j);
+            return (
+              <Card key={j._id} className="flex flex-col gap-3 p-5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h3 className="text-base font-extrabold text-slate-900 dark:text-white">{j.title}</h3>
+                    <p className="text-xs font-semibold text-slate-500">{j.companyId?.name || 'Company'}</p>
+                  </div>
+                  <span
+                    className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${
+                      open ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300' : 'bg-slate-100 text-slate-500 dark:bg-slate-800'
+                    }`}
+                  >
+                    {open ? `Open till ${new Date(j.deadline).toLocaleDateString(undefined, { day: 'numeric', month: 'short' })}` : 'Closed'}
+                  </span>
                 </div>
 
-                <div>
-                  <h3 className="font-extrabold text-base text-slate-900 dark:text-white">{j.title}</h3>
-                  <p className="text-xs text-slate-500 font-mono mt-0.5 font-bold">
-                    {(j.companyId as any)?.name || 'Partner Corporate'} • {j.location}
-                  </p>
-                </div>
-
-                <p className="text-xs text-slate-500 line-clamp-2">{j.description}</p>
-
-                {/* Skill Chips */}
-                <div className="flex flex-wrap gap-1.5 pt-1">
-                  {j.requiredSkills.map((sk: string) => (
-                    <span key={sk} className="px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-[10px] font-semibold">
-                      {sk}
-                    </span>
-                  ))}
-                </div>
-              </div>
-
-              <div className="rounded-xl bg-slate-50 dark:bg-slate-800/60 p-3 text-[11px]">
                 {j.applyUrl ? (
-                  <p className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300 min-w-0">
-                    <Link2 className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
-                    <span className="shrink-0 font-semibold">Students apply at:</span>
-                    <a href={j.applyUrl} target="_blank" rel="noopener noreferrer" className="truncate text-brand-600 hover:underline">
-                      {j.applyUrl}
-                    </a>
-                  </p>
+                  <>
+                    <p className="flex min-w-0 items-center gap-1.5 text-[11px] text-slate-500">
+                      <Link2 className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                      <a href={j.applyUrl} target="_blank" rel="noopener noreferrer" className="truncate text-brand-600 hover:underline">
+                        {j.applyUrl}
+                      </a>
+                    </p>
+                    <div className="grid grid-cols-3 gap-2 text-center text-xs">
+                      <div className="rounded-xl bg-sky-50 p-2 dark:bg-sky-950/40">
+                        <MousePointerClick className="mx-auto h-4 w-4 text-sky-600" />
+                        <p className="font-extrabold text-sky-700 dark:text-sky-300">{s.students}</p>
+                        <p className="text-[10px] font-semibold text-slate-500">opened link{s.clicks > s.students ? ` (${s.clicks} clicks)` : ''}</p>
+                      </div>
+                      <div className="rounded-xl bg-emerald-50 p-2 dark:bg-emerald-950/40">
+                        <CheckCircle2 className="mx-auto h-4 w-4 text-emerald-600" />
+                        <p className="font-extrabold text-emerald-700 dark:text-emerald-300">{s.completed}</p>
+                        <p className="text-[10px] font-semibold text-slate-500">completed</p>
+                      </div>
+                      <div className="rounded-xl bg-amber-50 p-2 dark:bg-amber-950/40">
+                        <XCircle className="mx-auto h-4 w-4 text-amber-600" />
+                        <p className="font-extrabold text-amber-700 dark:text-amber-300">{s.notCompleted}</p>
+                        <p className="text-[10px] font-semibold text-slate-500">not completed</p>
+                      </div>
+                    </div>
+                  </>
                 ) : (
-                  <p className="text-slate-500">No company application link. Students apply through the ScholarLogic form.</p>
+                  <p className="flex items-center gap-1.5 rounded-xl bg-slate-50 p-2 text-[11px] text-slate-500 dark:bg-slate-800/60">
+                    <Send className="h-3.5 w-3.5 text-brand-600" /> Students apply through the ScholarLogic form • <b>{s.portal}</b> applied
+                  </p>
                 )}
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <button type="button" onClick={() => openLinkEditor(j)} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-700 px-2 py-1 font-bold text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-900">
-                    <Link2 className="h-3 w-3" /> {j.applyUrl ? 'Edit apply link' : 'Add apply link'}
-                  </button>
-                  <Link to={`/placement/applications?jobId=${j._id}`} className="inline-flex items-center gap-1 rounded-lg border border-slate-200 dark:border-slate-700 px-2 py-1 font-bold text-slate-700 dark:text-slate-200 hover:bg-white dark:hover:bg-slate-900">
-                    <Users className="h-3 w-3" /> View applicants
+
+                <div className="mt-auto flex flex-wrap gap-2 border-t border-slate-100 pt-3 dark:border-slate-800">
+                  <Link to={`/placement/applications?jobId=${j._id}`} className={`${secondaryBtn} !px-2.5 !py-1 text-xs`}>
+                    <Users className="h-3.5 w-3.5" /> Students
                   </Link>
+                  <button type="button" className={`${secondaryBtn} !px-2.5 !py-1 text-xs`} onClick={() => openEdit(j)}>
+                    <Pencil className="h-3.5 w-3.5" /> Edit
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Delete ${j.title}`}
+                    onClick={() => setDeleting(j)}
+                    className="inline-flex items-center gap-1 rounded-lg bg-rose-50 px-2.5 py-1 text-xs font-bold text-rose-600 ring-1 ring-rose-200 hover:bg-rose-600 hover:text-white dark:bg-rose-950/40 dark:text-rose-300 dark:ring-rose-900"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" /> Delete
+                  </button>
                 </div>
-              </div>
-
-              <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800 text-xs">
-                <span className="text-[10px] text-slate-400 font-mono">
-                  Verified: {new Date(j.lastVerifiedAt || Date.now()).toLocaleDateString()}
-                </span>
-
-                <a
-                  href={(j.companyId as any)?.officialCareersUrl || (j.companyId as any)?.website || '#'}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="px-3 py-1.5 rounded-lg bg-brand-600 text-white font-bold text-[11px] hover:bg-brand-700 inline-flex items-center gap-1"
-                >
-                  <Globe className="h-3 w-3" /> Official Careers <ExternalLink className="h-3 w-3" />
-                </a>
-              </div>
-            </div>
-          ))}
+              </Card>
+            );
+          })}
         </div>
       )}
 
-      {/* Modal: Publish Job */}
-      {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900 p-6 space-y-4">
-            <h3 className="font-bold text-base text-white">Publish Job Posting</h3>
-            <form onSubmit={handleCreateJob} className="space-y-4 text-xs">
-              <div>
-                <label className="block text-slate-300 font-semibold mb-1">Job Title</label>
-                <input
-                  type="text"
-                  required
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="Python Full Stack Engineer"
-                  className="w-full rounded-xl border border-slate-800 bg-slate-800 p-2.5 text-white"
-                />
-              </div>
+      {posting && (
+        <Modal title="Post a job" subtitle="Copy the whole job post (WhatsApp, LinkedIn, email, careers page) and paste it below." onClose={() => setPosting(false)} wide>
+          <ErrorNote text={formError} />
+          <form onSubmit={publish} className="space-y-4">
+            <Field label="Paste the full job post" required>
+              <textarea
+                id="job-post"
+                rows={9}
+                className={inputClass}
+                value={form.post}
+                onChange={(e) => onPost(e.target.value)}
+                placeholder={'Example:\nThe Wedding Company is hiring – Backend Engineering Intern\nLocation: Bangalore\nStipend: 25,000/month\nLast date: 5 Nov 2026\nApply: https://forms.gle/...'}
+                required
+                autoFocus
+              />
+            </Field>
 
-              <div>
-                <label htmlFor="job-company" className="block text-slate-300 font-semibold mb-1">Company</label>
-                <input
-                  id="job-company"
-                  type="text"
-                  required
-                  list="job-company-list"
-                  value={companyName}
-                  onChange={(e) => setCompanyName(e.target.value)}
-                  placeholder="Type a company name, e.g. TCS"
-                  autoComplete="off"
-                  className="w-full rounded-xl border border-slate-800 bg-slate-800 p-2.5 text-white font-bold placeholder:font-normal placeholder:text-slate-500"
-                />
+            {form.post.trim() && (
+              <p className="flex items-center gap-1.5 text-xs font-semibold text-brand-700 dark:text-brand-300">
+                <ClipboardPaste className="h-3.5 w-3.5" /> Filled from your post. Check these and correct anything that's wrong:
+              </p>
+            )}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label="Company" required hint={newCompany ? 'New company, added when you post' : undefined}>
+                <input id="job-company" list="job-company-list" className={inputClass} value={form.companyName} onChange={(e) => setField('companyName', e.target.value)} autoComplete="off" required />
                 <datalist id="job-company-list">
                   {companies.map((c) => (
                     <option key={c._id} value={c.name} />
                   ))}
                 </datalist>
-                {companyName.trim() && !companies.some((c) => c.name.trim().toLowerCase() === companyName.trim().toLowerCase()) && (
-                  <p className="mt-1 text-[10px] text-emerald-400">New company: "{companyName.trim()}" will be added when you publish.</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-slate-300 font-semibold mb-1">Posting Type Badge</label>
-                <select
-                  value={postingType}
-                  onChange={(e: any) => setPostingType(e.target.value)}
-                  className="w-full rounded-xl border border-slate-800 bg-slate-800 p-2.5 text-white font-bold"
-                >
-                  <option value="SCHOLARLOGIC_POSTING">SCHOLARLOGIC POSTING (Internal Campus Drive)</option>
-                  <option value="OFFICIAL_COMPANY_POSTING">OFFICIAL COMPANY POSTING (Discovered from Careers Page)</option>
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Location</label>
-                  <input
-                    type="text"
-                    value={location}
-                    onChange={(e) => setLocation(e.target.value)}
-                    className="w-full rounded-xl border border-slate-800 bg-slate-800 p-2.5 text-white"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Salary Package</label>
-                  <input
-                    type="text"
-                    value={salaryPackage}
-                    onChange={(e) => setSalaryPackage(e.target.value)}
-                    className="w-full rounded-xl border border-slate-800 bg-slate-800 p-2.5 text-white"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-slate-300 font-semibold mb-1">Required Skills (Comma separated)</label>
-                <input
-                  type="text"
-                  value={skillsStr}
-                  onChange={(e) => setSkillsStr(e.target.value)}
-                  className="w-full rounded-xl border border-slate-800 bg-slate-800 p-2.5 text-white"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-300 font-semibold mb-1">Company application link (optional)</label>
-                <input
-                  type="url"
-                  value={applyUrl}
-                  onChange={(e) => setApplyUrl(e.target.value)}
-                  placeholder="https://careers.company.com/jobs/12345"
-                  className="w-full rounded-xl border border-slate-800 bg-slate-800 p-2.5 text-white"
-                />
-                <p className="mt-1 text-[10px] text-slate-400">If set, the student's Apply button opens this page and their name is recorded under Applications.</p>
-              </div>
-
-              <div>
-                <label className="block text-slate-300 font-semibold mb-1">Job Description</label>
-                <textarea
-                  rows={3}
-                  required
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Responsibilities & technical requirements..."
-                  className="w-full rounded-xl border border-slate-800 bg-slate-800 p-2.5 text-white"
-                />
-              </div>
-
-              <div className="flex items-center gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateModal(false)}
-                  className="flex-1 py-2.5 rounded-xl border border-slate-800 bg-slate-800 text-slate-300 font-bold"
-                >
-                  Cancel
-                </button>
-                <button type="submit" className="flex-1 py-2.5 rounded-xl bg-brand-600 text-white font-bold hover:bg-brand-700">
-                  Publish Job
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {linkJob && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md rounded-3xl border border-slate-800 bg-slate-900 p-6 space-y-4">
-            <div>
-              <h3 className="font-bold text-base text-white">Company application link</h3>
-              <p className="text-xs text-slate-400">
-                {linkJob.title} • {(linkJob.companyId as any)?.name || 'Company'}
-              </p>
+              </Field>
+              <Field label="Job title" required>
+                <input id="job-title" className={inputClass} value={form.title} onChange={(e) => setField('title', e.target.value)} required />
+              </Field>
+              <Field label="Apply link" hint="Company website or Google Form. Empty = ScholarLogic form">
+                <input id="job-link" className={inputClass} value={form.applyUrl} onChange={(e) => setField('applyUrl', e.target.value)} placeholder="https://" />
+              </Field>
+              <Field label="Last date to apply" hint="Empty = 30 days from today">
+                <input id="job-deadline" type="date" className={inputClass} value={form.deadline} onChange={(e) => setField('deadline', e.target.value)} />
+              </Field>
             </div>
-            <form onSubmit={saveLink} className="space-y-3 text-xs">
-              <input
-                id="apply-link"
-                type="url"
-                value={linkValue}
-                onChange={(e) => setLinkValue(e.target.value)}
-                placeholder="https://careers.company.com/jobs/12345"
-                className="w-full rounded-xl border border-slate-700 bg-slate-800 p-2.5 text-white"
-                autoFocus
-              />
-              <p className="text-[11px] text-slate-400">
-                Students who click Apply go to this page, and their name is saved under Applications. Leave it empty to go back to the ScholarLogic application form.
+            {(found.location || found.salaryPackage || found.type === 'INTERNSHIP') && (
+              <p className="text-[11px] text-slate-500">
+                Also found:{' '}
+                {[found.type === 'INTERNSHIP' && 'Internship', found.location && `📍 ${found.location}`, found.salaryPackage && `💰 ${found.salaryPackage}`].filter(Boolean).join('  •  ')}
               </p>
-              {linkError && <p className="rounded-lg bg-rose-950/60 p-2 text-rose-300">{linkError}</p>}
-              <div className="flex items-center gap-3 pt-1">
-                <button type="button" onClick={() => setLinkJob(null)} className="flex-1 py-2.5 rounded-xl border border-slate-800 bg-slate-800 text-slate-300 font-bold">
-                  Cancel
-                </button>
-                <button type="submit" disabled={savingLink} className="flex-1 py-2.5 rounded-xl bg-brand-600 text-white font-bold hover:bg-brand-700 disabled:opacity-60">
-                  {savingLink ? 'Saving…' : 'Save link'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+            )}
+            <div className="flex justify-end gap-2">
+              <button type="button" className={secondaryBtn} onClick={() => setPosting(false)}>
+                Cancel
+              </button>
+              <button type="submit" className={primaryBtn} disabled={busy}>
+                {busy ? 'Posting…' : 'Post job'}
+              </button>
+            </div>
+          </form>
+        </Modal>
       )}
+
+      {editing && (
+        <Modal title="Edit job" subtitle={editing.companyId?.name} onClose={() => setEditing(null)} wide>
+          <ErrorNote text={formError} />
+          <form onSubmit={saveEdit} className="space-y-3">
+            <Field label="Job title" required>
+              <input id="edit-title" className={inputClass} value={editForm.title} onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))} required />
+            </Field>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <Field label="Apply link" hint="Empty = ScholarLogic form">
+                <input id="edit-link" className={inputClass} value={editForm.applyUrl} onChange={(e) => setEditForm((f) => ({ ...f, applyUrl: e.target.value }))} />
+              </Field>
+              <Field label="Last date to apply">
+                <input id="edit-deadline" type="date" className={inputClass} value={editForm.deadline} onChange={(e) => setEditForm((f) => ({ ...f, deadline: e.target.value }))} />
+              </Field>
+              <Field label="Status">
+                <select id="edit-status" className={inputClass} value={editForm.status} onChange={(e) => setEditForm((f) => ({ ...f, status: e.target.value }))}>
+                  <option value="OPEN">Open</option>
+                  <option value="CLOSED">Closed</option>
+                </select>
+              </Field>
+            </div>
+            <Field label="Job post" required>
+              <textarea id="edit-post" rows={8} className={inputClass} value={editForm.description} onChange={(e) => setEditForm((f) => ({ ...f, description: e.target.value }))} required />
+            </Field>
+            <div className="flex justify-end gap-2">
+              <button type="button" className={secondaryBtn} onClick={() => setEditing(null)}>
+                Cancel
+              </button>
+              <button type="submit" className={primaryBtn} disabled={busy}>
+                {busy ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {deleting && (
+        <Modal title={`Delete ${deleting.title}?`} subtitle={`${deleting.companyId?.name || ''} • This cannot be undone`} onClose={() => !busy && setDeleting(null)}>
+          <p className="rounded-xl bg-rose-50 p-3 text-xs text-rose-800 dark:bg-rose-950/40 dark:text-rose-200">
+            Students will no longer see this job, and its applications are removed too.
+          </p>
+          <div className="flex justify-end gap-2 pt-4">
+            <button type="button" className={secondaryBtn} disabled={busy} onClick={() => setDeleting(null)}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={remove}
+              className="inline-flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+            >
+              <Trash2 className="h-4 w-4" /> {busy ? 'Deleting…' : 'Delete job'}
+            </button>
+          </div>
+        </Modal>
+      )}
+      {toast.node}
     </div>
   );
 };

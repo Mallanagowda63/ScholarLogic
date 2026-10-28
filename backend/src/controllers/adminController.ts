@@ -6,7 +6,7 @@ import { Course } from '../models/Course';
 import { Exam } from '../models/Exam';
 import { Company } from '../models/Company';
 import { Job } from '../models/Job';
-import { Application } from '../models/Application';
+import { Application, COUNTED_APPLICATION } from '../models/Application';
 import { AuditLog } from '../models/AuditLog';
 import { Result } from '../models/Result';
 import { AppError } from '../middleware/errorHandler';
@@ -19,7 +19,7 @@ export const getAdminMetrics = async (req: AuthRequest, res: Response): Promise<
   const totalExams = await Exam.countDocuments();
   const totalCompanies = await Company.countDocuments();
   const totalJobs = await Job.countDocuments();
-  const totalApplications = await Application.countDocuments();
+  const totalApplications = await Application.countDocuments(COUNTED_APPLICATION);
   const totalPlaced = await Application.countDocuments({ status: { $in: ['OFFERED', 'JOINED'] } });
   const examSubmissionsCount = await Result.countDocuments();
 

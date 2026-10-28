@@ -50,6 +50,11 @@ export interface IApplication extends Document {
   notes?: string;
   appliedVia: 'PORTAL' | 'COMPANY_SITE'; // COMPANY_SITE = student clicked Apply and was sent to the company's own page
   externalApplyUrl?: string;
+  // Company-site applications: how often the student opened the link, and whether they said they finished
+  linkClicks?: number;
+  lastClickedAt?: Date;
+  completion?: 'PENDING' | 'COMPLETED' | 'NOT_COMPLETED';
+  completionAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -63,6 +68,10 @@ const ApplicationSchema = new Schema<IApplication>(
     resumeId: { type: Schema.Types.ObjectId, ref: 'Resume', required: function (this: any) { return this.appliedVia !== 'COMPANY_SITE'; } },
     appliedVia: { type: String, enum: ['PORTAL', 'COMPANY_SITE'], default: 'PORTAL', index: true },
     externalApplyUrl: { type: String, default: '' },
+    linkClicks: { type: Number, default: 0 },
+    lastClickedAt: { type: Date },
+    completion: { type: String, enum: ['PENDING', 'COMPLETED', 'NOT_COMPLETED'] },
+    completionAt: { type: Date },
     appliedAt: { type: Date, default: Date.now },
     interviewDate: { type: Date },
     status: {
@@ -111,5 +120,8 @@ const ApplicationSchema = new Schema<IApplication>(
 );
 
 ApplicationSchema.index({ jobId: 1, studentId: 1 }, { unique: true });
+
+// Applications that count: ScholarLogic-form ones, and company-site ones the student confirmed they finished
+export const COUNTED_APPLICATION = { $or: [{ appliedVia: { $ne: 'COMPANY_SITE' } }, { completion: 'COMPLETED' }] };
 
 export const Application = mongoose.model<IApplication>('Application', ApplicationSchema);

@@ -93,10 +93,7 @@ const QuestionBankImporter = lazyPage(() => import('./pages/trainer/QuestionBank
 // Upgraded Placement Intelligence Platform Pages
 const PlacementDashboard = lazyPage(() => import('./pages/placement/PlacementDashboard'), 'PlacementDashboard');
 const PlacementCompanies = lazyPage(() => import('./pages/placement/PlacementCompanies'), 'PlacementCompanies');
-const CompanyComparison = lazyPage(() => import('./pages/placement/CompanyComparison'), 'CompanyComparison');
 const PlacementJobs = lazyPage(() => import('./pages/placement/PlacementJobs'), 'PlacementJobs');
-const HiringIntelligence = lazyPage(() => import('./pages/placement/HiringIntelligence'), 'HiringIntelligence');
-const PlacementReports = lazyPage(() => import('./pages/placement/PlacementReports'), 'PlacementReports');
 const PlacementApplications = lazyPage(() => import('./pages/placement/PlacementApplications'), 'PlacementApplications');
 const PlacementReadyStudents = lazyPage(() => import('./pages/placement/PlacementReadyStudents'), 'PlacementReadyStudents');
 
@@ -176,16 +173,9 @@ export const App: React.FC = () => {
               <Route element={<PlacementLayout />}>
                 <Route path="/placement/dashboard" element={<PlacementDashboard />} />
                 <Route path="/placement/companies" element={<PlacementCompanies />} />
-                <Route path="/placement/comparison" element={<CompanyComparison />} />
                 <Route path="/placement/jobs" element={<PlacementJobs />} />
-                <Route path="/placement/jobs/official" element={<PlacementJobs />} />
                 <Route path="/placement/applications" element={<PlacementApplications />} />
                 <Route path="/placement/ready-students" element={<PlacementReadyStudents />} />
-                <Route path="/placement/hiring-intelligence" element={<HiringIntelligence />} />
-                <Route path="/placement/hiring-intelligence/skills" element={<HiringIntelligence />} />
-                <Route path="/placement/hiring-intelligence/locations" element={<HiringIntelligence />} />
-                <Route path="/placement/hiring-intelligence/trends" element={<HiringIntelligence />} />
-                <Route path="/placement/reports" element={<PlacementReports />} />
                 <Route path="/placement/profile" element={<StaffProfile />} />
                 <Route path="/placement/banners" element={<AdminBanners />} />
               </Route>

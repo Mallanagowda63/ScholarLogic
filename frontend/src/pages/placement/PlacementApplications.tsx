@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Download, Globe, Search, Send, X } from 'lucide-react';
+import { CheckCircle2, Clock, Download, Globe, Search, Send, X, XCircle } from 'lucide-react';
 import { api } from '../../services/api';
 import { Card, EmptyRow, ErrorNote, PageHeader, Spinner, inputClass, secondaryBtn, useToast } from '../admin/tracking/shared';
 
@@ -13,6 +13,8 @@ interface Row {
   job: { _id: string; title: string; location: string; salaryPackage: string } | null;
   company: { _id: string; name: string } | null;
   appliedVia: 'PORTAL' | 'COMPANY_SITE';
+  linkClicks: number;
+  completion: 'PENDING' | 'COMPLETED' | 'NOT_COMPLETED';
   status: string;
   appliedAt: string;
 }
@@ -30,6 +32,7 @@ export const PlacementApplications: React.FC = () => {
   const [q, setQ] = useState('');
   const [via, setVia] = useState<'' | 'PORTAL' | 'COMPANY_SITE'>('');
   const [statusFilter, setStatusFilter] = useState('');
+  const [doneFilter, setDoneFilter] = useState<'' | 'COMPLETED' | 'NOT_COMPLETED'>('');
 
   const load = () =>
     api
@@ -52,10 +55,12 @@ export const PlacementApplications: React.FC = () => {
       if (jobFilter && r.job?._id !== jobFilter) return false;
       if (via && r.appliedVia !== via) return false;
       if (statusFilter && r.status !== statusFilter) return false;
+      if (doneFilter === 'COMPLETED' && r.completion !== 'COMPLETED') return false;
+      if (doneFilter === 'NOT_COMPLETED' && r.completion === 'COMPLETED') return false;
       if (!term) return true;
       return [r.student?.fullName, r.student?.studentId, r.student?.phone, r.job?.title, r.company?.name].filter(Boolean).join(' ').toLowerCase().includes(term);
     });
-  }, [rows, q, via, statusFilter, jobFilter]);
+  }, [rows, q, via, statusFilter, doneFilter, jobFilter]);
 
   const setStatus = async (r: Row, status: string) => {
     try {
@@ -81,13 +86,16 @@ export const PlacementApplications: React.FC = () => {
     }
   };
 
-  const companySite = (rows || []).filter((r) => r.appliedVia === 'COMPANY_SITE').length;
+  // Company-site / Google Form links: a click is not an application until the student says they finished
+  const all = rows || [];
+  const site = all.filter((r) => r.appliedVia === 'COMPANY_SITE');
+  const completed = all.filter((r) => r.completion === 'COMPLETED');
 
   return (
     <div className="space-y-5 pb-12">
       <PageHeader
         title="Applications"
-        subtitle="Every student who applied to a job. Applications made on a company's own website are recorded when the student clicks Apply."
+        subtitle="For company-website and Google Form links, every click is counted. It becomes an application only when the student comes back and confirms they finished; otherwise it shows as Not completed."
         action={
           <button type="button" className={secondaryBtn} onClick={exportCsv}>
             <Download className="h-3.5 w-3.5" /> Export CSV
@@ -97,15 +105,16 @@ export const PlacementApplications: React.FC = () => {
       <ErrorNote text={error} />
 
       {rows && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
           {[
-            ['Total applications', rows.length],
-            ['Via company website', companySite],
-            ['Via ScholarLogic form', rows.length - companySite],
-            ['Selected / offered / joined', rows.filter((r) => ['SELECTED', 'OFFERED', 'JOINED'].includes(r.status)).length],
-          ].map(([l, v]) => (
+            ['Completed applications', completed.length, 'text-emerald-600'],
+            ['Opened company link', site.length, 'text-sky-600'],
+            ['Total link clicks', site.reduce((n, r) => n + (r.linkClicks || 0), 0), 'text-slate-900 dark:text-white'],
+            ['Not completed', site.length - site.filter((r) => r.completion === 'COMPLETED').length, 'text-amber-600'],
+            ['Selected / offered / joined', completed.filter((r) => ['SELECTED', 'OFFERED', 'JOINED'].includes(r.status)).length, 'text-brand-600'],
+          ].map(([l, v, tone]) => (
             <Card key={String(l)} className="p-4">
-              <p className="text-2xl font-extrabold text-slate-900 dark:text-white">{v}</p>
+              <p className={`text-2xl font-extrabold ${tone}`}>{v}</p>
               <p className="text-[11px] font-semibold text-slate-500">{l}</p>
             </Card>
           ))}
@@ -117,7 +126,7 @@ export const PlacementApplications: React.FC = () => {
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input id="app-search" className={`${inputClass} pl-9`} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search student name, Student ID, phone, job or company" />
         </label>
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-4">
           <select
             id="app-job"
             className={`${inputClass} !py-1.5 text-xs`}
@@ -141,6 +150,11 @@ export const PlacementApplications: React.FC = () => {
             <option value="COMPANY_SITE">On company website</option>
             <option value="PORTAL">Through ScholarLogic form</option>
           </select>
+          <select id="app-done" className={`${inputClass} !py-1.5 text-xs`} value={doneFilter} onChange={(e) => setDoneFilter(e.target.value as any)}>
+            <option value="">Completed or not</option>
+            <option value="COMPLETED">Completed only</option>
+            <option value="NOT_COMPLETED">Not completed only</option>
+          </select>
           <select id="app-status" className={`${inputClass} !py-1.5 text-xs`} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
             <option value="">Any status</option>
             {STATUSES.map((s) => (
@@ -150,7 +164,7 @@ export const PlacementApplications: React.FC = () => {
             ))}
           </select>
         </div>
-        {(jobFilter || via || statusFilter || q) && (
+        {(jobFilter || via || statusFilter || doneFilter || q) && (
           <button
             type="button"
             className="inline-flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
@@ -158,6 +172,7 @@ export const PlacementApplications: React.FC = () => {
               setQ('');
               setVia('');
               setStatusFilter('');
+              setDoneFilter('');
               setParams(new URLSearchParams());
             }}
           >
@@ -174,7 +189,7 @@ export const PlacementApplications: React.FC = () => {
             <table className="w-full min-w-[980px] text-xs">
               <thead className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 text-[10px] font-bold uppercase text-slate-500">
                 <tr>
-                  {['Applied', 'Student', 'Contact', 'Job', 'Company', 'Applied via', 'Status'].map((h) => (
+                  {['Applied', 'Student', 'Contact', 'Job', 'Company', 'Applied via', 'Completed?', 'Status'].map((h) => (
                     <th key={h} className={th}>
                       {h}
                     </th>
@@ -183,7 +198,7 @@ export const PlacementApplications: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {visible.length === 0 ? (
-                  <EmptyRow colSpan={7} text={rows.length ? 'No applications match these filters.' : 'No applications yet. They appear here as soon as a student clicks Apply.'} />
+                  <EmptyRow colSpan={8} text={rows.length ? 'No applications match these filters.' : 'No applications yet. They appear here as soon as a student clicks Apply.'} />
                 ) : (
                   visible.map((r) => (
                     <tr key={r._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
@@ -211,6 +226,26 @@ export const PlacementApplications: React.FC = () => {
                         ) : (
                           <span className="inline-flex items-center gap-1 rounded-full bg-brand-50 dark:bg-brand-950/50 px-2 py-0.5 text-[10px] font-bold text-brand-700 dark:text-brand-300">
                             <Send className="h-3 w-3" /> ScholarLogic form
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        {r.completion === 'COMPLETED' ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">
+                            <CheckCircle2 className="h-3 w-3" /> Completed
+                          </span>
+                        ) : (
+                          <span
+                            title={r.completion === 'PENDING' ? "Opened the link but hasn't confirmed yet" : 'Student said they did not finish'}
+                            className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:bg-amber-950/50 dark:text-amber-300"
+                          >
+                            {r.completion === 'PENDING' ? <Clock className="h-3 w-3" /> : <XCircle className="h-3 w-3" />} Not completed
+                          </span>
+                        )}
+                        {r.appliedVia === 'COMPANY_SITE' && (
+                          <span className="block pt-0.5 text-[10px] text-slate-400">
+                            {r.linkClicks} {r.linkClicks === 1 ? 'click' : 'clicks'}
+                            {r.completion === 'PENDING' ? ' • no answer yet' : ''}
                           </span>
                         )}
                       </td>

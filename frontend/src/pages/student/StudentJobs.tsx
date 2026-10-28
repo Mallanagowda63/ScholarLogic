@@ -21,6 +21,7 @@ import {
   GraduationCap,
   CalendarDays,
   CalendarClock,
+  XCircle,
 } from 'lucide-react';
 
 type DriveTab = 'all' | 'fulltime' | 'internship' | 'applied';
@@ -139,7 +140,21 @@ export const StudentJobs: React.FC = () => {
   };
 
   // Jobs with the company's own application link: record the application, then send the student there
-  const [externalNote, setExternalNote] = useState<{ job: any; url: string; popupBlocked: boolean } | null>(null);
+  const [externalNote, setExternalNote] = useState<{ job: any; url: string; popupBlocked: boolean; applicationId: string } | null>(null);
+  const [confirming, setConfirming] = useState('');
+  // Back from the company page / Google Form: only a "yes" counts as an application
+  const confirmExternal = async (applicationId: string, completed: boolean) => {
+    setConfirming(applicationId);
+    try {
+      await api.post(`/placements/applications/${applicationId}/completion`, { completed });
+      setExternalNote(null);
+      fetchJobs();
+    } catch (err: any) {
+      alert(err.message || 'Could not save your answer. Please try again.');
+    } finally {
+      setConfirming('');
+    }
+  };
   const applyOnCompanySite = async (job: any) => {
     // Open the tab inside the click so the browser doesn't block it; fill it once the application is recorded
     const tab = window.open('', '_blank');
@@ -149,7 +164,7 @@ export const StudentJobs: React.FC = () => {
       const url = res.data.applyUrl;
       if (tab) tab.location.href = url;
       setViewJdJob(null);
-      setExternalNote({ job, url, popupBlocked: !tab });
+      setExternalNote({ job, url, popupBlocked: !tab, applicationId: String(res.data.application._id) });
       fetchJobs();
     } catch (err: any) {
       tab?.close();
@@ -265,6 +280,37 @@ export const StudentJobs: React.FC = () => {
         </span>
       </div>
 
+      {jobs.some((j: any) => j.externalApplication?.completion === 'PENDING') && (
+        <div className="rounded-2xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 p-4 space-y-3">
+          <p className="text-sm font-bold text-amber-900 dark:text-amber-200">Did you finish these applications?</p>
+          {jobs
+            .filter((j: any) => j.externalApplication?.completion === 'PENDING')
+            .map((j: any) => (
+              <div key={j._id} className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white dark:bg-slate-900 p-3">
+                <span className="text-xs text-slate-700 dark:text-slate-300">
+                  <b>{j.title}</b> • {j.companyId?.name || 'Company'}
+                </span>
+                <span className="flex gap-2">
+                  <button
+                    disabled={!!confirming}
+                    onClick={() => confirmExternal(j.externalApplication.applicationId, true)}
+                    className="px-3 py-1.5 rounded-lg bg-emerald-600 text-white text-[11px] font-bold hover:bg-emerald-700 disabled:opacity-60"
+                  >
+                    Yes, submitted
+                  </button>
+                  <button
+                    disabled={!!confirming}
+                    onClick={() => confirmExternal(j.externalApplication.applicationId, false)}
+                    className="px-3 py-1.5 rounded-lg bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 text-[11px] font-bold hover:bg-amber-200 disabled:opacity-60"
+                  >
+                    No, not completed
+                  </button>
+                </span>
+              </div>
+            ))}
+        </div>
+      )}
+
       {/* Tabs */}
       <nav className="flex gap-6 overflow-x-auto border-b border-slate-200 dark:border-slate-800" aria-label="Drive categories">
         {DRIVE_TABS.map(({ key, label }) => {
@@ -331,7 +377,11 @@ export const StudentJobs: React.FC = () => {
               >
                 <div className="flex items-start justify-between gap-3">
                   <span className="font-mono text-[11px] font-semibold tracking-wider text-slate-400">{driveCode(job._id)}</span>
-                  {job.appliedStatus ? (
+                  {!job.appliedStatus && job.externalApplication ? (
+                    <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/50 px-2 py-0.5 text-[10px] font-bold uppercase text-amber-700 dark:text-amber-300">
+                      <XCircle className="h-3 w-3" /> Not completed
+                    </span>
+                  ) : job.appliedStatus ? (
                     <span className="inline-flex items-center gap-1 rounded-full border border-brand-200 dark:border-brand-800 bg-brand-50 dark:bg-brand-950/50 px-2 py-0.5 text-[10px] font-bold uppercase text-brand-700 dark:text-brand-300">
                       <CheckCircle2 className="h-3 w-3" /> {job.appliedStatus.replace(/_/g, ' ')}
                     </span>
@@ -363,7 +413,7 @@ export const StudentJobs: React.FC = () => {
                     label="Eligibility"
                     value={
                       <>
-                        Min CGPA {job.eligibilityCriteria?.minCgpa ?? 6}
+                        {job.eligibilityCriteria?.minCgpa ? `Min CGPA ${job.eligibilityCriteria.minCgpa}` : 'Open to all'}
                         {branches.length > 0 && <span className="block text-slate-500 dark:text-slate-400">{branches.join(', ')}</span>}
                       </>
                     }
@@ -397,28 +447,47 @@ export const StudentJobs: React.FC = () => {
       {externalNote && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
           <div className="w-full max-w-md rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center gap-2 text-emerald-600">
-              <CheckCircle2 className="h-6 w-6" />
-              <h2 className="text-lg font-black text-slate-900 dark:text-white">Application recorded</h2>
+            <div className="flex items-center gap-2 text-brand-600">
+              <Globe className="h-6 w-6" />
+              <h2 className="text-lg font-black text-slate-900 dark:text-white">Finish applying, then come back here</h2>
             </div>
             <p className="text-sm text-slate-600 dark:text-slate-300">
-              The placement team can now see that you applied for <b>{externalNote.job.title}</b> at <b>{externalNote.job.companyId?.name || 'the company'}</b>.
               {externalNote.popupBlocked
-                ? ' Your browser blocked the new tab, so open the company page with the button below and finish your application there.'
-                : ' The company page opened in a new tab. Finish your application there.'}
+                ? 'Your browser blocked the new tab. Open the application page with the button below.'
+                : 'The application page opened in a new tab.'}{' '}
+              Fill in and submit the form for <b>{externalNote.job.title}</b> at <b>{externalNote.job.companyId?.name || 'the company'}</b>, then come back and tell us.
             </p>
-            <div className="flex justify-end gap-2">
+            <a
+              href={externalNote.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-brand-600 hover:underline"
+            >
+              <Globe className="h-3.5 w-3.5" /> Open the application page {externalNote.popupBlocked ? '' : 'again'}
+            </a>
+            <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 p-4 space-y-3">
+              <p className="text-sm font-bold text-slate-900 dark:text-white">Did you submit your application?</p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  disabled={!!confirming}
+                  onClick={() => confirmExternal(externalNote.applicationId, true)}
+                  className="px-4 py-2 rounded-xl bg-emerald-600 text-white text-xs font-extrabold hover:bg-emerald-700 disabled:opacity-60 inline-flex items-center gap-1.5"
+                >
+                  <CheckCircle2 className="h-4 w-4" /> Yes, I submitted it
+                </button>
+                <button
+                  disabled={!!confirming}
+                  onClick={() => confirmExternal(externalNote.applicationId, false)}
+                  className="px-4 py-2 rounded-xl bg-amber-100 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 text-xs font-extrabold hover:bg-amber-200 disabled:opacity-60 inline-flex items-center gap-1.5"
+                >
+                  <XCircle className="h-4 w-4" /> No, not completed
+                </button>
+              </div>
+            </div>
+            <div className="flex justify-end">
               <button onClick={() => setExternalNote(null)} className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold">
-                Close
+                Answer later
               </button>
-              <a
-                href={externalNote.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="px-4 py-2 rounded-xl bg-brand-600 text-white text-xs font-extrabold hover:bg-brand-700 inline-flex items-center gap-1.5"
-              >
-                <Globe className="h-3.5 w-3.5" /> Open company page
-              </a>
             </div>
           </div>
         </div>
@@ -431,13 +500,13 @@ export const StudentJobs: React.FC = () => {
             <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
               <div>
                 <span className="text-[10px] font-bold uppercase text-brand-600 font-mono tracking-wider">
-                  {viewJdJob.postingType || 'OFFICIAL_CAREERS_PAGE'} • VERIFIED LISTING
+                  {JOB_TYPE_LABEL[viewJdJob.type] || 'Job'}
                 </span>
                 <h2 className="text-xl font-black text-slate-900 dark:text-white mt-1">{viewJdJob.title}</h2>
                 <p className="text-xs font-semibold text-slate-500 flex items-center gap-3 mt-1">
                   <span>🏢 {viewJdJob.companyId?.name || 'Partner Company'}</span>
-                  <span>📍 {viewJdJob.location}</span>
-                  <span>💰 {viewJdJob.salaryPackage}</span>
+                  {viewJdJob.location && viewJdJob.location !== 'See job details' && <span>📍 {viewJdJob.location}</span>}
+                  {viewJdJob.salaryPackage && viewJdJob.salaryPackage !== 'See job details' && <span>💰 {viewJdJob.salaryPackage}</span>}
                 </p>
               </div>
 
@@ -449,55 +518,42 @@ export const StudentJobs: React.FC = () => {
               </button>
             </div>
 
-            {/* Official Source Badge */}
-            <div className="p-3.5 rounded-2xl bg-brand-50 dark:bg-brand-950/60 border border-brand-200 dark:border-brand-900 flex items-center justify-between text-xs font-semibold text-brand-800 dark:text-brand-300">
-              <div className="flex items-center gap-2">
-                <Globe className="h-4 w-4 text-brand-600" />
-                <span>Source: Official Company Careers Page</span>
-              </div>
-              {viewJdJob.companyId?.officialCareersUrl && (
-                <a
-                  href={viewJdJob.companyId.officialCareersUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="font-bold text-brand-600 dark:text-brand-400 hover:underline flex items-center gap-1 text-[11px]"
-                >
-                  Visit Official Careers Page →
-                </a>
-              )}
-            </div>
-
             {/* Role Breakdown Sections */}
             <div className="space-y-4 text-xs text-slate-700 dark:text-slate-300 leading-relaxed max-h-[50vh] overflow-y-auto pr-2">
               <div>
-                <h4 className="font-extrabold text-sm text-slate-900 dark:text-white uppercase tracking-wider mb-1">About The Role</h4>
-                <p>{viewJdJob.description}</p>
+                <h4 className="font-extrabold text-sm text-slate-900 dark:text-white uppercase tracking-wider mb-1">Job details</h4>
+                <p className="whitespace-pre-wrap break-words">{viewJdJob.description}</p>
               </div>
 
-              <div>
-                <h4 className="font-extrabold text-sm text-slate-900 dark:text-white uppercase tracking-wider mb-1">Required Technical Skills</h4>
-                <div className="flex flex-wrap gap-1.5 mt-1">
-                  {(viewJdJob.requiredSkills || []).map((sk: string) => (
-                    <span key={sk} className="px-3 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white font-bold text-xs">
-                      {sk}
-                    </span>
-                  ))}
+              {(viewJdJob.requiredSkills || []).length > 0 && (
+                <div>
+                  <h4 className="font-extrabold text-sm text-slate-900 dark:text-white uppercase tracking-wider mb-1">Skills</h4>
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {(viewJdJob.requiredSkills || []).map((sk: string) => (
+                      <span key={sk} className="px-3 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-900 dark:text-white font-bold text-xs">
+                        {sk}
+                      </span>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
 
-              <div>
-                <h4 className="font-extrabold text-sm text-slate-900 dark:text-white uppercase tracking-wider mb-1">Eligibility Criteria</h4>
-                <ul className="list-disc pl-4 space-y-1">
-                  <li>Minimum CGPA Required: <strong className="text-slate-900 dark:text-white">{viewJdJob.eligibilityCriteria?.minCgpa || 6.0}</strong></li>
-                  <li>Eligible Branches: <strong className="text-slate-900 dark:text-white">{(viewJdJob.eligibilityCriteria?.allowedBranches || ['CSE', 'ECE']).join(', ')}</strong></li>
-                  <li>Eligible Passout Years: <strong className="text-slate-900 dark:text-white">{(viewJdJob.eligibilityCriteria?.passoutYears || [2026]).join(', ')}</strong></li>
-                </ul>
-              </div>
-
-              <div>
-                <h4 className="font-extrabold text-sm text-slate-900 dark:text-white uppercase tracking-wider mb-1">Hiring & Selection Rounds</h4>
-                <p>Initial Profile Screening → Technical Online Assessment → Technical Interview (Round 1) → HR Interview → Official Offer Letter.</p>
-              </div>
+              {(viewJdJob.eligibilityCriteria?.minCgpa > 0 || viewJdJob.eligibilityCriteria?.allowedBranches?.length > 0 || viewJdJob.eligibilityCriteria?.passoutYears?.length > 0) && (
+                <div>
+                  <h4 className="font-extrabold text-sm text-slate-900 dark:text-white uppercase tracking-wider mb-1">Eligibility</h4>
+                  <ul className="list-disc pl-4 space-y-1">
+                    {viewJdJob.eligibilityCriteria.minCgpa > 0 && (
+                      <li>Minimum CGPA: <strong className="text-slate-900 dark:text-white">{viewJdJob.eligibilityCriteria.minCgpa}</strong></li>
+                    )}
+                    {viewJdJob.eligibilityCriteria.allowedBranches?.length > 0 && (
+                      <li>Branches: <strong className="text-slate-900 dark:text-white">{viewJdJob.eligibilityCriteria.allowedBranches.join(', ')}</strong></li>
+                    )}
+                    {viewJdJob.eligibilityCriteria.passoutYears?.length > 0 && (
+                      <li>Passing years: <strong className="text-slate-900 dark:text-white">{viewJdJob.eligibilityCriteria.passoutYears.join(', ')}</strong></li>
+                    )}
+                  </ul>
+                </div>
+              )}
             </div>
 
             <div className="border-t border-slate-100 dark:border-slate-800 pt-4 flex items-center justify-between">

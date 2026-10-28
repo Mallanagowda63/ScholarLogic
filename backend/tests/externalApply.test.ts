@@ -66,19 +66,40 @@ describe('Apply on the company website', () => {
     expect(missing.status).toBe(400);
   });
 
-  it('student clicks Apply: the application is recorded once and the company link comes back', async () => {
+  it('student clicks Apply: every click is counted, but it only counts as applied once they confirm', async () => {
     const first = await as(student).post(`/api/placements/jobs/${job._id}/apply-external`);
     expect(first.status).toBe(201);
     expect(first.body.data.applyUrl).toBe('https://careers.example.com/jobs/42');
     const again = await as(student).post(`/api/placements/jobs/${job._id}/apply-external`);
     expect(again.status).toBe(200);
-    expect(again.body.data.alreadyApplied).toBe(true);
+    expect(again.body.data.alreadyApplied).toBe(false);
     expect(await Application.countDocuments({ jobId: job._id })).toBe(1);
+    const appId = String(first.body.data.application._id);
+    expect((await Application.findById(appId))!.linkClicks).toBe(2);
 
-    const jobs = await as(student).get('/api/placements/jobs');
-    const listed = jobs.body.data.jobs.find((j: any) => String(j._id) === String(job._id));
+    let listed = (await as(student).get('/api/placements/jobs')).body.data.jobs.find((j: any) => String(j._id) === String(job._id));
+    expect(listed.appliedStatus).toBeNull();
+    expect(listed.externalApplication).toEqual({ applicationId: appId, completion: 'PENDING' });
+
+    // Back in the LMS: "No, I didn't finish"
+    const no = await as(student).post(`/api/placements/applications/${appId}/completion`).send({ completed: false });
+    expect(no.status).toBe(200);
+    const row = (await as(placement).get('/api/placements/applications/all')).body.data.applications.find((a: any) => String(a._id) === appId);
+    expect(row.completion).toBe('NOT_COMPLETED');
+    expect(row.linkClicks).toBe(2);
+
+    // Opened again and finished this time
+    await as(student).post(`/api/placements/jobs/${job._id}/apply-external`);
+    expect((await as(student).post(`/api/placements/applications/${appId}/completion`).send({})).status).toBe(400);
+    expect((await as(placement).post(`/api/placements/applications/${appId}/completion`).send({ completed: true })).status).toBe(403);
+    expect((await as(student).post(`/api/placements/applications/${appId}/completion`).send({ completed: true })).status).toBe(200);
+    listed = (await as(student).get('/api/placements/jobs')).body.data.jobs.find((j: any) => String(j._id) === String(job._id));
     expect(listed.appliedStatus).toBe('APPLIED');
     expect(listed.applyUrl).toBe('https://careers.example.com/jobs/42');
+
+    // The placement team sees the link numbers on the job
+    const staffJob = (await as(placement).get('/api/placements/jobs')).body.data.jobs.find((j: any) => String(j._id) === String(job._id));
+    expect(staffJob.linkStats).toMatchObject({ clicks: 3, students: 1, completed: 1, notCompleted: 0 });
   });
 
   it('a job without a company link cannot be applied to this way', async () => {
@@ -94,6 +115,7 @@ describe('Apply on the company website', () => {
     expect(row.student.fullName).toBe('Alex Morgan');
     expect(row.student.studentId).toBe('SL-2026-00001');
     expect(row.appliedVia).toBe('COMPANY_SITE');
+    expect(row.completion).toBe('COMPLETED');
     expect(row.status).toBe('APPLIED');
     expect((await as(student).get('/api/placements/applications/all')).status).toBe(403);
   });
@@ -103,5 +125,29 @@ describe('Apply on the company website', () => {
     expect(res.status).toBe(200);
     expect(res.text).toContain('Applied Via');
     expect(res.text).toContain('Company website');
+    expect(res.text).toContain('Link Clicks');
+  });
+
+  it('a job can be posted from just the company, title and the pasted post, open to every student', async () => {
+    const res = await as(placement).post('/api/placements/jobs').send({ title: 'Backend Intern', companyName: 'Paste Co', description: 'Full post pasted here' });
+    expect(res.status).toBe(201);
+    expect(res.body.data.job.location).toBe('See job details');
+    expect(res.body.data.job.eligibilityCriteria.minCgpa).toBe(0);
+    expect(res.body.data.job.requiredSkills).toEqual([]);
+    const fix = await as(placement).put(`/api/placements/jobs/${res.body.data.job._id}`).send({ title: 'Backend Engineering Intern' });
+    expect(fix.body.data.job.title).toBe('Backend Engineering Intern');
+  });
+
+  it('the placement team can delete a job, or a whole company with its jobs and applications', async () => {
+    const del = (url: string, token = placement) => request(app).delete(url).set('Authorization', `Bearer ${token}`);
+    expect((await del(`/api/placements/companies/${job.companyId}`, student)).status).toBe(403);
+    expect(await Application.countDocuments({ jobId: job._id })).toBe(1);
+    const res = await del(`/api/placements/companies/${job.companyId}`);
+    expect(res.status).toBe(200);
+    expect(res.body.data.applications).toBeGreaterThanOrEqual(1);
+    expect(await Job.countDocuments({ companyId: job.companyId })).toBe(0);
+    expect(await Application.countDocuments({ jobId: job._id })).toBe(0);
+    expect((await del(`/api/placements/jobs/${otherJob._id}`)).status).toBe(200);
+    expect((await del(`/api/placements/jobs/${otherJob._id}`)).status).toBe(404);
   });
 });
