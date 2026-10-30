@@ -21,6 +21,7 @@ import {
   importQuestions,
 } from '../controllers/examController';
 import { authenticateUser, authorizeRoles } from '../middleware/auth';
+import { createLinkTest, createMcqTestFromExcel, downloadMcqTemplate, previewMcqExcel } from '../controllers/examExcelController';
 import { asyncHandler } from '../utils/asyncHandler';
 
 const router = Router();
@@ -37,6 +38,12 @@ router.post('/questions/:id/archive', authorizeRoles('ADMIN', 'SUPER_ADMIN', 'TR
 router.post('/questions/:id/duplicate', authorizeRoles('ADMIN', 'SUPER_ADMIN', 'TRAINER'), asyncHandler(duplicateQuestion));
 
 // Exam Builder & Management Routes
+const staff = authorizeRoles('ADMIN', 'SUPER_ADMIN', 'TRAINER');
+router.get('/excel/template', staff, asyncHandler(downloadMcqTemplate));
+router.post('/excel/preview', staff, asyncHandler(previewMcqExcel));
+router.post('/excel', staff, asyncHandler(createMcqTestFromExcel));
+router.post('/link', staff, asyncHandler(createLinkTest));
+
 router.get('/', asyncHandler(getExams));
 router.get('/results/me', authorizeRoles('STUDENT'), asyncHandler(getMyResults));
 router.get('/results/:id', asyncHandler(getResultById));

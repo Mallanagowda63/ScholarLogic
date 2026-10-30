@@ -39,7 +39,7 @@ export const StudentExams: React.FC = () => {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <Badge variant="blue">{exam.durationMinutes} Minutes</Badge>
-                  <span className="text-xs font-semibold text-slate-500">Attempts: {exam.attemptLimit} Max</span>
+                  <span className="text-xs font-semibold text-slate-500">{exam.kind === 'LINK' ? 'Technical test • opens on another site' : `Attempts: ${exam.attemptLimit} Max`}</span>
                 </div>
 
                 <h3 className="font-bold text-lg text-slate-900 dark:text-white">{exam.title}</h3>
@@ -47,16 +47,27 @@ export const StudentExams: React.FC = () => {
               </div>
 
               <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                <div className="text-xs text-slate-500 font-medium">
+                <div className={`text-xs text-slate-500 font-medium ${exam.kind === 'LINK' ? 'invisible' : ''}`}>
                   Passing: <span className="font-bold text-slate-900 dark:text-white">{exam.passingMarks} / {exam.totalMarks} Marks</span>
                 </div>
 
+                {exam.kind === 'LINK' ? (
+                  <a
+                    href={exam.testLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-xs font-bold shadow-md hover:opacity-95"
+                  >
+                    Open test <ArrowRight className="h-4 w-4" />
+                  </a>
+                ) : (
                 <Link
                   to={`/student/exams/${exam._id}/instructions`}
                   className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-gradient-to-r from-brand-600 to-indigo-600 text-white text-xs font-bold shadow-md shadow-brand-500/20 hover:opacity-95 transition-opacity"
                 >
                   <ShieldCheck className="h-4 w-4" /> Start Secure Exam <ArrowRight className="h-4 w-4" />
                 </Link>
+                )}
               </div>
             </div>
           ))}

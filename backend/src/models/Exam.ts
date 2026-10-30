@@ -32,6 +32,8 @@ export interface IExam extends Document {
   isPublished: boolean;
   securitySettings: ISecuritySettings;
   questionIds: mongoose.Types.ObjectId[];
+  kind: 'MCQ' | 'LINK'; // LINK = technical test taken on another site (testLink)
+  testLink?: string;
   createdById: mongoose.Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -65,6 +67,8 @@ const ExamSchema = new Schema<IExam>(
       optionRandomization: { type: Boolean, default: false },
     },
     questionIds: [{ type: Schema.Types.ObjectId, ref: 'Question' }],
+    kind: { type: String, enum: ['MCQ', 'LINK'], default: 'MCQ' },
+    testLink: { type: String, default: '' },
     createdById: { type: Schema.Types.ObjectId, ref: 'User', required: true },
   },
   { timestamps: true }

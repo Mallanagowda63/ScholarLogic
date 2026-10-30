@@ -2,7 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { api } from '../../services/api';
 import { Badge } from '../../components/Badge';
-import { FileCheck, HelpCircle, PlusCircle, Award, CheckCircle2, TrendingUp, BarChart3, ShieldCheck, Camera, Mic, Maximize2, Layers, ArrowRight } from 'lucide-react';
+import { FileCheck, HelpCircle, PlusCircle, Award, CheckCircle2, TrendingUp, BarChart3, ShieldCheck, Camera, Mic, Maximize2, Layers, ArrowRight, FileSpreadsheet, Link2, ExternalLink } from 'lucide-react';
+import { ExcelMcqTestModal, LinkTestModal } from './QuickTestModals';
 
 export const TrainerAssessments: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -32,6 +33,14 @@ export const TrainerAssessments: React.FC = () => {
   const [autoSubmitOnViolations, setAutoSubmitOnViolations] = useState(true);
   const [maxViolations, setMaxViolations] = useState(3);
   const [questionRandomization, setQuestionRandomization] = useState(true);
+
+  // Quick tests: MCQ from an Excel sheet, or a technical test given as a link
+  const [quick, setQuick] = useState<'' | 'excel' | 'link'>('');
+  const quickDone = (message: string) => {
+    setQuick('');
+    alert(message);
+    fetchExams();
+  };
 
   // Selected Question IDs from Question Bank
   const [selectedQuestionIds, setSelectedQuestionIds] = useState<string[]>([]);
@@ -127,7 +136,19 @@ export const TrainerAssessments: React.FC = () => {
           <p className="text-xs text-slate-500">Configure online exams, question randomization, proctoring security rules, and audit results</p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => setQuick('excel')}
+            className="px-4 py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-xs hover:bg-emerald-700 transition-colors flex items-center gap-2 shadow-md"
+          >
+            <FileSpreadsheet className="h-4 w-4" /> MCQ test from Excel
+          </button>
+          <button
+            onClick={() => setQuick('link')}
+            className="px-4 py-2.5 rounded-xl bg-violet-600 text-white font-bold text-xs hover:bg-violet-700 transition-colors flex items-center gap-2 shadow-md"
+          >
+            <Link2 className="h-4 w-4" /> Technical test (link)
+          </button>
           <Link
             to="/trainer/question-bank"
             className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center gap-2"
@@ -155,7 +176,7 @@ export const TrainerAssessments: React.FC = () => {
             <div key={exam._id} className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4">
               <div className="flex items-center justify-between">
                 <Badge variant="purple">{exam.durationMinutes} Mins</Badge>
-                <Badge variant="green">PUBLISHED</Badge>
+                {exam.kind === 'LINK' ? <Badge variant="amber">TECHNICAL • LINK</Badge> : <Badge variant="green">PUBLISHED</Badge>}
               </div>
 
               <div>
@@ -182,22 +203,36 @@ export const TrainerAssessments: React.FC = () => {
                 </div>
                 <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
                   <span className="text-[10px] text-slate-400 block font-bold">Questions</span>
-                  <span className="font-extrabold text-brand-600">{exam.questionIds?.length || 10}</span>
+                  <span className="font-extrabold text-brand-600">{exam.kind === 'LINK' ? '—' : exam.questionIds?.length || 0}</span>
                 </div>
               </div>
 
               <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+                {exam.kind === 'LINK' ? (
+                  <a
+                    href={exam.testLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex max-w-full items-center gap-1.5 px-3.5 py-2 rounded-xl bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 font-bold text-xs"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5 shrink-0" /> <span className="truncate">{exam.testLink}</span>
+                  </a>
+                ) : (
                 <Link
                   to={`/trainer/exams/${exam._id}/results`}
                   className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-brand-600 hover:text-white text-slate-700 dark:text-slate-300 font-bold text-xs transition-colors"
                 >
                   View Student Results & Violation Audit <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
+                )}
               </div>
             </div>
           ))}
         </div>
       )}
+
+      {quick === 'excel' && <ExcelMcqTestModal onClose={() => setQuick('')} onDone={quickDone} />}
+      {quick === 'link' && <LinkTestModal onClose={() => setQuick('')} onDone={quickDone} />}
 
       {/* Modal: Create Exam with Security Rules */}
       {showCreateModal && (

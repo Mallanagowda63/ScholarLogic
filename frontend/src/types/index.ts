@@ -97,6 +97,8 @@ export interface Exam {
   description: string;
   courseId?: Course;
   durationMinutes: number;
+  kind?: 'MCQ' | 'LINK'; // LINK = technical test on another site
+  testLink?: string;
   totalMarks: number;
   passingMarks: number;
   negativeMarking: number;
