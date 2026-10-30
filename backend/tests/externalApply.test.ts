@@ -149,6 +149,19 @@ describe('Apply on the company website', () => {
     expect(seen.source).toBe('LINKEDIN');
   });
 
+  it('students get a pop-up list of jobs posted since they last closed it', async () => {
+    const first = await as(student).get('/api/placements/jobs/new-for-me');
+    expect(first.status).toBe(200);
+    expect(first.body.data.jobs.length).toBeGreaterThan(0); // recent open jobs on the first visit
+    expect((await as(student).post('/api/placements/jobs/seen')).status).toBe(200);
+    expect((await as(student).get('/api/placements/jobs/new-for-me')).body.data.jobs).toHaveLength(0);
+    await as(placement).post('/api/placements/jobs').send({ title: 'Fresh Opening', companyName: 'Paste Co', description: 'New' });
+    const after = (await as(student).get('/api/placements/jobs/new-for-me')).body.data.jobs;
+    expect(after.map((j: any) => j.title)).toEqual(['Fresh Opening']);
+    expect(after[0].companyId.name).toBe('Paste Co');
+    expect((await as(placement).get('/api/placements/jobs/new-for-me')).body.data.jobs).toEqual([]);
+  });
+
   it('the placement team can delete a job, or a whole company with its jobs and applications', async () => {
     const del = (url: string, token = placement) => request(app).delete(url).set('Authorization', `Bearer ${token}`);
     expect((await del(`/api/placements/companies/${job.companyId}`, student)).status).toBe(403);

@@ -13,6 +13,8 @@ import {
   applyToJob,
   recordExternalApplication,
   confirmExternalApplication,
+  getNewJobsForStudent,
+  markJobsSeen,
   deleteJobPosting,
   deleteCompany,
   updateJobPosting,
@@ -49,6 +51,8 @@ router.post('/companies/:id/verify', authorizeRoles('ADMIN', 'SUPER_ADMIN', 'PLA
 router.get('/jobs', asyncHandler(getJobPostings));
 router.get('/jobs/official', asyncHandler(getOfficialJobs));
 router.get('/jobs/hiring-now', asyncHandler(getHiringNowJobs));
+router.get('/jobs/new-for-me', asyncHandler(getNewJobsForStudent));
+router.post('/jobs/seen', asyncHandler(markJobsSeen));
 router.get('/jobs/:id', asyncHandler(getJobDetail));
 router.get('/jobs/:id/eligibility', asyncHandler(checkEligibility));
 router.post('/jobs/:id/apply', asyncHandler(applyToJob));

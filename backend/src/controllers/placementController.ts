@@ -5,6 +5,7 @@ import { Company } from '../models/Company';
 import { Job } from '../models/Job';
 import { Application, COUNTED_APPLICATION } from '../models/Application';
 import { AuditLog } from '../models/AuditLog';
+import { User } from '../models/User';
 import { Student } from '../models/Student';
 import { Resume } from '../models/Resume';
 import { AppError } from '../middleware/errorHandler';
@@ -1078,6 +1079,29 @@ export const recordExternalApplication = async (req: AuthRequest, res: Response)
     completion: 'PENDING',
   });
   res.status(201).json({ success: true, message: 'Link opened', data: { applyUrl: job.applyUrl, alreadyApplied: false, application } });
+};
+
+// Student opening the site: open jobs posted since they last closed the pop-up.
+// First time: the open jobs from the last 7 days, so nobody gets a list of very old ones.
+export const getNewJobsForStudent = async (req: AuthRequest, res: Response): Promise<void> => {
+  if (req.user?.role !== 'STUDENT') {
+    res.json({ success: true, data: { jobs: [] } });
+    return;
+  }
+  const user = await User.findById(req.user.userId).select('jobsSeenAt').lean();
+  const since = user?.jobsSeenAt || new Date(Date.now() - 7 * 86400000);
+  const jobs = await Job.find({ status: 'OPEN', deadline: { $gt: new Date() }, createdAt: { $gt: since } })
+    .select('title type location salaryPackage deadline source companyId createdAt')
+    .populate('companyId', 'name')
+    .sort({ createdAt: -1 })
+    .limit(10)
+    .lean();
+  res.json({ success: true, data: { jobs } });
+};
+
+export const markJobsSeen = async (req: AuthRequest, res: Response): Promise<void> => {
+  if (req.user?.role === 'STUDENT') await User.updateOne({ _id: req.user.userId }, { $set: { jobsSeenAt: new Date() } });
+  res.json({ success: true });
 };
 
 // Student, back from the company's page: "I finished applying" or "I didn't finish"
