@@ -25,6 +25,9 @@ export interface IBatch extends Document {
   remarks: string;
   completedTopicIds: mongoose.Types.ObjectId[]; // syllabus topics the trainer has finished for this batch
   classesConducted: number;
+  // One shared Zoho folder per batch: the trainer uploads every class recording there, students open the same link
+  recordingsLink?: string;
+  recordingsLinkUpdatedAt?: Date;
   history: IBatchHistoryEntry[]; // append-only log of batch changes
   createdAt: Date;
   updatedAt: Date;
@@ -45,6 +48,8 @@ const BatchSchema = new Schema<IBatch>(
     remarks: { type: String, default: '' },
     completedTopicIds: [{ type: Schema.Types.ObjectId }],
     classesConducted: { type: Number, default: 0 },
+    recordingsLink: { type: String, default: '', trim: true },
+    recordingsLinkUpdatedAt: { type: Date },
     history: [
       {
         at: { type: Date, default: Date.now },

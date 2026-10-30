@@ -8,6 +8,7 @@ import { StudentRegistration } from '../models/StudentRegistration';
 import { Student } from '../models/Student';
 import { User } from '../models/User';
 import { Attendance } from '../models/Attendance';
+import { Notification } from '../models/Notification';
 import { getNextStudentId } from '../models/Counter';
 import { Subject } from '../models/tracking/Subject';
 import { TrackCourse } from '../models/tracking/TrackCourse';
@@ -494,6 +495,8 @@ const summarizeBatch = (b: any, subject: any, trainer: any, studentCount: number
     storedStatus: b.status,
     remarks: b.remarks,
     classesConducted: b.classesConducted,
+    recordingsLink: b.recordingsLink || '',
+    recordingsLinkUpdatedAt: b.recordingsLinkUpdatedAt,
     progress,
     estimatedCompletion: estimate.expectedDate,
     estimateBasis: estimate.basis,
@@ -679,6 +682,94 @@ export const getBatchDetail = async (req: AuthRequest, res: Response) => {
 
 export const listMyBatches = async (req: AuthRequest, res: Response) => {
   res.json({ success: true, data: { batches: await listBatchSummaries({ trainerId: req.user?.userId }) } });
+};
+
+// Trainer (or admin): the batch's one recordings link, e.g. a Zoho WorkDrive shared folder. Empty removes it.
+export const setRecordingsLink = async (req: AuthRequest, res: Response) => {
+  const batch = await Batch.findById(oid(req.params.id, 'batch'));
+  if (!batch) throw new AppError('Batch not found', 404, 'NOT_FOUND');
+  if (!isAdmin(req) && String(batch.trainerId) !== String(req.user?.userId)) {
+    throw new AppError('You can only update batches assigned to you', 403, 'FORBIDDEN');
+  }
+  const raw = String(req.body?.recordingsLink ?? '').trim();
+  let link = '';
+  if (raw) {
+    let url: URL;
+    try {
+      url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
+    } catch {
+      throw new AppError('This is not a valid link. Copy the share link from Zoho and paste it here.', 400, 'INVALID_URL');
+    }
+    if (!['http:', 'https:'].includes(url.protocol) || !url.hostname.includes('.')) {
+      throw new AppError('This is not a valid link. Copy the share link from Zoho and paste it here.', 400, 'INVALID_URL');
+    }
+    link = url.toString();
+  }
+  const first = !batch.recordingsLink && !!link;
+  const changed = (batch.recordingsLink || '') !== link;
+  batch.recordingsLink = link;
+  batch.recordingsLinkUpdatedAt = new Date();
+  if (changed) {
+    batch.history.push({ at: new Date(), action: 'RECORDINGS_LINK', details: link ? `Recordings link set: ${link}` : 'Recordings link removed', byUserId: req.user?.userId as any });
+  }
+  await batch.save();
+
+  // Tell the batch's students once, when the link is first added (or changed)
+  let notified = 0;
+  if (link && changed) {
+    const allocations = await StudentBatchAllocation.find({ batchId: batch._id, status: { $in: ACTIVE_ALLOCATION_STATUSES } }).select('studentId').lean();
+    const students = await Student.find({ _id: { $in: allocations.map((a) => a.studentId) } }).select('userId').lean();
+    const subject = await Subject.findById(batch.subjectId).select('name').lean();
+    const docs = students
+      .filter((s) => s.userId)
+      .map((s) => ({
+        userId: s.userId,
+        title: first ? 'Class recordings link added' : 'Class recordings link changed',
+        message: `All recordings for ${subject?.name || batch.batchCode} (${batch.batchCode}) are in one place. Open "Class Recordings" on your dashboard.`,
+        type: 'COURSE' as const,
+        linkUrl: '/student/dashboard',
+      }));
+    if (docs.length) await Notification.insertMany(docs);
+    notified = docs.length;
+  }
+  res.json({
+    success: true,
+    message: link ? (notified ? `Link saved. ${notified} students were told.` : 'Link saved') : 'Link removed',
+    data: { recordingsLink: link, notified },
+  });
+};
+
+// Student: the recordings link of every batch they are in (current first)
+export const getMyRecordings = async (req: AuthRequest, res: Response) => {
+  const student = await Student.findOne({ userId: req.user?.userId }).select('_id').lean();
+  if (!student) throw new AppError('Student profile not found', 404, 'NOT_FOUND');
+  const allocations = await StudentBatchAllocation.find({ studentId: student._id, status: { $nin: ['MOVED', 'DROPPED'] } })
+    .sort({ allocationDate: -1 })
+    .lean();
+  const batches = await Batch.find({ _id: { $in: allocations.map((a) => a.batchId) } }).select('batchCode subjectId trainerId recordingsLink recordingsLinkUpdatedAt status').lean();
+  const [subjects, trainers] = await Promise.all([
+    Subject.find({ _id: { $in: batches.map((b) => b.subjectId) } }).select('name').lean(),
+    User.find({ _id: { $in: batches.map((b) => b.trainerId).filter(Boolean) } }).select('fullName').lean(),
+  ]);
+  const byId = new Map(batches.map((b) => [String(b._id), b]));
+  const seen = new Set<string>();
+  const recordings = allocations
+    .map((a) => {
+      const b: any = byId.get(String(a.batchId));
+      if (!b || seen.has(String(b._id))) return null;
+      seen.add(String(b._id));
+      return {
+        batchId: b._id,
+        batchCode: b.batchCode,
+        subject: subjects.find((s) => String(s._id) === String(b.subjectId))?.name || '',
+        trainer: trainers.find((t) => String(t._id) === String(b.trainerId))?.fullName || '',
+        current: ACTIVE_ALLOCATION_STATUSES.includes(a.status),
+        recordingsLink: b.recordingsLink || '',
+        updatedAt: b.recordingsLinkUpdatedAt,
+      };
+    })
+    .filter(Boolean);
+  res.json({ success: true, data: { recordings } });
 };
 
 export const submitDailyUpdate = async (req: AuthRequest, res: Response) => {

@@ -30,6 +30,8 @@ import {
   saveSubject,
   setAllocationStatus,
   submitDailyUpdate,
+  setRecordingsLink,
+  getMyRecordings,
   updateBatch,
   updateTrackedStudent,
 } from '../controllers/trackingController';
@@ -56,11 +58,13 @@ const adminOrTrainer = authorizeRoles('ADMIN', 'SUPER_ADMIN', 'TRAINER');
 
 // Student self-view (read only)
 router.get('/me', authorizeRoles('STUDENT'), asyncHandler(getMyJourney));
+router.get('/me/recordings', authorizeRoles('STUDENT'), asyncHandler(getMyRecordings));
 
 // Trainer
 router.get('/trainer/batches', authorizeRoles('TRAINER'), asyncHandler(listMyBatches));
 router.get('/batches/:id', adminOrTrainer, asyncHandler(getBatchDetail));
 router.post('/batches/:id/updates', adminOrTrainer, asyncHandler(submitDailyUpdate));
+router.put('/batches/:id/recordings-link', adminOrTrainer, asyncHandler(setRecordingsLink));
 
 // Admin
 router.get('/overview', admin, asyncHandler(getOverview));

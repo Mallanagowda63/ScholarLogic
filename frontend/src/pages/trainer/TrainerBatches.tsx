@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../../services/api';
+import { Video } from 'lucide-react';
 import { BatchDetailView } from '../admin/tracking/BatchDetailView';
 import { Card, PageHeader, ProgressBar, Spinner, StatusBadge, fmtDate, fmtMode, statusTone } from '../admin/tracking/shared';
 
@@ -32,6 +33,17 @@ export const TrainerBatches: React.FC = () => {
         </div>
         <ProgressBar value={b.progress.percentage} tone={statusTone(b.status)} className="mt-1" />
         <p className="mt-2 text-[11px] text-slate-400">Expected completion {fmtDate(b.estimatedCompletion)}</p>
+        {b.recordingsLink ? (
+          <p className="mt-2 inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">
+            <Video className="h-3 w-3" /> Recordings link added
+          </p>
+        ) : (
+          !['COMPLETED', 'CANCELLED'].includes(b.status) && (
+            <p className="mt-2 inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:bg-amber-950/50 dark:text-amber-300">
+              <Video className="h-3 w-3" /> Add the Zoho recordings link
+            </p>
+          )
+        )}
       </Card>
     </Link>
   );

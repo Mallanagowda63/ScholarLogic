@@ -8,6 +8,7 @@ import { CourseJourneyCard } from '../../components/CourseJourneyCard';
 import { ClassRecordCard } from '../../components/ClassRecordCard';
 import { AttendanceCalendar } from '../../components/AttendanceCalendar';
 import { OnlineAttendanceCard } from '../../components/OnlineAttendanceCard';
+import { ClassRecordingsCard } from '../../components/ClassRecordingsCard';
 import { BannerCarousel, BannerSlide } from '../../components/BannerCarousel';
 
 import {
@@ -223,6 +224,8 @@ export const StudentDashboard: React.FC = () => {
           <Leaderboard data={data?.leaderboard || null} />
         </div>
       </div>
+
+      <ClassRecordingsCard />
 
       {/* Online students mark attendance with the QR code; everyone else gets the eSSL / classroom calendar */}
       {isOnlineStudent ? <OnlineAttendanceCard /> : <AttendanceCalendar />}

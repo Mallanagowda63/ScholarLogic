@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../../../services/api';
+import { RecordingsLinkCard } from './RecordingsLinkCard';
 import { ArrowLeft, UserPlus, Pencil, CheckCircle2, Circle, PlayCircle, Ban, Flag, Search, ClipboardCheck } from 'lucide-react';
 import {
   AllocationStatusModal,
@@ -422,6 +423,8 @@ export const BatchDetailView: React.FC<{ batchId: string; role: Role }> = ({ bat
           <ProgressBar value={b.progress.percentage} tone={statusTone(b.status)} />
         </div>
       </Card>
+
+      <RecordingsLinkCard key={b.recordingsLink || 'none'} batch={b} onSaved={done} />
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
