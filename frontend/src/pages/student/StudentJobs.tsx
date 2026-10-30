@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../../services/api';
 import { Job } from '../../types';
 import { Badge } from '../../components/Badge';
+import { LinkedInLogo, isLinkedInJob } from '../../components/JobSourceLogo';
 import {
   Briefcase,
   Building,
@@ -24,12 +25,13 @@ import {
   XCircle,
 } from 'lucide-react';
 
-type DriveTab = 'all' | 'fulltime' | 'internship' | 'applied';
+type DriveTab = 'all' | 'fulltime' | 'internship' | 'linkedin' | 'applied';
 
 const DRIVE_TABS: { key: DriveTab; label: string }[] = [
   { key: 'all', label: 'All drives' },
   { key: 'fulltime', label: 'Full-time' },
   { key: 'internship', label: 'Internships' },
+  { key: 'linkedin', label: 'From LinkedIn' },
   { key: 'applied', label: 'Applied drives' },
 ];
 
@@ -243,6 +245,7 @@ export const StudentJobs: React.FC = () => {
         if (activeTab === 'fulltime' && job.type !== 'FULL_TIME') return false;
         if (activeTab === 'internship' && job.type !== 'INTERNSHIP') return false;
         if (activeTab === 'applied' && !job.appliedStatus) return false;
+        if (activeTab === 'linkedin' && !isLinkedInJob(job)) return false;
         if (!q) return true;
         return [job.title, job.companyId?.name, job.location, ...(job.requiredSkills || [])]
           .filter(Boolean)
@@ -263,6 +266,7 @@ export const StudentJobs: React.FC = () => {
     all: jobs.length,
     fulltime: jobs.filter((j: any) => j.type === 'FULL_TIME').length,
     internship: jobs.filter((j: any) => j.type === 'INTERNSHIP').length,
+    linkedin: jobs.filter((j: any) => isLinkedInJob(j)).length,
     applied: jobs.filter((j: any) => j.appliedStatus).length,
   };
   const openCount = jobs.filter((j: any) => isDriveOpen(j, now)).length;
@@ -324,7 +328,10 @@ export const StudentJobs: React.FC = () => {
                 active ? 'text-slate-900 dark:text-white' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
               }`}
             >
-              {label}
+              <span className="inline-flex items-center gap-1.5">
+                {key === 'linkedin' && <LinkedInLogo className="h-4 w-4" />}
+                {label}
+              </span>
               <span className="ml-1.5 text-xs font-medium text-slate-400">{tabCounts[key]}</span>
               <span className={`absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-brand-500 transition-opacity ${active ? 'opacity-100' : 'opacity-0'}`} />
             </button>
@@ -399,6 +406,11 @@ export const StudentJobs: React.FC = () => {
                 <h3 className={`mt-1.5 text-base font-bold ${open ? 'text-slate-900 dark:text-white' : 'text-slate-700 dark:text-slate-300'}`}>
                   {job.title}
                 </h3>
+                {isLinkedInJob(job) && (
+                  <span className="mt-1 inline-flex w-fit items-center gap-1 rounded-full bg-[#0A66C2]/10 px-2 py-0.5 text-[10px] font-bold text-[#0A66C2]">
+                    <LinkedInLogo className="h-3.5 w-3.5" /> From LinkedIn
+                  </span>
+                )}
                 <p className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500">
                   <Building className="h-3.5 w-3.5" /> {job.companyId?.name || 'Partner Company'}
                   <span className="text-slate-300 dark:text-slate-600">•</span>
@@ -499,8 +511,13 @@ export const StudentJobs: React.FC = () => {
           <div className="w-full max-w-3xl rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 md:p-8 space-y-6 shadow-2xl my-8">
             <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-800 pb-4">
               <div>
-                <span className="text-[10px] font-bold uppercase text-brand-600 font-mono tracking-wider">
+                <span className="inline-flex items-center gap-2 text-[10px] font-bold uppercase text-brand-600 font-mono tracking-wider">
                   {JOB_TYPE_LABEL[viewJdJob.type] || 'Job'}
+                  {isLinkedInJob(viewJdJob) && (
+                    <span className="inline-flex items-center gap-1 normal-case text-[#0A66C2]">
+                      <LinkedInLogo className="h-3.5 w-3.5" /> From LinkedIn
+                    </span>
+                  )}
                 </span>
                 <h2 className="text-xl font-black text-slate-900 dark:text-white mt-1">{viewJdJob.title}</h2>
                 <p className="text-xs font-semibold text-slate-500 flex items-center gap-3 mt-1">

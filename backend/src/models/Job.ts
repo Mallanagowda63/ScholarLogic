@@ -29,6 +29,7 @@ export interface IJob extends Document {
   status: JobStatus;
   jdAttachmentUrl?: string;
   sourceUrl?: string;
+  source: 'SCHOLARLOGIC' | 'LINKEDIN'; // where the placement team found the job; LinkedIn jobs get their own tab for students
   applyUrl?: string; // the company's own application page; students apply there and ScholarLogic records it
   sourceType: 'OFFICIAL_CAREERS_PAGE' | 'SCHOLARLOGIC_INTERNAL';
   lastVerifiedAt?: Date;
@@ -65,6 +66,7 @@ const JobSchema = new Schema<IJob>(
     status: { type: String, enum: ['OPEN', 'CLOSED', 'DRAFT'], default: 'OPEN' },
     jdAttachmentUrl: { type: String, default: '' },
     sourceUrl: { type: String, default: '' },
+    source: { type: String, enum: ['SCHOLARLOGIC', 'LINKEDIN'], default: 'SCHOLARLOGIC', index: true },
     applyUrl: { type: String, default: '', trim: true },
     sourceType: {
       type: String,

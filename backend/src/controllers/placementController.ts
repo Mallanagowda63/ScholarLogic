@@ -657,6 +657,7 @@ export const createJobPosting = async (req: AuthRequest, res: Response): Promise
     openings: openings || 5,
     status: 'OPEN',
     sourceUrl: sourceUrl || '',
+    source: req.body.source === 'LINKEDIN' ? 'LINKEDIN' : 'SCHOLARLOGIC',
     applyUrl: cleanApplyUrl(applyUrl),
     sourceType: postingType === 'OFFICIAL_COMPANY_POSTING' ? 'OFFICIAL_CAREERS_PAGE' : 'SCHOLARLOGIC_INTERNAL',
     lastVerifiedAt: new Date(),
@@ -1153,6 +1154,10 @@ export const updateJobPosting = async (req: AuthRequest, res: Response): Promise
   if (!job) throw new AppError('Job posting not found', 404, 'JOB_NOT_FOUND');
   const { applyUrl, status, deadline } = req.body || {};
   if (applyUrl !== undefined) job.applyUrl = cleanApplyUrl(applyUrl);
+  if (req.body?.source !== undefined) {
+    if (!['SCHOLARLOGIC', 'LINKEDIN'].includes(req.body.source)) throw new AppError('Source must be SCHOLARLOGIC or LINKEDIN', 400, 'INVALID_SOURCE');
+    job.source = req.body.source;
+  }
   // Fix a typo in the title or the pasted post without re-posting the job
   for (const key of ['title', 'description', 'location', 'salaryPackage'] as const) {
     const v = req.body?.[key];

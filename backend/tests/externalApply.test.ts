@@ -138,6 +138,17 @@ describe('Apply on the company website', () => {
     expect(fix.body.data.job.title).toBe('Backend Engineering Intern');
   });
 
+  it('a job can be marked as found on LinkedIn, and students see where it came from', async () => {
+    const res = await as(placement).post('/api/placements/jobs').send({ title: 'SDE 1', companyName: 'Paste Co', description: 'From LinkedIn', source: 'LINKEDIN', applyUrl: 'https://www.linkedin.com/jobs/view/123' });
+    expect(res.body.data.job.source).toBe('LINKEDIN');
+    const plain = await as(placement).post('/api/placements/jobs').send({ title: 'SDE 2', companyName: 'Paste Co', description: 'Ours' });
+    expect(plain.body.data.job.source).toBe('SCHOLARLOGIC');
+    expect((await as(placement).put(`/api/placements/jobs/${plain.body.data.job._id}`).send({ source: 'FACEBOOK' })).status).toBe(400);
+    expect((await as(placement).put(`/api/placements/jobs/${plain.body.data.job._id}`).send({ source: 'LINKEDIN' })).body.data.job.source).toBe('LINKEDIN');
+    const seen = (await as(student).get('/api/placements/jobs')).body.data.jobs.find((j: any) => j.title === 'SDE 1');
+    expect(seen.source).toBe('LINKEDIN');
+  });
+
   it('the placement team can delete a job, or a whole company with its jobs and applications', async () => {
     const del = (url: string, token = placement) => request(app).delete(url).set('Authorization', `Bearer ${token}`);
     expect((await del(`/api/placements/companies/${job.companyId}`, student)).status).toBe(403);

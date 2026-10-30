@@ -4,14 +4,16 @@ import { api } from '../../services/api';
 import { CheckCircle2, ClipboardPaste, Link2, MousePointerClick, Pencil, PlusCircle, Search, Send, Trash2, Users, XCircle } from 'lucide-react';
 import { Card, ErrorNote, Field, Modal, PageHeader, Spinner, inputClass, primaryBtn, secondaryBtn, useToast } from '../admin/tracking/shared';
 import { parseJobPost } from './jobPostParser';
+import { LinkedInLogo, ScholarLogicLogo, isLinkedInJob } from '../../components/JobSourceLogo';
 
 // Placement team: post a job by pasting the whole post; see who opened the company link and who finished applying
 
 const toDateInput = (d?: string) => (d ? new Date(d).toISOString().slice(0, 10) : '');
 const isOpen = (j: any) => j.status === 'OPEN' && new Date(j.deadline).getTime() > Date.now();
 
-type Form = { post: string; companyName: string; title: string; applyUrl: string; deadline: string };
-const EMPTY: Form = { post: '', companyName: '', title: '', applyUrl: '', deadline: '' };
+type Source = 'SCHOLARLOGIC' | 'LINKEDIN';
+type Form = { post: string; companyName: string; title: string; applyUrl: string; deadline: string; source: Source };
+const EMPTY: Form = { post: '', companyName: '', title: '', applyUrl: '', deadline: '', source: 'SCHOLARLOGIC' };
 
 export const PlacementJobs: React.FC = () => {
   const toast = useToast();
@@ -28,7 +30,7 @@ export const PlacementJobs: React.FC = () => {
 
   // Edit / delete an existing job
   const [editing, setEditing] = useState<any | null>(null);
-  const [editForm, setEditForm] = useState({ title: '', description: '', applyUrl: '', deadline: '', status: 'OPEN' });
+  const [editForm, setEditForm] = useState({ title: '', description: '', applyUrl: '', deadline: '', status: 'OPEN', source: 'SCHOLARLOGIC' as Source });
   const [deleting, setDeleting] = useState<any | null>(null);
 
   const load = () =>
@@ -53,6 +55,7 @@ export const PlacementJobs: React.FC = () => {
       title: touched.title ? f.title : p.title,
       applyUrl: touched.applyUrl ? f.applyUrl : p.applyUrl,
       deadline: touched.deadline ? f.deadline : p.deadline,
+      source: touched.source ? f.source : /linkedin\.com/i.test(post) ? 'LINKEDIN' : 'SCHOLARLOGIC',
     }));
   };
   const setField = (key: keyof Form, value: string) => {
@@ -77,6 +80,7 @@ export const PlacementJobs: React.FC = () => {
         salaryPackage: found.salaryPackage,
         requiredSkills: found.requiredSkills,
         type: found.type,
+        source: form.source,
       });
       setPosting(false);
       setForm(EMPTY);
@@ -92,7 +96,7 @@ export const PlacementJobs: React.FC = () => {
 
   const openEdit = (j: any) => {
     setEditing(j);
-    setEditForm({ title: j.title, description: j.description, applyUrl: j.applyUrl || '', deadline: toDateInput(j.deadline), status: j.status === 'OPEN' ? 'OPEN' : 'CLOSED' });
+    setEditForm({ title: j.title, description: j.description, applyUrl: j.applyUrl || '', deadline: toDateInput(j.deadline), status: j.status === 'OPEN' ? 'OPEN' : 'CLOSED', source: isLinkedInJob(j) ? 'LINKEDIN' : 'SCHOLARLOGIC' });
     setFormError('');
   };
   const saveEdit = async (e: React.FormEvent) => {
@@ -106,6 +110,7 @@ export const PlacementJobs: React.FC = () => {
         description: editForm.description,
         applyUrl: editForm.applyUrl.trim(),
         status: editForm.status,
+        source: editForm.source,
         ...(editForm.deadline ? { deadline: `${editForm.deadline}T23:59:59` } : {}),
       });
       setEditing(null);
@@ -167,6 +172,15 @@ export const PlacementJobs: React.FC = () => {
               <Card key={j._id} className="flex flex-col gap-3 p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
+                    {isLinkedInJob(j) ? (
+                      <span className="mb-1 inline-flex items-center gap-1 rounded-full bg-[#0A66C2]/10 px-2 py-0.5 text-[10px] font-bold text-[#0A66C2]">
+                        <LinkedInLogo className="h-3.5 w-3.5" /> From LinkedIn
+                      </span>
+                    ) : (
+                      <span className="mb-1 inline-flex items-center gap-1 rounded-full bg-brand-50 px-2 py-0.5 text-[10px] font-bold text-brand-700 dark:bg-brand-950/50 dark:text-brand-300">
+                        <ScholarLogicLogo className="h-3.5 w-3.5" /> ScholarLogic
+                      </span>
+                    )}
                     <h3 className="text-base font-extrabold text-slate-900 dark:text-white">{j.title}</h3>
                     <p className="text-xs font-semibold text-slate-500">{j.companyId?.name || 'Company'}</p>
                   </div>
@@ -237,6 +251,31 @@ export const PlacementJobs: React.FC = () => {
         <Modal title="Post a job" subtitle="Copy the whole job post (WhatsApp, LinkedIn, email, careers page) and paste it below." onClose={() => setPosting(false)} wide>
           <ErrorNote text={formError} />
           <form onSubmit={publish} className="space-y-4">
+            <div>
+              <p className="mb-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300">Where is this job from?</p>
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  ['SCHOLARLOGIC', 'ScholarLogic', <ScholarLogicLogo key="s" className="h-5 w-5" />],
+                  ['LINKEDIN', 'LinkedIn', <LinkedInLogo key="l" className="h-5 w-5" />],
+                ] as const).map(([value, label, logo]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setField('source', value)}
+                    className={`flex items-center justify-center gap-2 rounded-xl border-2 px-3 py-2.5 text-sm font-bold transition ${
+                      form.source === value
+                        ? value === 'LINKEDIN'
+                          ? 'border-[#0A66C2] bg-[#0A66C2]/10 text-[#0A66C2]'
+                          : 'border-brand-600 bg-brand-50 text-brand-700 dark:bg-brand-950/40 dark:text-brand-300'
+                        : 'border-slate-200 text-slate-500 hover:border-slate-300 dark:border-slate-700'
+                    }`}
+                  >
+                    {logo} {label}
+                  </button>
+                ))}
+              </div>
+              {form.source === 'LINKEDIN' && <p className="mt-1 text-[11px] text-slate-500">Students see it under the "From LinkedIn" tab.</p>}
+            </div>
             <Field label="Paste the full job post" required>
               <textarea
                 id="job-post"
@@ -296,6 +335,31 @@ export const PlacementJobs: React.FC = () => {
         <Modal title="Edit job" subtitle={editing.companyId?.name} onClose={() => setEditing(null)} wide>
           <ErrorNote text={formError} />
           <form onSubmit={saveEdit} className="space-y-3">
+            <div>
+              <p className="mb-1.5 text-xs font-semibold text-slate-700 dark:text-slate-300">Where is this job from?</p>
+              <div className="grid grid-cols-2 gap-2">
+                {([
+                  ['SCHOLARLOGIC', 'ScholarLogic', <ScholarLogicLogo key="s" className="h-5 w-5" />],
+                  ['LINKEDIN', 'LinkedIn', <LinkedInLogo key="l" className="h-5 w-5" />],
+                ] as const).map(([value, label, logo]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setEditForm((f) => ({ ...f, source: value }))}
+                    className={`flex items-center justify-center gap-2 rounded-xl border-2 px-3 py-2.5 text-sm font-bold transition ${
+                      editForm.source === value
+                        ? value === 'LINKEDIN'
+                          ? 'border-[#0A66C2] bg-[#0A66C2]/10 text-[#0A66C2]'
+                          : 'border-brand-600 bg-brand-50 text-brand-700 dark:bg-brand-950/40 dark:text-brand-300'
+                        : 'border-slate-200 text-slate-500 hover:border-slate-300 dark:border-slate-700'
+                    }`}
+                  >
+                    {logo} {label}
+                  </button>
+                ))}
+              </div>
+              {editForm.source === 'LINKEDIN' && <p className="mt-1 text-[11px] text-slate-500">Students see it under the "From LinkedIn" tab.</p>}
+            </div>
             <Field label="Job title" required>
               <input id="edit-title" className={inputClass} value={editForm.title} onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))} required />
             </Field>
