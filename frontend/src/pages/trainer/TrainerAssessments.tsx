@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { api } from '../../services/api';
 import { Badge } from '../../components/Badge';
-import { FileCheck, HelpCircle, PlusCircle, Award, CheckCircle2, TrendingUp, BarChart3, ShieldCheck, Camera, Mic, Maximize2, Layers, ArrowRight, FileSpreadsheet, Link2, ExternalLink } from 'lucide-react';
+import { FileCheck, HelpCircle, PlusCircle, Award, CheckCircle2, TrendingUp, BarChart3, ShieldCheck, Camera, Mic, Maximize2, Layers, ArrowRight, FileSpreadsheet, Link2, ExternalLink, Trash2 } from 'lucide-react';
 import { ExcelMcqTestModal, LinkTestModal } from './QuickTestModals';
 
 export const TrainerAssessments: React.FC = () => {
@@ -40,6 +40,19 @@ export const TrainerAssessments: React.FC = () => {
     setQuick('');
     alert(message);
     fetchExams();
+  };
+
+  const deleteExam = async (exam: any) => {
+    if (!window.confirm(`Delete "${exam.title}"?
+
+Students will no longer see it, and its questions and student attempts are removed. This cannot be undone.`)) return;
+    try {
+      const res: any = await api.delete(`/exams/${exam._id}`);
+      setExams((list) => list.filter((e) => e._id !== exam._id));
+      alert(res.message);
+    } catch (err: any) {
+      alert(err.message || 'Could not delete the test');
+    }
   };
 
   // Selected Question IDs from Question Bank
@@ -207,7 +220,15 @@ export const TrainerAssessments: React.FC = () => {
                 </div>
               </div>
 
-              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => deleteExam(exam)}
+                  aria-label={`Delete ${exam.title}`}
+                  className="inline-flex shrink-0 items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-300 ring-1 ring-rose-200 dark:ring-rose-900 font-bold text-xs hover:bg-rose-600 hover:text-white transition-colors"
+                >
+                  <Trash2 className="h-3.5 w-3.5" /> Delete
+                </button>
                 {exam.kind === 'LINK' ? (
                   <a
                     href={exam.testLink}

@@ -21,7 +21,7 @@ import {
   importQuestions,
 } from '../controllers/examController';
 import { authenticateUser, authorizeRoles } from '../middleware/auth';
-import { createLinkTest, createMcqTestFromExcel, downloadMcqTemplate, previewMcqExcel } from '../controllers/examExcelController';
+import { createLinkTest, createMcqTestFromExcel, deleteExam, downloadMcqTemplate, previewMcqExcel } from '../controllers/examExcelController';
 import { asyncHandler } from '../utils/asyncHandler';
 
 const router = Router();
@@ -43,6 +43,7 @@ router.get('/excel/template', staff, asyncHandler(downloadMcqTemplate));
 router.post('/excel/preview', staff, asyncHandler(previewMcqExcel));
 router.post('/excel', staff, asyncHandler(createMcqTestFromExcel));
 router.post('/link', staff, asyncHandler(createLinkTest));
+router.delete('/:id', staff, asyncHandler(deleteExam));
 
 router.get('/', asyncHandler(getExams));
 router.get('/results/me', authorizeRoles('STUDENT'), asyncHandler(getMyResults));

@@ -4,6 +4,11 @@ import { AuthRequest } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import { Exam } from '../models/Exam';
 import { Question } from '../models/Question';
+import { ExamAttempt } from '../models/ExamAttempt';
+import { Result } from '../models/Result';
+import { ProctoringLog } from '../models/ProctoringLog';
+import { AuditLog } from '../models/AuditLog';
+import mongoose from 'mongoose';
 
 /**
  * Trainer tests made the quick way:
@@ -184,4 +189,27 @@ export const createLinkTest = async (req: AuthRequest, res: Response): Promise<v
     createdById: req.user!.userId,
   });
   res.status(201).json({ success: true, message: 'Technical test link published', data: { exam } });
+};
+
+// Trainer / admin: remove a test with its own questions (bank questions stay), attempts, results and proctoring logs
+export const deleteExam = async (req: AuthRequest, res: Response): Promise<void> => {
+  const exam = mongoose.isValidObjectId(req.params.id) ? await Exam.findById(req.params.id).select('title') : null;
+  if (!exam) throw new AppError('Test not found', 404, 'NOT_FOUND');
+  const [attempts] = await Promise.all([
+    ExamAttempt.deleteMany({ examId: exam._id }),
+    Result.deleteMany({ examId: exam._id }),
+    ProctoringLog.deleteMany({ examId: exam._id }),
+    Question.deleteMany({ examId: exam._id }),
+  ]);
+  await Exam.deleteOne({ _id: exam._id });
+  await AuditLog.create({
+    userId: req.user?.userId,
+    userEmail: req.user?.email,
+    userRole: req.user?.role,
+    action: 'EXAM_DELETED',
+    resource: 'EXAM',
+    metadata: { examId: String(exam._id), title: exam.title, attempts: attempts.deletedCount },
+    ipAddress: req.ip,
+  }).catch(() => undefined);
+  res.json({ success: true, message: `${exam.title} was deleted` });
 };

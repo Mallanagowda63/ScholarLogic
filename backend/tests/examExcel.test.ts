@@ -78,4 +78,16 @@ describe('Trainer tests: MCQ from Excel, technical test as a link', () => {
     expect(list.body.data.exams.find((e: any) => e.title === 'DSA round').testLink).toBe('https://hackerrank.com/test/abc');
     expect((await post(`/api/exams/${res.body.data.exam._id}/start`, {}, student)).status).toBe(400);
   });
+
+  it('trainers can delete a test (with its questions and attempts); students cannot', async () => {
+    const made = await post('/api/exams/excel', { title: 'To delete', fileBase64: sheet(rowsOf(3)) });
+    const id = made.body.data.exam._id;
+    await post(`/api/exams/${id}/start`, {}, student);
+    const del = (token: string) => request(app).delete(`/api/exams/${id}`).set('Authorization', `Bearer ${token}`);
+    expect((await del(student)).status).toBe(403);
+    expect((await del(trainer)).status).toBe(200);
+    expect((await del(trainer)).status).toBe(404);
+    const list = await request(app).get('/api/exams').set('Authorization', `Bearer ${trainer}`);
+    expect(list.body.data.exams.some((e: any) => e._id === id)).toBe(false);
+  });
 });

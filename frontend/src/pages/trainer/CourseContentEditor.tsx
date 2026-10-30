@@ -38,6 +38,22 @@ export const CourseContentEditor: React.FC = () => {
   const [videoSource, setVideoSource] = useState<'UPLOAD' | 'ZOHO_MEETING'>('UPLOAD');
   const [useCustomModule, setUseCustomModule] = useState(false);
   const [customModuleName, setCustomModuleName] = useState('');
+  // Course typed by the trainer: reused if it exists (and assigned to them), otherwise created
+  const [useCustomCourse, setUseCustomCourse] = useState(false);
+  const [customCourseName, setCustomCourseName] = useState('');
+  const writingCourse = useCustomCourse || courses.length === 0;
+  const resolveCourseId = async (): Promise<string> => {
+    if (!writingCourse && selectedCourseId) return selectedCourseId;
+    const name = customCourseName.trim();
+    if (!name) throw new Error('Please write the course name');
+    const res: any = await api.post('/trainer/courses', { title: name });
+    const course = res.data.course;
+    setCourses((list) => (list.some((c) => c._id === course._id) ? list : [course, ...list]));
+    setSelectedCourseId(course._id);
+    setUseCustomCourse(false);
+    setCustomCourseName('');
+    return course._id;
+  };
   const [zohoUrl, setZohoUrl] = useState('');
   const [zohoValidating, setZohoValidating] = useState(false);
   const [zohoMetadata, setZohoMetadata] = useState<any>(null);
@@ -121,24 +137,32 @@ export const CourseContentEditor: React.FC = () => {
     setUploadProgress(20);
     setUploadSuccess('');
 
+    const newCourse = writingCourse;
+    let courseIdToUse: string;
     let moduleIdToUse = targetModuleId;
-    if (useCustomModule || !moduleIdToUse) {
-      if (!customModuleName.trim()) {
-        setUploading(false);
-        return alert('Please write a target module name');
-      }
-      const modRes: any = await api.post(`/trainer/courses/${selectedCourseId}/modules`, {
-        title: customModuleName.trim(),
-      });
-      moduleIdToUse = modRes.data.module._id;
-    }
-
     let lessonIdToUse = targetLessonId;
+    try {
+      courseIdToUse = await resolveCourseId();
+      if (newCourse || useCustomModule || !moduleIdToUse) {
+        if (!customModuleName.trim()) {
+          setUploading(false);
+          return alert('Please write a target module name');
+        }
+        const modRes: any = await api.post(`/trainer/courses/${courseIdToUse}/modules`, {
+          title: customModuleName.trim(),
+        });
+        moduleIdToUse = modRes.data.module._id;
+        lessonIdToUse = '';
+      }
+    } catch (err: any) {
+      setUploading(false);
+      return alert(err.message || 'Could not prepare the course');
+    }
 
     // Create lesson if needed
     if (!lessonIdToUse || mediaTitle) {
       const newLessRes: any = await api.post(`/trainer/modules/${moduleIdToUse}/lessons`, {
-        courseId: selectedCourseId,
+        courseId: courseIdToUse,
         title: mediaTitle || selectedFile.name,
         type,
       });
@@ -175,7 +199,7 @@ export const CourseContentEditor: React.FC = () => {
         setMediaTitle('');
         setCustomModuleName('');
         setUseCustomModule(false);
-        fetchCourseHierarchy(selectedCourseId);
+        fetchCourseHierarchy(courseIdToUse);
       } catch (err: any) {
         alert(err.message || 'Upload failed');
       } finally {
@@ -209,20 +233,22 @@ export const CourseContentEditor: React.FC = () => {
 
     setUploading(true);
     try {
+      const newCourse = writingCourse;
+      const courseIdToUse = await resolveCourseId();
       let moduleIdToUse = targetModuleId;
-      if (useCustomModule || !moduleIdToUse) {
+      if (newCourse || useCustomModule || !moduleIdToUse) {
         if (!customModuleName.trim()) {
           setUploading(false);
           return alert('Please write a target module name');
         }
-        const modRes: any = await api.post(`/trainer/courses/${selectedCourseId}/modules`, {
+        const modRes: any = await api.post(`/trainer/courses/${courseIdToUse}/modules`, {
           title: customModuleName.trim(),
         });
         moduleIdToUse = modRes.data.module._id;
       }
 
       await api.post(`/trainer/modules/${moduleIdToUse}/lessons/zoho-recording`, {
-        courseId: selectedCourseId,
+        courseId: courseIdToUse,
         recordingUrl: zohoUrl,
         title: mediaTitle || (zohoMetadata ? zohoMetadata.title : 'Zoho Meeting Recording'),
       });
@@ -234,7 +260,7 @@ export const CourseContentEditor: React.FC = () => {
       setMediaTitle('');
       setCustomModuleName('');
       setUseCustomModule(false);
-      fetchCourseHierarchy(selectedCourseId);
+      fetchCourseHierarchy(courseIdToUse);
     } catch (err: any) {
       alert(err.message || 'Failed to add Zoho Meeting recording');
     } finally {
@@ -246,6 +272,46 @@ export const CourseContentEditor: React.FC = () => {
   const allLessons = modules.flatMap((m) => m.lessons || []);
   const videoLessons = allLessons.filter((l) => l.videoUrl || l.type === 'VIDEO');
   const notesLessons = allLessons.filter((l) => l.notesFileUrl || l.type === 'NOTES');
+
+  const courseField = (
+    <>
+      <div className="flex items-center justify-between mb-1">
+        <label className="text-slate-300 font-semibold">Target Course</label>
+        {courses.length > 0 && (
+          <button type="button" onClick={() => setUseCustomCourse(!useCustomCourse)} className="text-brand-400 hover:underline text-[11px] font-bold">
+            {useCustomCourse ? 'Select existing course' : '+ Write course name'}
+          </button>
+        )}
+      </div>
+      {writingCourse ? (
+        <>
+          <input
+            type="text"
+            required
+            list="trainer-course-names"
+            placeholder="Write the course name here (e.g. Python Full Stack)..."
+            value={customCourseName}
+            onChange={(e) => setCustomCourseName(e.target.value)}
+            className="w-full rounded-xl border border-slate-700 bg-slate-800 p-2.5 text-white font-bold placeholder:text-slate-500"
+          />
+          <p className="mt-1 text-[10px] text-slate-400">If this course already exists it is used; otherwise it is added. Then write the module name below.</p>
+        </>
+      ) : (
+        <select
+          value={selectedCourseId}
+          onChange={(e) => {
+            setSelectedCourseId(e.target.value);
+            fetchCourseHierarchy(e.target.value);
+          }}
+          className="w-full rounded-xl border border-slate-800 bg-slate-800 p-2.5 text-white font-bold"
+        >
+          {courses.map((c) => (
+            <option key={c._id} value={c._id}>{c.title}</option>
+          ))}
+        </select>
+      )}
+    </>
+  );
 
   return (
     <div className="space-y-8 pb-12">
@@ -472,19 +538,7 @@ export const CourseContentEditor: React.FC = () => {
             {videoSource === 'UPLOAD' ? (
               <form onSubmit={(e) => handleUploadMediaSubmit(e, 'VIDEO')} className="space-y-4 text-xs">
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Target Course</label>
-                  <select
-                    value={selectedCourseId}
-                    onChange={(e) => {
-                      setSelectedCourseId(e.target.value);
-                      fetchCourseHierarchy(e.target.value);
-                    }}
-                    className="w-full rounded-xl border border-slate-800 bg-slate-800 p-2.5 text-white font-bold"
-                  >
-                    {courses.map((c) => (
-                      <option key={c._id} value={c._id}>{c.title}</option>
-                    ))}
-                  </select>
+                  {courseField}
                 </div>
 
                 <div>
@@ -499,7 +553,7 @@ export const CourseContentEditor: React.FC = () => {
                     </button>
                   </div>
 
-                  {useCustomModule || modules.length === 0 ? (
+                  {useCustomModule || writingCourse || modules.length === 0 ? (
                     <input
                       type="text"
                       required
@@ -589,19 +643,7 @@ export const CourseContentEditor: React.FC = () => {
             ) : (
               <form onSubmit={handleAddZohoSubmit} className="space-y-4 text-xs">
                 <div>
-                  <label className="block text-slate-300 font-semibold mb-1">Target Course</label>
-                  <select
-                    value={selectedCourseId}
-                    onChange={(e) => {
-                      setSelectedCourseId(e.target.value);
-                      fetchCourseHierarchy(e.target.value);
-                    }}
-                    className="w-full rounded-xl border border-slate-800 bg-slate-800 p-2.5 text-white font-bold"
-                  >
-                    {courses.map((c) => (
-                      <option key={c._id} value={c._id}>{c.title}</option>
-                    ))}
-                  </select>
+                  {courseField}
                 </div>
 
                 <div>
@@ -616,7 +658,7 @@ export const CourseContentEditor: React.FC = () => {
                     </button>
                   </div>
 
-                  {useCustomModule || modules.length === 0 ? (
+                  {useCustomModule || writingCourse || modules.length === 0 ? (
                     <input
                       type="text"
                       required
@@ -721,16 +763,7 @@ export const CourseContentEditor: React.FC = () => {
             <h3 className="font-bold text-base text-white">UPLOAD LESSON NOTES</h3>
             <form onSubmit={(e) => handleUploadMediaSubmit(e, 'NOTES')} className="space-y-4 text-xs">
               <div>
-                <label className="block text-slate-300 font-semibold mb-1">Target Course</label>
-                <select
-                  value={selectedCourseId}
-                  onChange={(e) => setSelectedCourseId(e.target.value)}
-                  className="w-full rounded-xl border border-slate-800 bg-slate-800 p-2.5 text-white font-bold"
-                >
-                  {courses.map((c) => (
-                    <option key={c._id} value={c._id}>{c.title}</option>
-                  ))}
-                </select>
+                {courseField}
               </div>
 
               <div>
@@ -745,7 +778,7 @@ export const CourseContentEditor: React.FC = () => {
                   </button>
                 </div>
 
-                {useCustomModule || modules.length === 0 ? (
+                {useCustomModule || writingCourse || modules.length === 0 ? (
                   <input
                     type="text"
                     required

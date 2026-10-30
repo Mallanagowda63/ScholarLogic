@@ -24,17 +24,6 @@ import {
   Bell,
   UserCheck,
 } from 'lucide-react';
-import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  Tooltip,
-  LineChart,
-  Line,
-  CartesianGrid,
-} from 'recharts';
 
 export const TrainerDashboard: React.FC = () => {
   const { user } = useAuth();
@@ -112,23 +101,7 @@ export const TrainerDashboard: React.FC = () => {
     );
   }
 
-  const m = dashboardData?.metrics || {
-    assignedStudentsCount: 86,
-    activeCoursesCount: 4,
-    pendingAssignmentsCount: 12,
-    upcomingExamsCount: 3,
-    avgStudentScore: 84,
-    courseCompletionRate: 76,
-    atRiskStudentsCount: 3,
-    completedAssessmentsCount: 41,
-  };
-
-  const performanceTrendData = [
-    { week: 'W1', avgScore: 75, completion: 60 },
-    { week: 'W2', avgScore: 78, completion: 65 },
-    { week: 'W3', avgScore: 82, completion: 72 },
-    { week: 'W4', avgScore: 84, completion: 76 },
-  ];
+  const m = dashboardData?.metrics || {};
 
   return (
     <div className="space-y-8 pb-12">
@@ -139,30 +112,35 @@ export const TrainerDashboard: React.FC = () => {
             ScholarLogic Trainer Workspace
           </h1>
           <p className="text-xs text-slate-500">
-            Welcome back, <span className="font-semibold text-slate-900 dark:text-white">{user?.fullName || 'Prof. Michael Vance'}</span>. Teaching management & student performance workspace.
+            Welcome back, <span className="font-semibold text-slate-900 dark:text-white">{user?.fullName || 'Trainer'}</span>. Teaching management & student performance workspace.
           </p>
         </div>
 
         <div className="flex items-center gap-2">
           <Badge variant="purple" className="px-3 py-1 font-mono text-xs">
-            SENIOR INSTRUCTOR
+            TRAINER
           </Badge>
         </div>
       </div>
 
-      {/* Primary Metrics (Requirement 20) */}
+      {/* Real numbers for this trainer */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-        <StatCard title="Assigned Courses" value={m.activeCoursesCount || 4} subtitle="Assigned LMS Modules" icon={BookOpen} color="indigo" />
-        <StatCard title="Students" value={m.assignedStudentsCount || 86} subtitle="Enrolled Candidates" icon={Users} color="blue" />
-        <StatCard title="Videos Uploaded" value={128} subtitle="Supabase Video Bucket" icon={Video} color="green" trend="100% Live" />
-        <StatCard title="Notes PDFs" value={94} subtitle="Supabase Notes Bucket" icon={FileText} color="purple" />
+        <StatCard title="My Batches" value={m.activeBatchesCount ?? 0} subtitle="Running now" icon={BookOpen} color="indigo" />
+        <StatCard title="My Students" value={m.assignedStudentsCount ?? 0} subtitle="In my batches" icon={Users} color="blue" />
+        <StatCard title="Videos" value={m.videosCount ?? 0} subtitle="In my courses" icon={Video} color="green" />
+        <StatCard title="Notes" value={m.notesCount ?? 0} subtitle="In my courses" icon={FileText} color="purple" />
       </div>
 
-      {/* Additional Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-        <StatCard title="Pending Reviews" value={m.pendingAssignmentsCount || 12} subtitle="Requires Grading" icon={FileCheck} color="amber" trend="12 To Grade" />
-        <StatCard title="Upcoming Exams" value={m.upcomingExamsCount || 3} subtitle="Scheduled Assessments" icon={Calendar} color="purple" />
-        <StatCard title="Average Student Progress" value={`${m.courseCompletionRate || 76}%`} subtitle="Class Progress Velocity" icon={TrendingUp} color="green" trend="↑ 4% this week" />
+        <StatCard title="Pending Reviews" value={m.pendingAssignmentsCount ?? 0} subtitle="Assignments to grade" icon={FileCheck} color="amber" />
+        <StatCard title="My Tests" value={m.upcomingExamsCount ?? 0} subtitle="Published" icon={Calendar} color="purple" />
+        <StatCard
+          title="Average Test Score"
+          value={m.avgStudentScore == null ? '—' : `${m.avgStudentScore}%`}
+          subtitle={m.completedAssessmentsCount ? `From ${m.completedAssessmentsCount} results` : 'No results yet'}
+          icon={TrendingUp}
+          color="green"
+        />
       </div>
 
       {/* Trainer Quick Actions Bar (Requirement 21) */}
@@ -230,49 +208,47 @@ export const TrainerDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* Schedule & Analytics Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-            <h3 className="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-brand-500" /> Class Completion Velocity Trend
-            </h3>
-            <span className="text-xs text-slate-500">Weekly Student Progress</span>
-          </div>
-
-          <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={performanceTrendData}>
-                <CartesianGrid strokeDasharray="3 3" opacity={0.2} />
-                <XAxis dataKey="week" tick={{ fill: '#64748b', fontSize: 11 }} />
-                <YAxis domain={[0, 100]} />
-                <Tooltip />
-                <Line type="monotone" dataKey="avgScore" name="Avg Score %" stroke="#0c8ee9" strokeWidth={3} />
-                <Line type="monotone" dataKey="completion" name="Completion %" stroke="#10b981" strokeWidth={3} />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+      {/* Today's classes: running batches and any sessions scheduled for today */}
+      <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="font-bold text-base text-slate-900 dark:text-white flex items-center gap-2">
+            <Calendar className="h-5 w-5 text-brand-500" /> Today's Classes
+          </h3>
+          <Link to="/trainer/batches" className="text-xs font-bold text-brand-600 hover:underline">
+            My batches →
+          </Link>
         </div>
-
-        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4">
-          <h3 className="font-bold text-sm text-slate-900 dark:text-white">Today's Class Timetable</h3>
-          <div className="space-y-3">
+        {(dashboardData?.todaysBatches || []).length === 0 && (dashboardData?.todaysSchedule || []).length === 0 ? (
+          <p className="rounded-xl bg-slate-50 dark:bg-slate-800/60 p-4 text-sm text-slate-500">No classes today. Batches the admin assigns to you appear here.</p>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {(dashboardData?.todaysBatches || []).map((b: any) => (
+              <Link
+                key={b._id}
+                to={`/trainer/batches/${b._id}`}
+                className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 text-xs space-y-1 hover:border-brand-300"
+              >
+                <span className="text-[10px] font-bold uppercase text-brand-600">{b.timing} • {b.mode === 'ONLINE' ? 'Online' : 'Offline'}</span>
+                <h4 className="font-bold text-slate-900 dark:text-white line-clamp-1">{b.subject || b.batchCode}</h4>
+                <p className="font-mono text-[10px] text-slate-500">{b.batchCode}</p>
+                {!b.recordingsLink && <p className="text-[10px] font-bold text-amber-600">Add the Zoho recordings link</p>}
+              </Link>
+            ))}
             {(dashboardData?.todaysSchedule || []).map((session: any) => (
               <div key={session._id} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 text-xs space-y-1">
-                <span className="text-[10px] font-bold uppercase text-brand-600">{session.type}</span>
+                <span className="text-[10px] font-bold uppercase text-brand-600">
+                  {new Date(session.startTime).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })} • {String(session.type || '').replace(/_/g, ' ').toLowerCase()}
+                </span>
                 <h4 className="font-bold text-slate-900 dark:text-white line-clamp-1">{session.title}</h4>
-                <a
-                  href={session.meetingLink || '#'}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-[10px] text-emerald-600 font-bold hover:underline block pt-1"
-                >
-                  Join Meeting →
-                </a>
+                {session.meetingLink && (
+                  <a href={session.meetingLink} target="_blank" rel="noreferrer" className="text-[10px] text-emerald-600 font-bold hover:underline block pt-1">
+                    Join Meeting →
+                  </a>
+                )}
               </div>
             ))}
           </div>
-        </div>
+        )}
       </div>
 
       {/* Modal: Create Announcement */}
