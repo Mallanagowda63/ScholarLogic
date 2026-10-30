@@ -4,6 +4,7 @@ import { api } from '../../services/api';
 import { Badge } from '../../components/Badge';
 import { FileCheck, HelpCircle, PlusCircle, Award, CheckCircle2, TrendingUp, BarChart3, ShieldCheck, Camera, Mic, Maximize2, Layers, ArrowRight, FileSpreadsheet, Link2, ExternalLink, Trash2 } from 'lucide-react';
 import { ExcelMcqTestModal, LinkTestModal } from './QuickTestModals';
+import { Modal, secondaryBtn, useToast } from '../admin/tracking/shared';
 
 export const TrainerAssessments: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -38,20 +39,26 @@ export const TrainerAssessments: React.FC = () => {
   const [quick, setQuick] = useState<'' | 'excel' | 'link'>('');
   const quickDone = (message: string) => {
     setQuick('');
-    alert(message);
+    toast.show(message);
     fetchExams();
   };
 
-  const deleteExam = async (exam: any) => {
-    if (!window.confirm(`Delete "${exam.title}"?
-
-Students will no longer see it, and its questions and student attempts are removed. This cannot be undone.`)) return;
+  // Delete: our own confirmation pop-up, then a short message at the bottom
+  const toast = useToast();
+  const [deleting, setDeleting] = useState<any | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const confirmDelete = async () => {
+    if (!deleting) return;
+    setDeleteBusy(true);
     try {
-      const res: any = await api.delete(`/exams/${exam._id}`);
-      setExams((list) => list.filter((e) => e._id !== exam._id));
-      alert(res.message);
+      const res: any = await api.delete(`/exams/${deleting._id}`);
+      setExams((list) => list.filter((e) => e._id !== deleting._id));
+      setDeleting(null);
+      toast.show(res.message);
     } catch (err: any) {
-      alert(err.message || 'Could not delete the test');
+      toast.show(err.message || 'Could not delete the test');
+    } finally {
+      setDeleteBusy(false);
     }
   };
 
@@ -223,7 +230,7 @@ Students will no longer see it, and its questions and student attempts are remov
               <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
                 <button
                   type="button"
-                  onClick={() => deleteExam(exam)}
+                  onClick={() => setDeleting(exam)}
                   aria-label={`Delete ${exam.title}`}
                   className="inline-flex shrink-0 items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-300 ring-1 ring-rose-200 dark:ring-rose-900 font-bold text-xs hover:bg-rose-600 hover:text-white transition-colors"
                 >
@@ -251,6 +258,32 @@ Students will no longer see it, and its questions and student attempts are remov
           ))}
         </div>
       )}
+
+      {deleting && (
+        <Modal title={`Delete "${deleting.title}"?`} subtitle="This cannot be undone" onClose={() => !deleteBusy && setDeleting(null)}>
+          <div className="flex items-start gap-3 rounded-xl bg-rose-50 p-4 text-sm text-rose-800 dark:bg-rose-950/40 dark:text-rose-200">
+            <Trash2 className="mt-0.5 h-5 w-5 shrink-0" />
+            <p>
+              Students will no longer see this test. Its{' '}
+              {deleting.kind === 'LINK' ? 'link' : <b>{deleting.questionIds?.length || 0} questions</b>} and all student attempts and results are removed.
+            </p>
+          </div>
+          <div className="flex justify-end gap-2 pt-4">
+            <button type="button" className={secondaryBtn} disabled={deleteBusy} onClick={() => setDeleting(null)}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={deleteBusy}
+              onClick={confirmDelete}
+              className="inline-flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+            >
+              <Trash2 className="h-4 w-4" /> {deleteBusy ? 'Deleting…' : 'Delete test'}
+            </button>
+          </div>
+        </Modal>
+      )}
+      {toast.node}
 
       {quick === 'excel' && <ExcelMcqTestModal onClose={() => setQuick('')} onDone={quickDone} />}
       {quick === 'link' && <LinkTestModal onClose={() => setQuick('')} onDone={quickDone} />}
