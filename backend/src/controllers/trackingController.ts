@@ -149,6 +149,10 @@ const summarizeStudent = (student: any, journey: ReturnType<typeof buildJourney>
     : null,
   needsReallocationSubject: journey.subjects.find((x) => ['MISSED', 'REALLOCATION_REQUIRED', 'ON_HOLD', 'DROPPED'].includes(x.status))?.name || null,
   currentBatch: journey.current?.batch || null,
+  // No batch seat here: the batch from the office class sheet (a batch named in the status, else the sheet's batch group)
+  sheetBatch: !journey.current?.batch && journey.current?.sheetNote
+    ? (journey.current.sheetNote.raw.split(/\r?\n/).find((l: string) => /batch/i.test(l)) || journey.current.sheetNote.section || '').trim()
+    : '',
   nextSubject: journey.next ? { subjectId: journey.next.subjectId, name: journey.next.name, status: journey.next.status } : null,
   allocationStatus: journey.allocationStatus,
   registrationSource: student.registrationSource || 'ADMIN',

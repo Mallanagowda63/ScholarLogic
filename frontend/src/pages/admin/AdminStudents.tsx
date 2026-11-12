@@ -81,7 +81,7 @@ export const AdminStudents: React.FC = () => {
     const term = q.trim().toLowerCase();
     return students.filter((s) => {
       if (term) {
-        const hay = [s.fullName, s.studentId, s.phone, s.currentBatch?.batchCode, s.course?.name, s.currentSubject?.name].filter(Boolean).join(' ').toLowerCase();
+        const hay = [s.fullName, s.studentId, s.phone, s.currentBatch?.batchCode, s.sheetBatch, s.course?.name, s.currentSubject?.name].filter(Boolean).join(' ').toLowerCase();
         if (!hay.includes(term)) return false;
       }
       if (f.course && (f.course === NONE ? !!s.course?.name : s.course?.name !== f.course)) return false;
@@ -275,6 +275,11 @@ export const AdminStudents: React.FC = () => {
                               {s.currentBatch.batchCode}
                               <span className="block font-sans text-[10px] font-normal text-slate-400">{s.currentBatch.timing}</span>
                             </Link>
+                          ) : s.sheetBatch ? (
+                            <span className="font-semibold text-slate-700 dark:text-slate-300" title="From the office class sheet">
+                              {s.sheetBatch}
+                              <span className="block text-[10px] font-normal text-amber-600 dark:text-amber-400">class sheet</span>
+                            </span>
                           ) : (
                             '—'
                           )}
