@@ -317,7 +317,12 @@ export function buildJourney(student: IStudent | any, ctx: JourneyContext) {
 
   subjects.sort((a, b) => a.order - b.order);
 
-  const current = subjects.find((s) => s.currentAllocationId) || null;
+  // A real batch seat first; otherwise what the office class sheet says they are doing now
+  const current =
+    subjects.find((s) => s.currentAllocationId) ||
+    subjects.find((s) => s.sheetNote && ['ATTENDING', 'RE_ATTENDING'].includes(s.status)) ||
+    subjects.find((s) => s.sheetNote && s.status === 'BATCH_ALLOCATED') ||
+    null;
   const completed = subjects.filter((s) => s.status === 'COMPLETED');
   const needsReallocation = subjects.find((s) => ['MISSED', 'REALLOCATION_REQUIRED', 'ON_HOLD', 'DROPPED'].includes(s.status));
   const next =
