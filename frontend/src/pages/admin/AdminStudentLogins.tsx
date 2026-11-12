@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { CheckCircle2, Copy, Download, Eye, EyeOff, KeyRound, MessageCircle, ScanLine, Search, XCircle } from 'lucide-react';
+import { CheckCircle2, Copy, Download, Eye, EyeOff, KeyRound, Mail, MessageCircle, ScanLine, Search, XCircle } from 'lucide-react';
 import { api, assetUrl } from '../../services/api';
 import { Card, EmptyRow, Modal, PageHeader, Spinner, inputClass, primaryBtn, secondaryBtn, useToast } from './tracking/shared';
 
@@ -28,6 +28,14 @@ interface StudentLogin {
 }
 
 type LoginFilter = 'ALL' | 'NEVER' | 'LOGGED' | 'NOPASS';
+
+interface EmailResult {
+  _id: string;
+  fullName: string;
+  status: 'SENT' | 'SKIPPED' | 'FAILED';
+  reason?: string;
+  loginSharedAt?: string;
+}
 
 const SITE = 'https://scholarlogiclms.in/login';
 
@@ -60,6 +68,10 @@ export const AdminStudentLogins: React.FC = () => {
   const [checking, setChecking] = useState(false);
   const [q, setQ] = useState('');
   const [filter, setFilter] = useState<LoginFilter>('ALL');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [confirmEmail, setConfirmEmail] = useState(false);
+  const [emailProgress, setEmailProgress] = useState<{ done: number; total: number } | null>(null);
+  const [emailResults, setEmailResults] = useState<EmailResult[] | null>(null);
   const [shown, setShown] = useState<Set<string>>(new Set());
   const [confirmNew, setConfirmNew] = useState<StudentLogin | null>(null);
   const [created, setCreated] = useState<{ student: StudentLogin; loginId: string; password: string } | null>(null);
@@ -160,6 +172,42 @@ export const AdminStudentLogins: React.FC = () => {
     URL.revokeObjectURL(a.href);
   };
 
+  const pick = (id: string) =>
+    setSelected((set) => {
+      const next = new Set(set);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
+  // Sends in groups of 20 so the page can show progress; each student gets only their own login
+  const sendEmails = async () => {
+    const chosen = (students || []).filter((s) => selected.has(s._id));
+    const ready = chosen.filter((s) => s.email && s.password);
+    setConfirmEmail(false);
+    setEmailResults(null);
+    setEmailProgress({ done: 0, total: ready.length });
+    const all: EmailResult[] = chosen
+      .filter((s) => !s.email || !s.password)
+      .map((s) => ({ _id: s._id, fullName: s.fullName, status: 'SKIPPED' as const, reason: !s.email ? 'No email address' : 'No password on record' }));
+    for (let i = 0; i < ready.length; i += 20) {
+      const group = ready.slice(i, i + 20);
+      try {
+        const res: any = await api.post('/admin/student-logins/send-email', { ids: group.map((s) => s._id) });
+        const results: EmailResult[] = res.data.results;
+        all.push(...results);
+        const sentAt = new Map(results.filter((r) => r.status === 'SENT').map((r) => [r._id, r.loginSharedAt || new Date().toISOString()]));
+        setStudents((list) => (list || []).map((x) => (sentAt.has(x._id) ? { ...x, loginSharedAt: sentAt.get(x._id)! } : x)));
+      } catch (err: any) {
+        all.push(...group.map((s) => ({ _id: s._id, fullName: s.fullName, status: 'FAILED' as const, reason: err.message })));
+      }
+      setEmailProgress({ done: Math.min(i + group.length, ready.length), total: ready.length });
+    }
+    setEmailProgress(null);
+    setEmailResults(all);
+    setSelected(new Set(all.filter((r) => r.status === 'FAILED').map((r) => r._id)));
+  };
+
   const toggle = (id: string) =>
     setShown((set) => {
       const next = new Set(set);
@@ -175,12 +223,22 @@ export const AdminStudentLogins: React.FC = () => {
       if (filter === 'LOGGED' && !s.hasLoggedIn) return false;
       if (filter === 'NOPASS' && s.password) return false;
       if (!term) return true;
-      return [s.fullName, s.studentId, s.machineCode, s.phone, s.course].join(' ').toLowerCase().includes(term);
+      return [s.fullName, s.studentId, s.machineCode, s.phone, s.email, s.course].join(' ').toLowerCase().includes(term);
     });
   }, [students, q, filter]);
   const missing = (students || []).filter((s) => !s.password).length;
   const never = (students || []).filter((s) => !s.hasLoggedIn).length;
   const logged = (students || []).length - never;
+  const allVisibleSelected = visible.length > 0 && visible.every((s) => selected.has(s._id));
+  const selectVisible = (on: boolean) =>
+    setSelected((set) => {
+      const next = new Set(set);
+      visible.forEach((s) => (on ? next.add(s._id) : next.delete(s._id)));
+      return next;
+    });
+  const chosen = (students || []).filter((s) => selected.has(s._id));
+  const chosenReady = chosen.filter((s) => s.email && s.password).length;
+  const withEmail = (students || []).filter((s) => s.email).length;
 
   const LoginStatus: React.FC<{ s: StudentLogin }> = ({ s }) =>
     s.hasLoggedIn ? (
@@ -307,7 +365,7 @@ export const AdminStudentLogins: React.FC = () => {
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <label className="relative block flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input id="login-search" className={`${inputClass} pl-9`} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, Student ID, phone or course" />
+            <input id="login-search" className={`${inputClass} pl-9`} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, Student ID, phone, email or course" />
           </label>
           <select id="login-filter" className={`${inputClass} sm:w-60`} value={filter} onChange={(e) => setFilter(e.target.value as LoginFilter)}>
             <option value="ALL">All students ({(students || []).length})</option>
@@ -334,15 +392,32 @@ export const AdminStudentLogins: React.FC = () => {
           </div>
         )}
         <p className="text-[11px] text-slate-500">Login times are recorded from 12 Nov 2026. Students who logged in before that and are still signed in show "Logged in before".</p>
+        <div className="flex flex-wrap items-center gap-2 rounded-xl bg-slate-50 p-2.5 text-xs dark:bg-slate-800/60">
+          <label className="inline-flex items-center gap-2 font-semibold text-slate-700 dark:text-slate-200">
+            <input type="checkbox" checked={allVisibleSelected} onChange={(e) => selectVisible(e.target.checked)} /> Select all in this list ({visible.length})
+          </label>
+          <span className="text-slate-500">
+            • {selected.size} selected{selected.size > 0 && `, ${chosenReady} with an email address`} • {withEmail} of {(students || []).length} students have an email
+          </span>
+          <span className="flex-1" />
+          {selected.size > 0 && (
+            <button type="button" className={secondaryBtn} onClick={() => setSelected(new Set())}>
+              Clear
+            </button>
+          )}
+          <button type="button" className={primaryBtn} disabled={!chosenReady || !!emailProgress} onClick={() => setConfirmEmail(true)}>
+            <Mail className="h-4 w-4" /> {emailProgress ? `Sending ${emailProgress.done}/${emailProgress.total}…` : `Email login to selected (${chosenReady})`}
+          </button>
+        </div>
 
         {!students ? (
           <Spinner />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1000px] text-xs">
+            <table className="w-full min-w-[1060px] text-xs">
               <thead className="border-b border-slate-200 bg-slate-50 text-[10px] font-bold uppercase text-slate-500 dark:border-slate-800 dark:bg-slate-800/60">
                 <tr>
-                  {['Student', 'Student ID', 'Course', 'Login ID', 'Password', 'Login status', ''].map((h) => (
+                  {['', 'Student', 'Student ID', 'Course', 'Login ID', 'Password', 'Login status', ''].map((h) => (
                     <th key={h} className="px-3 py-3 text-left whitespace-nowrap">
                       {h}
                     </th>
@@ -351,11 +426,17 @@ export const AdminStudentLogins: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {visible.length === 0 ? (
-                  <EmptyRow colSpan={7} text="No students match." />
+                  <EmptyRow colSpan={8} text="No students match." />
                 ) : (
                   visible.map((s) => (
-                    <tr key={s._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                      <td className="px-3 py-2.5 font-bold text-slate-900 dark:text-white">{s.fullName}</td>
+                    <tr key={s._id} className={`hover:bg-slate-50 dark:hover:bg-slate-800/40 ${selected.has(s._id) ? 'bg-brand-50/60 dark:bg-brand-950/20' : ''}`}>
+                      <td className="px-3 py-2.5">
+                        <input type="checkbox" aria-label={`Select ${s.fullName}`} checked={selected.has(s._id)} onChange={() => pick(s._id)} />
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <p className="font-bold text-slate-900 dark:text-white">{s.fullName}</p>
+                        <p className={`text-[10px] ${s.email ? 'text-slate-500' : 'text-amber-600'}`}>{s.email || 'No email'}</p>
+                      </td>
                       <td className="px-3 py-2.5 font-mono">{s.studentId}</td>
                       <td className="px-3 py-2.5 text-slate-600 dark:text-slate-300">{s.course || '—'}</td>
                       <td className="px-3 py-2.5 font-mono font-semibold">{s.loginId}</td>
@@ -417,6 +498,44 @@ export const AdminStudentLogins: React.FC = () => {
             </button>
             <WhatsAppBtn s={created.student} password={created.password} big />
             <button type="button" className={primaryBtn} onClick={() => setCreated(null)}>
+              Done
+            </button>
+          </div>
+        </Modal>
+      )}
+      {confirmEmail && (
+        <Modal title={`Email login details to ${chosenReady} student${chosenReady === 1 ? '' : 's'}?`} subtitle="Each student gets only their own Login ID and password." onClose={() => setConfirmEmail(false)}>
+          <p className="text-sm text-slate-600 dark:text-slate-300">
+            Sent from noreply@scholarlogiclms.in with the website link, their Login ID and their password.
+            {chosen.length > chosenReady && ` ${chosen.length - chosenReady} selected student(s) have no email address or password and will be skipped.`}
+          </p>
+          <p className="pt-2 text-xs text-slate-500">About 2 emails per second: {Math.max(1, Math.ceil(chosenReady / 100))} minute(s) or less. Keep this page open until it finishes.</p>
+          <div className="flex justify-end gap-2 pt-4">
+            <button type="button" className={secondaryBtn} onClick={() => setConfirmEmail(false)}>
+              Cancel
+            </button>
+            <button type="button" className={primaryBtn} onClick={sendEmails}>
+              <Mail className="h-4 w-4" /> Send {chosenReady} email{chosenReady === 1 ? '' : 's'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {emailResults && (
+        <Modal title="Emails finished" subtitle={`${emailResults.filter((r) => r.status === 'SENT').length} sent • ${emailResults.filter((r) => r.status === 'SKIPPED').length} skipped • ${emailResults.filter((r) => r.status === 'FAILED').length} failed`} onClose={() => setEmailResults(null)}>
+          <div className="max-h-72 space-y-1 overflow-y-auto text-xs">
+            {emailResults
+              .filter((r) => r.status !== 'SENT')
+              .map((r) => (
+                <p key={r._id} className={r.status === 'FAILED' ? 'text-rose-600' : 'text-amber-600'}>
+                  {r.status === 'FAILED' ? 'Failed' : 'Skipped'}: <b>{r.fullName}</b> ({r.reason})
+                </p>
+              ))}
+            {emailResults.every((r) => r.status === 'SENT') && <p className="text-emerald-600 font-semibold">Every selected student got their email.</p>}
+            {emailResults.some((r) => r.status === 'FAILED') && <p className="pt-2 text-slate-500">The failed ones are still selected, so you can try again.</p>}
+          </div>
+          <div className="flex justify-end pt-4">
+            <button type="button" className={primaryBtn} onClick={() => setEmailResults(null)}>
               Done
             </button>
           </div>

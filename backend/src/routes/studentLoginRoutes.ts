@@ -12,6 +12,11 @@ import { ProfilePhoto } from '../models/ProfilePhoto';
 import '../models/tracking/TrackCourse';
 import { openPassword, sealPassword } from '../utils/credentialVault';
 import { PLACEHOLDER_EMAIL_DOMAIN } from '../services/trackingService';
+import { emailService } from '../services/emailService';
+import { env } from '../config/env';
+
+// Link in the email: the live site, even when this runs on a laptop with a localhost FRONTEND_URL
+const siteUrl = () => (/localhost|127.0.0.1/.test(env.FRONTEND_URL) ? 'https://scholarlogiclms.in' : env.FRONTEND_URL);
 
 /**
  * Admin → Student Login & ID Card: check a student's ID card and see (or create) their login.
@@ -111,6 +116,52 @@ router.post(
       message: `New password created for ${user.fullName}`,
       data: { loginId: student.biometricId || student.studentId, password },
     });
+  })
+);
+
+// Email each selected student their own login ID and password. The page sends small groups (max 25)
+// and shows progress, so one request never runs long. Resend allows about 2 emails per second.
+router.post(
+  '/send-email',
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const ids: string[] = Array.isArray(req.body?.ids) ? req.body.ids.map(String).filter((id: string) => mongoose.isValidObjectId(id)) : [];
+    if (!ids.length) throw new AppError('Select at least one student', 400, 'MISSING_FIELDS');
+    if (ids.length > 25) throw new AppError('Send at most 25 at a time', 400, 'TOO_MANY');
+    const students = await findStudents({ _id: { $in: ids } });
+    const results: { _id: string; fullName: string; status: 'SENT' | 'SKIPPED' | 'FAILED'; reason?: string; loginSharedAt?: Date }[] = [];
+    for (const s of students as any[]) {
+      const c = card(s, false);
+      if (!c.email) {
+        results.push({ _id: String(s._id), fullName: c.fullName, status: 'SKIPPED', reason: 'No email address' });
+        continue;
+      }
+      if (!c.password) {
+        results.push({ _id: String(s._id), fullName: c.fullName, status: 'SKIPPED', reason: 'No password on record' });
+        continue;
+      }
+      try {
+        await emailService.sendLoginCredentialsEmail(c.email, c.fullName, c.loginId, c.password, siteUrl());
+        const at = new Date();
+        await Student.updateOne({ _id: s._id }, { $set: { loginSharedAt: at } });
+        results.push({ _id: String(s._id), fullName: c.fullName, status: 'SENT', loginSharedAt: at });
+      } catch (err: any) {
+        results.push({ _id: String(s._id), fullName: c.fullName, status: 'FAILED', reason: String(err?.message || err).slice(0, 200) });
+      }
+      await new Promise((r) => setTimeout(r, 600));
+    }
+    const sent = results.filter((r) => r.status === 'SENT');
+    if (sent.length) {
+      await AuditLog.create({
+        userId: req.user?.userId,
+        userEmail: req.user?.email,
+        userRole: req.user?.role,
+        action: 'STUDENT_LOGIN_SHARED',
+        resource: 'STUDENT',
+        metadata: { via: 'EMAIL', count: sent.length, studentIds: (students as any[]).filter((s) => sent.some((r) => r._id === String(s._id))).map((s) => s.studentId) },
+        ipAddress: req.ip,
+      }).catch(() => undefined);
+    }
+    res.json({ success: true, data: { results } });
   })
 );
 
