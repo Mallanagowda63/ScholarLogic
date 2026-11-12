@@ -97,7 +97,7 @@ export async function disconnectZoho(userId: string) {
 
 async function accessTokenFor(userId: string) {
   requireConfig();
-  const u: any = await User.findById(userId).select('+zoho.refreshToken zoho').lean();
+  const u: any = await User.findById(userId).select('+zoho.refreshToken').lean();
   const refresh = openPassword(u?.zoho?.refreshToken);
   if (!refresh || !u?.zoho?.zsoid) throw new AppError('Connect your Zoho account first (Connect Zoho button).', 400, 'ZOHO_NOT_CONNECTED');
   const tokens = await tokenRequest({ grant_type: 'refresh_token', client_id: env.ZOHO_CLIENT_ID, client_secret: env.ZOHO_CLIENT_SECRET, refresh_token: refresh });
