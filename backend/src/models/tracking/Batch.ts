@@ -34,6 +34,10 @@ export interface IBatch extends Document {
   meetingKey?: string; // Zoho meeting key when created from ScholarLogic
   nextClassAt?: Date;
   meetingUpdatedAt?: Date;
+  // Every Zoho meeting created for this batch, so its recording can be picked up afterwards
+  zohoMeetings?: { meetingKey: string; topic: string; startAt: Date; createdAt: Date }[];
+  // One entry per class recording (from Zoho automatically, or a link the trainer adds)
+  classRecordings?: { _id?: mongoose.Types.ObjectId; title: string; url: string; recordedAt?: Date; durationMinutes?: number; source: 'ZOHO' | 'MANUAL'; zohoRecordingId?: string; meetingKey?: string; addedAt: Date }[];
   history: IBatchHistoryEntry[]; // append-only log of batch changes
   createdAt: Date;
   updatedAt: Date;
@@ -61,6 +65,19 @@ const BatchSchema = new Schema<IBatch>(
     meetingKey: { type: String, default: '' },
     nextClassAt: { type: Date },
     meetingUpdatedAt: { type: Date },
+    zohoMeetings: [{ _id: false, meetingKey: String, topic: String, startAt: Date, createdAt: Date }],
+    classRecordings: [
+      {
+        title: { type: String, default: '' },
+        url: { type: String, required: true },
+        recordedAt: { type: Date },
+        durationMinutes: { type: Number },
+        source: { type: String, enum: ['ZOHO', 'MANUAL'], default: 'MANUAL' },
+        zohoRecordingId: { type: String, default: '' },
+        meetingKey: { type: String, default: '' },
+        addedAt: { type: Date, default: Date.now },
+      },
+    ],
     history: [
       {
         at: { type: Date, default: Date.now },

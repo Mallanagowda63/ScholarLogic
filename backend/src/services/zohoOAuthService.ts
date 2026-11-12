@@ -129,5 +129,30 @@ export async function createZohoMeeting(userId: string, opts: { topic: string; a
   const res: any = await zohoApi(token, `/api/v2/${encodeURIComponent(zsoid)}/sessions.json`, { method: 'POST', body: JSON.stringify(body) });
   const s = res?.session || {};
   if (!s.joinLink) throw new AppError('Zoho created no join link', 502, 'ZOHO_API_FAILED');
-  return { joinLink: String(s.joinLink), startLink: String(s.startLink || ''), meetingKey: String(s.meetingKey || '') };
+  return { joinLink: String(s.joinLink), startLink: String(s.startLink || s.startUrl || s.hostLink || ''), meetingKey: String(s.meetingKey || '') };
+}
+
+export interface ZohoRecording {
+  id: string;
+  meetingKey: string;
+  topic: string;
+  url: string;
+  recordedAt: Date | null;
+  durationMinutes: number;
+  ready: boolean;
+}
+
+/** Recordings in the trainer's Zoho Meeting account (newest first, as Zoho lists them) */
+export async function listZohoRecordings(userId: string): Promise<ZohoRecording[]> {
+  const { token, zsoid } = await accessTokenFor(userId);
+  const res: any = await zohoApi(token, `/meeting/api/v2/${encodeURIComponent(zsoid)}/recordings.json`);
+  return (Array.isArray(res?.recordings) ? res.recordings : []).map((r: any) => ({
+    id: String(r.erecordingId || r.recordingId || r.id || ''),
+    meetingKey: String(r.meetingKey || ''),
+    topic: String(r.topic || ''),
+    url: String(r.shareUrl || r.playUrl || r.downloadUrl || ''),
+    recordedAt: r.startTimeinMs ? new Date(Number(r.startTimeinMs)) : r.startTimeMillis ? new Date(Number(r.startTimeMillis)) : null,
+    durationMinutes: Number(r.durationInMins) || (Number(r.duration) ? Math.round(Number(r.duration) / 60000) : 0),
+    ready: !r.status || /UPLOADED|AVAILABLE|COMPLETED/i.test(String(r.status)),
+  }));
 }

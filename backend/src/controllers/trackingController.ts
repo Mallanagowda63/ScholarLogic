@@ -12,6 +12,7 @@ import { Lesson } from '../models/Lesson';
 import { AuditLog } from '../models/AuditLog';
 import { Notification } from '../models/Notification';
 import { createZohoMeeting } from '../services/zohoOAuthService';
+import { syncBatchRecordings, notifyStudents } from '../services/batchRecordingsService';
 import { getNextStudentId } from '../models/Counter';
 import { Subject } from '../models/tracking/Subject';
 import { TrackCourse } from '../models/tracking/TrackCourse';
@@ -853,11 +854,45 @@ export const createBatchZohoMeeting = async (req: AuthRequest, res: Response) =>
   batch.meetingStartLink = meeting.startLink;
   batch.meetingKey = meeting.meetingKey;
   batch.nextClassAt = start;
+  if (meeting.meetingKey) (batch.zohoMeetings ||= []).push({ meetingKey: meeting.meetingKey, topic, startAt: start, createdAt: new Date() });
   batch.meetingUpdatedAt = new Date();
   batch.history.push({ at: new Date(), action: 'ZOHO_MEETING', details: `Zoho meeting created for ${whenText(start)} (${duration} min)`, byUserId: req.user?.userId as any });
   await batch.save();
   const told = await notifyBatchStudents(batch, 'Class scheduled', `${topic} on ${whenText(start)}. Join from your dashboard.`);
   res.json({ success: true, message: `Zoho meeting created for ${whenText(start)}${told ? `. ${told} students were told.` : ''}`, data: { batch } });
+};
+
+// Trainer: pick up the Zoho recordings of this batch's meetings now (also runs every hour by itself)
+export const syncRecordingsNow = async (req: AuthRequest, res: Response) => {
+  const batch = await myTrainerBatch(req);
+  if (!batch.zohoMeetings?.length) throw new AppError('No Zoho meeting was created for this batch yet', 400, 'NO_ZOHO_MEETINGS');
+  const r = await syncBatchRecordings(String(batch._id));
+  res.json({ success: true, message: r.added ? `${r.added} new recording${r.added === 1 ? '' : 's'} added` : 'No new recordings yet. Zoho can take a while after the class ends.', data: r });
+};
+
+// Trainer: add one recording link by hand (any video link: Zoho, Drive, YouTube unlisted, ...)
+export const addClassRecording = async (req: AuthRequest, res: Response) => {
+  const batch = await myTrainerBatch(req);
+  const url = httpsLink(req.body?.url);
+  if (!url) throw new AppError('Paste the recording link', 400, 'MISSING_FIELDS');
+  const recordedAt = req.body?.recordedAt ? new Date(req.body.recordedAt) : new Date();
+  if (Number.isNaN(recordedAt.getTime())) throw new AppError('Pick a valid class date', 400, 'INVALID_DATE');
+  const title = String(req.body?.title || '').trim().slice(0, 120) || `Class on ${recordedAt.toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short' })}`;
+  (batch.classRecordings ||= []).push({ title, url, recordedAt, source: 'MANUAL', addedAt: new Date() } as any);
+  batch.history.push({ at: new Date(), action: 'RECORDING_ADDED', details: `Recording added: ${title}`, byUserId: req.user?.userId as any });
+  await batch.save();
+  const told = await notifyStudents(batch, 'New class recording', `${title} (${batch.batchCode}) is ready on your dashboard.`);
+  res.json({ success: true, message: `Recording added${told ? `. ${told} students were told.` : ''}`, data: { batch } });
+};
+
+export const removeClassRecording = async (req: AuthRequest, res: Response) => {
+  const batch = await myTrainerBatch(req);
+  const before = batch.classRecordings?.length || 0;
+  batch.classRecordings = (batch.classRecordings || []).filter((r: any) => String(r._id) !== String(req.params.rid)) as any;
+  if ((batch.classRecordings?.length || 0) === before) throw new AppError('Recording not found', 404, 'NOT_FOUND');
+  batch.history.push({ at: new Date(), action: 'RECORDING_REMOVED', details: 'A class recording was removed', byUserId: req.user?.userId as any });
+  await batch.save();
+  res.json({ success: true, message: 'Recording removed', data: { batch } });
 };
 
 export const getMyRecordings = async (req: AuthRequest, res: Response) => {
@@ -866,7 +901,7 @@ export const getMyRecordings = async (req: AuthRequest, res: Response) => {
   const allocations = await StudentBatchAllocation.find({ studentId: student._id, status: { $nin: ['MOVED', 'DROPPED'] } })
     .sort({ allocationDate: -1 })
     .lean();
-  const batches = await Batch.find({ _id: { $in: allocations.map((a) => a.batchId) } }).select('batchCode subjectId trainerId recordingsLink recordingsLinkUpdatedAt meetingLink nextClassAt timing status').lean();
+  const batches = await Batch.find({ _id: { $in: allocations.map((a) => a.batchId) } }).select('batchCode subjectId trainerId recordingsLink recordingsLinkUpdatedAt meetingLink nextClassAt timing status classRecordings').lean();
   const [subjects, trainers] = await Promise.all([
     Subject.find({ _id: { $in: batches.map((b) => b.subjectId) } }).select('name').lean(),
     User.find({ _id: { $in: batches.map((b) => b.trainerId).filter(Boolean) } }).select('fullName').lean(),
@@ -889,6 +924,11 @@ export const getMyRecordings = async (req: AuthRequest, res: Response) => {
         meetingLink: ACTIVE_ALLOCATION_STATUSES.includes(a.status) ? b.meetingLink || '' : '',
         nextClassAt: ACTIVE_ALLOCATION_STATUSES.includes(a.status) ? b.nextClassAt || null : null,
         timing: b.timing || '',
+        classRecordings: (b.classRecordings || [])
+          .slice()
+          .sort((x: any, y: any) => new Date(y.recordedAt || y.addedAt).getTime() - new Date(x.recordedAt || x.addedAt).getTime())
+          .slice(0, 60)
+          .map((r: any) => ({ _id: r._id, title: r.title, url: r.url, recordedAt: r.recordedAt || r.addedAt, durationMinutes: r.durationMinutes || 0 })),
       };
     })
     .filter(Boolean);

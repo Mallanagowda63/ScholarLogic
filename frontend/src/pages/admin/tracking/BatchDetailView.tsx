@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../../../services/api';
 import { RecordingsLinkCard } from './RecordingsLinkCard';
 import { ClassMeetingCard } from './ClassMeetingCard';
+import { ClassRecordingsList } from './ClassRecordingsList';
 import { ArrowLeft, UserPlus, Pencil, CheckCircle2, Circle, PlayCircle, Ban, Flag, Search, ClipboardCheck } from 'lucide-react';
 import {
   AllocationStatusModal,
@@ -426,6 +427,7 @@ export const BatchDetailView: React.FC<{ batchId: string; role: Role }> = ({ bat
       </Card>
 
       <ClassMeetingCard key={`${b.meetingLink || 'none'}-${b.nextClassAt || ''}`} batch={b} canEdit={!isAdmin} onSaved={done} />
+      <ClassRecordingsList key={`rec-${(b.classRecordings || []).length}`} batch={b} canEdit={!isAdmin} onSaved={done} />
       <RecordingsLinkCard key={b.recordingsLink || 'none'} batch={b} onSaved={done} canEdit={!isAdmin} />
 
       <div className="grid gap-6 lg:grid-cols-3">

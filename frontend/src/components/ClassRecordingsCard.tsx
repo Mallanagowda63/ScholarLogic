@@ -13,6 +13,7 @@ interface BatchRecordings {
   meetingLink?: string;
   nextClassAt?: string | null;
   timing?: string;
+  classRecordings?: { _id: string; title: string; url: string; recordedAt?: string; durationMinutes?: number }[];
 }
 
 export const ClassRecordingsCard: React.FC = () => {
@@ -23,6 +24,7 @@ export const ClassRecordingsCard: React.FC = () => {
       .then((res: any) => setRows(res.data.recordings || []))
       .catch(() => setRows([]));
   }, []);
+  const [open, setOpen] = useState<string | null>(null);
   if (!rows?.length) return null;
 
   return (
@@ -33,7 +35,8 @@ export const ClassRecordingsCard: React.FC = () => {
       <p className="mb-3 text-xs text-slate-500">Join your live class here. Every recording of your batch is in one Zoho folder; the same link always has the latest classes.</p>
       <div className="grid gap-3 sm:grid-cols-2">
         {rows.map((r) => (
-          <div key={r.batchId} className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-800/60">
+          <div key={r.batchId} className="rounded-xl border border-slate-100 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-800/60">
+          <div className="flex items-center justify-between gap-3">
             <div className="min-w-0">
               <p className="truncate text-sm font-bold text-slate-900 dark:text-white">{r.subject || r.batchCode}</p>
               <p className="truncate text-[11px] text-slate-500">
@@ -62,10 +65,36 @@ export const ClassRecordingsCard: React.FC = () => {
               >
                 <FolderOpen className="h-3.5 w-3.5" /> Open recordings <ExternalLink className="h-3 w-3" />
               </a>
-            ) : (
-              <span className="shrink-0 text-[11px] font-semibold text-slate-400">No recordings link yet</span>
-            )}
+            ) : !(r.classRecordings || []).length ? (
+              <span className="shrink-0 text-[11px] font-semibold text-slate-400">No recordings yet</span>
+            ) : null}
             </div>
+          </div>
+          {(r.classRecordings || []).length > 0 && (
+            <div className="mt-2 border-t border-slate-200 pt-2 dark:border-slate-700">
+              <button type="button" onClick={() => setOpen(open === r.batchId ? null : r.batchId)} className="text-[11px] font-bold text-violet-700 hover:underline dark:text-violet-300">
+                {open === r.batchId ? 'Hide class recordings' : `Class recordings (${r.classRecordings!.length})`}
+              </button>
+              {open === r.batchId && (
+                <ul className="mt-1.5 space-y-1">
+                  {r.classRecordings!.map((c) => (
+                    <li key={c._id} className="flex items-center justify-between gap-2 text-[11px]">
+                      <span className="min-w-0 truncate text-slate-700 dark:text-slate-300">
+                        {c.title}
+                        <span className="text-slate-400">
+                          {c.recordedAt ? ` • ${new Date(c.recordedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}` : ''}
+                          {c.durationMinutes ? ` • ${c.durationMinutes} min` : ''}
+                        </span>
+                      </span>
+                      <a href={c.url} target="_blank" rel="noopener noreferrer" className="shrink-0 rounded-md bg-violet-600 px-2 py-1 font-bold text-white hover:bg-violet-700">
+                        Watch
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
           </div>
         ))}
       </div>
