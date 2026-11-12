@@ -8,6 +8,8 @@ import { StudentRegistration } from '../models/StudentRegistration';
 import { Student } from '../models/Student';
 import { User } from '../models/User';
 import { Attendance } from '../models/Attendance';
+import { Lesson } from '../models/Lesson';
+import { AuditLog } from '../models/AuditLog';
 import { Notification } from '../models/Notification';
 import { getNextStudentId } from '../models/Counter';
 import { Subject } from '../models/tracking/Subject';
@@ -617,6 +619,47 @@ export const updateBatch = async (req: AuthRequest, res: Response) => {
   }
   await batch.save();
   res.json({ success: true, data: { batch } });
+};
+
+/**
+ * Admin removes a batch made by mistake or no longer needed. Its students go back to "needs a batch" for
+ * that subject (with a timeline note). A batch with attendance or trainer updates keeps its history:
+ * it can't be removed, only cancelled.
+ */
+export const deleteBatch = async (req: AuthRequest, res: Response) => {
+  const batch = await Batch.findById(oid(req.params.id, 'batch'));
+  if (!batch) throw new AppError('Batch not found', 404, 'NOT_FOUND');
+  const [sessions, updates] = await Promise.all([Attendance.countDocuments({ batchId: batch._id }), TrainerDailyUpdate.countDocuments({ batchId: batch._id })]);
+  if (sessions || updates) {
+    throw new AppError(
+      `${batch.batchCode} already has ${sessions ? `${sessions} attendance record${sessions === 1 ? '' : 's'}` : ''}${sessions && updates ? ' and ' : ''}${updates ? `${updates} trainer update${updates === 1 ? '' : 's'}` : ''}. Set its status to Cancelled instead, so that history is kept.`,
+      409,
+      'BATCH_HAS_HISTORY'
+    );
+  }
+  const subject = await Subject.findById(batch.subjectId).select('name').lean();
+  const allocations = await StudentBatchAllocation.find({ batchId: batch._id });
+  const activeStudents = allocations.filter((a) => ACTIVE_ALLOCATION_STATUSES.includes(a.status)).map((a) => a.studentId);
+  for (const studentId of activeStudents) {
+    await addTimeline(studentId, 'ALLOCATION_STATUS', `Batch ${batch.batchCode} removed — needs a new batch`, `${subject?.name || 'Subject'} batch was deleted by an admin`, { subjectId: batch.subjectId }, req.user);
+  }
+  await StudentBatchAllocation.deleteMany({ batchId: batch._id });
+  await Lesson.updateMany({ batchIds: batch._id }, { $pull: { batchIds: batch._id } });
+  await Batch.deleteOne({ _id: batch._id });
+  await AuditLog.create({
+    userId: req.user?.userId,
+    userEmail: req.user?.email,
+    userRole: req.user?.role,
+    action: 'BATCH_DELETED',
+    resource: 'BATCH',
+    metadata: { batchCode: batch.batchCode, subject: subject?.name, students: activeStudents.length, allocations: allocations.length },
+    ipAddress: req.ip,
+  }).catch(() => undefined);
+  res.json({
+    success: true,
+    message: `Batch ${batch.batchCode} removed${activeStudents.length ? `; ${activeStudents.length} student${activeStudents.length === 1 ? '' : 's'} now need${activeStudents.length === 1 ? 's' : ''} a new batch` : ''}`,
+    data: { batchCode: batch.batchCode, studentsToReallocate: activeStudents.length },
+  });
 };
 
 export const getBatchDetail = async (req: AuthRequest, res: Response) => {

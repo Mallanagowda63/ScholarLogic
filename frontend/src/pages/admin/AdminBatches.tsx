@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
-import { Plus, Search } from 'lucide-react';
+import { AlertTriangle, Plus, Search, Trash2 } from 'lucide-react';
 import {
   Card,
   EmptyRow,
@@ -18,6 +18,7 @@ import {
   primaryBtn,
   secondaryBtn,
   statusTone,
+  useToast,
 } from './tracking/shared';
 
 // Short, unique code for a new subject (used in batch IDs): initials for several words, else the first letters
@@ -153,6 +154,30 @@ export const AdminBatches: React.FC = () => {
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('');
   const [subject, setSubject] = useState('');
+  const [removing, setRemoving] = useState<any | null>(null);
+  const [removeBusy, setRemoveBusy] = useState(false);
+  const [removeError, setRemoveError] = useState('');
+  const toast = useToast();
+
+  const askRemove = (b: any) => {
+    setRemoveError('');
+    setRemoving(b);
+  };
+  const removeBatch = async () => {
+    if (!removing) return;
+    setRemoveBusy(true);
+    setRemoveError('');
+    try {
+      const res: any = await api.delete(`/tracking/batches/${removing._id}`);
+      setBatches((list) => list.filter((x) => x._id !== removing._id));
+      setRemoving(null);
+      toast.show(res.message || 'Batch removed');
+    } catch (e: any) {
+      setRemoveError(e.message);
+    } finally {
+      setRemoveBusy(false);
+    }
+  };
 
   useEffect(() => {
     api
@@ -216,7 +241,7 @@ export const AdminBatches: React.FC = () => {
             <table className="w-full min-w-[1000px] text-left text-xs">
               <thead className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 text-[10px] font-bold uppercase text-slate-500">
                 <tr>
-                  {['Batch ID', 'Subject', 'Trainer', 'Mode', 'Timing', 'Start', 'Expected End', 'Seats', 'Progress', 'Status'].map((h) => (
+                  {['Batch ID', 'Subject', 'Trainer', 'Mode', 'Timing', 'Start', 'Expected End', 'Seats', 'Progress', 'Status', ''].map((h) => (
                     <th key={h} className="px-3 py-3 whitespace-nowrap">
                       {h}
                     </th>
@@ -225,7 +250,7 @@ export const AdminBatches: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {visible.length === 0 ? (
-                  <EmptyRow colSpan={10} text={batches.length ? 'No batches match.' : 'No batches yet. Create the first one.'} />
+                  <EmptyRow colSpan={11} text={batches.length ? 'No batches match.' : 'No batches yet. Create the first one.'} />
                 ) : (
                   visible.map((b) => (
                     <tr key={b._id} className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40" onClick={() => navigate(`/admin/batches/${b._id}`)}>
@@ -256,6 +281,20 @@ export const AdminBatches: React.FC = () => {
                       <td className="px-3 py-3">
                         <StatusBadge status={b.status} />
                       </td>
+                      <td className="px-3 py-3 text-right">
+                        <button
+                          type="button"
+                          title={`Remove batch ${b.batchCode}`}
+                          aria-label={`Remove batch ${b.batchCode}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            askRemove(b);
+                          }}
+                          className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-[11px] font-bold text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" /> Remove
+                        </button>
+                      </td>
                     </tr>
                   ))
                 )}
@@ -264,6 +303,43 @@ export const AdminBatches: React.FC = () => {
           </div>
         </Card>
       )}
+
+      {removing && (
+        <Modal title={`Remove batch ${removing.batchCode}?`} subtitle={`${removing.subject?.name || 'Subject'} • ${removing.timing} • ${fmtDate(removing.startDate)}`} onClose={() => !removeBusy && setRemoving(null)}>
+          <div className="space-y-3 text-sm text-slate-600 dark:text-slate-300">
+            <div className="flex gap-3 rounded-xl bg-rose-50 p-3 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+              <p>
+                The batch is deleted for good.
+                {removing.studentCount > 0 ? (
+                  <>
+                    {' '}
+                    Its <b>{removing.studentCount} student{removing.studentCount === 1 ? '' : 's'}</b> go back to “needs a batch” for {removing.subject?.name || 'this subject'}, so you can put them in another batch.
+                  </>
+                ) : (
+                  ' No students are in it.'
+                )}
+              </p>
+            </div>
+            <p className="text-xs text-slate-500">A batch that already has attendance or trainer updates can’t be removed. Set its status to Cancelled instead, so that history is kept.</p>
+            <ErrorNote text={removeError} />
+          </div>
+          <div className="flex justify-end gap-2 pt-4">
+            <button type="button" className={secondaryBtn} disabled={removeBusy} onClick={() => setRemoving(null)}>
+              Keep batch
+            </button>
+            <button
+              type="button"
+              disabled={removeBusy}
+              onClick={removeBatch}
+              className="inline-flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white shadow hover:bg-rose-700 disabled:opacity-50"
+            >
+              <Trash2 className="h-4 w-4" /> {removeBusy ? 'Removing…' : 'Remove batch'}
+            </button>
+          </div>
+        </Modal>
+      )}
+      {toast.node}
 
       {showNew && <CreateBatchModal onClose={() => setShowNew(false)} onDone={(id) => navigate(`/admin/batches/${id}`)} />}
     </div>

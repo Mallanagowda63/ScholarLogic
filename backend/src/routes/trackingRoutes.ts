@@ -33,6 +33,7 @@ import {
   setRecordingsLink,
   getMyRecordings,
   updateBatch,
+  deleteBatch,
   updateTrackedStudent,
 } from '../controllers/trackingController';
 import {
@@ -84,6 +85,7 @@ router.put('/courses/:id', admin, asyncHandler(saveCourse));
 router.get('/batches', admin, asyncHandler(listBatches));
 router.post('/batches', admin, asyncHandler(createBatch));
 router.put('/batches/:id', admin, asyncHandler(updateBatch));
+router.delete('/batches/:id', admin, asyncHandler(deleteBatch));
 
 router.get('/students', admin, asyncHandler(listTrackedStudents));
 router.post('/students', admin, asyncHandler(createTrackedStudent));
