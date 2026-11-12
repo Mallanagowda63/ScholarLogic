@@ -4,6 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
 import { StatCard } from '../../components/StatCard';
 import { Badge } from '../../components/Badge';
+import { ZohoConnectCard } from '../../components/ZohoConnectCard';
 import {
   Users,
   BookOpen,
@@ -142,6 +143,8 @@ export const TrainerDashboard: React.FC = () => {
           color="green"
         />
       </div>
+
+      <ZohoConnectCard />
 
       {/* Trainer Quick Actions Bar (Requirement 21) */}
       <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4">
