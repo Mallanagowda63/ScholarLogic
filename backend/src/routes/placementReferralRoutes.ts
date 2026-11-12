@@ -10,6 +10,7 @@ import { StudentBatchAllocation, ACTIVE_ALLOCATION_STATUSES } from '../models/tr
 import { PlacementReferral, OPEN_REFERRAL_STATUSES } from '../models/PlacementReferral';
 import { sseService } from '../services/sseService';
 import { PLACEHOLDER_EMAIL_DOMAIN } from '../services/trackingService';
+import { trainerStudentIds, assertTrainerCanSee } from '../services/trainerScope';
 
 // Trainers push students to the placement team; the placement team works through them course by course
 const router = Router();
@@ -45,12 +46,13 @@ async function currentBatches(studentIds: mongoose.Types.ObjectId[]) {
   return result;
 }
 
-// Trainer's student list: everyone, flagged when they are in one of this trainer's batches, with their referral state
+// Trainer's student list: a trainer sees only the students in their own batches; admins see everyone
 router.get(
   '/students',
   trainers,
   asyncHandler(async (req: AuthRequest, res: Response) => {
-    const students: any[] = await Student.find({}).select('studentId phone enrollment userId').populate('userId', 'fullName').lean();
+    const filter = req.user?.role === 'TRAINER' ? { _id: { $in: await trainerStudentIds(String(req.user.userId)) } } : {};
+    const students: any[] = await Student.find(filter).select('studentId phone enrollment userId').populate('userId', 'fullName').lean();
     const ids = students.map((s) => s._id);
     const [courses, batchMap, referrals] = await Promise.all([
       TrackCourse.find({}).select('name').lean(),
@@ -88,6 +90,7 @@ router.post(
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const student: any = await Student.findById(oid(req.body?.studentId, 'student')).select('studentId enrollment userId').populate('userId', 'fullName');
     if (!student) throw new AppError('Student not found', 404, 'NOT_FOUND');
+    await assertTrainerCanSee(req.user, student._id);
     const open = await PlacementReferral.findOne({ studentId: student._id, status: { $in: OPEN_REFERRAL_STATUSES } }).select('_id');
     if (open) throw new AppError(`${student.userId?.fullName || student.studentId} is already with the placement team`, 409, 'ALREADY_PUSHED');
 

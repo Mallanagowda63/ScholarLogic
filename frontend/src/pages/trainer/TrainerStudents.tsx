@@ -30,7 +30,7 @@ export const TrainerStudents: React.FC = () => {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [error, setError] = useState('');
   const [q, setQ] = useState('');
-  const [scope, setScope] = useState<'MINE' | 'ALL' | 'PUSHED'>('MINE');
+  const [scope, setScope] = useState<'MINE' | 'PUSHED'>('MINE');
   const [course, setCourse] = useState('');
   const [pushing, setPushing] = useState<Row | null>(null);
   const [note, setNote] = useState('');
@@ -42,8 +42,6 @@ export const TrainerStudents: React.FC = () => {
       .then((res: any) => {
         const list: Row[] = res.data.students;
         setRows(list);
-        // Trainers without batch students yet start on the full list
-        if (!list.some((r) => r.inMyBatch)) setScope((s) => (s === 'MINE' ? 'ALL' : s));
       })
       .catch((e: any) => setError(e.message));
   useEffect(() => {
@@ -94,7 +92,7 @@ export const TrainerStudents: React.FC = () => {
     <div className="space-y-5 pb-12">
       <PageHeader
         title="Students"
-        subtitle="Push students who are ready for jobs to the placement team. They are notified and see the student under the student's course."
+        subtitle="Students in your batches. Push the ones who are ready for jobs to the placement team."
       />
       <ErrorNote text={error} />
 
@@ -102,7 +100,6 @@ export const TrainerStudents: React.FC = () => {
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex flex-wrap items-center gap-1 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-1">
             {tab('MINE', 'My batches', mine)}
-            {tab('ALL', 'All students', rows?.length || 0)}
             {tab('PUSHED', 'Pushed to placement', pushedCount)}
           </div>
           <select id="trainer-course" className={`${inputClass} !w-48 !py-1.5 text-xs`} value={course} onChange={(e) => setCourse(e.target.value)}>
@@ -138,7 +135,7 @@ export const TrainerStudents: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {visible.length === 0 ? (
-                  <EmptyRow colSpan={7} text={scope === 'MINE' ? 'No students in your batches yet. Switch to "All students".' : 'No students match.'} />
+                  <EmptyRow colSpan={7} text={!rows?.length ? 'No students are assigned to your batches yet. Ask the admin to add students to your batch.' : 'No students match.'} />
                 ) : (
                   visible.map((r) => (
                     <tr key={r._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">

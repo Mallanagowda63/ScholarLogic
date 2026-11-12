@@ -12,6 +12,8 @@ import { Question } from '../models/Question';
 import { ExamAttempt } from '../models/ExamAttempt';
 import { Result } from '../models/Result';
 import { Student } from '../models/Student';
+import { User } from '../models/User';
+import { trainerStudentIds, assertTrainerCanSee } from '../services/trainerScope';
 import { Attendance } from '../models/Attendance';
 import { Announcement } from '../models/Announcement';
 import { Message } from '../models/Message';
@@ -225,6 +227,12 @@ export const getTrainerStudents = async (req: AuthRequest, res: Response): Promi
 
   const query: any = {};
   if (batch) query.batch = batch;
+  // A trainer sees only the students in their own batches
+  if (req.user?.role === 'TRAINER') query._id = { $in: await trainerStudentIds(String(req.user.userId)) };
+  if (search) {
+    const users = await User.find({ role: 'STUDENT', fullName: new RegExp(String(search).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') }).select('_id').lean();
+    query.userId = { $in: users.map((u) => u._id) };
+  }
 
   const skip = (Number(page) - 1) * Number(limit);
 
@@ -248,9 +256,6 @@ export const getTrainerStudents = async (req: AuthRequest, res: Response): Promi
     cgpa: st.cgpa,
     skills: st.skills,
     batch: st.batch,
-    courseProgressPct: Math.floor(Math.random() * 40) + 60,
-    avgExamScore: Math.floor(Math.random() * 20) + 75,
-    pendingAssignments: Math.floor(Math.random() * 2),
     status: 'ACTIVE',
   }));
 
@@ -270,8 +275,10 @@ export const getTrainerStudents = async (req: AuthRequest, res: Response): Promi
 export const getStudentDetailForTrainer = async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params;
 
+  if (!mongoose.isValidObjectId(id)) throw new AppError('Student profile not found', 404, 'NOT_FOUND');
   const student = await Student.findById(id).populate('userId', 'fullName email avatarUrl');
   if (!student) throw new AppError('Student profile not found', 404, 'NOT_FOUND');
+  await assertTrainerCanSee(req.user, student._id);
 
   const results = await Result.find({ studentId: student._id }).populate('examId', 'title totalMarks');
   const submissions = await Submission.find({ studentId: student._id }).populate('assignmentId', 'title maxMarks');
@@ -503,8 +510,10 @@ export const getCourseVideoAnalytics = async (req: AuthRequest, res: Response): 
   const { courseId } = req.params;
 
   const lessons = await Lesson.find({ courseId }).select('_id title durationMinutes');
-  const totalStudents = await Student.countDocuments();
-  const videoProgressRecords = await VideoProgress.find({ courseId }).populate('lessonId', 'title');
+  // Trainers see numbers for their own students only
+  const mine = req.user?.role === 'TRAINER' ? await trainerStudentIds(String(req.user.userId)) : null;
+  const totalStudents = mine ? mine.length : await Student.countDocuments();
+  const videoProgressRecords = await VideoProgress.find({ courseId, ...(mine ? { studentId: { $in: mine } } : {}) }).populate('lessonId', 'title');
 
   const lessonAnalytics = lessons.map((l) => {
     const records = videoProgressRecords.filter((r) => r.lessonId && (r.lessonId as any)._id.toString() === l._id.toString());
