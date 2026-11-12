@@ -216,7 +216,7 @@ async function processNew(sub: IIdCardSubmission) {
 }
 
 /** Next free SCLR code: one above the highest used by any student or anyone enrolled on the eSSL machine */
-async function nextSclrCode(): Promise<string> {
+export async function nextSclrCode(): Promise<string> {
   const re = /^SCLR(\d+)$/;
   const [students, machine] = await Promise.all([
     Student.find({ $or: [{ studentId: /^SCLR\d+$/ }, { biometricId: /^SCLR\d+$/ }] }).select('studentId biometricId').lean(),
@@ -237,14 +237,16 @@ async function nextSclrCode(): Promise<string> {
  * New-student form: create the student with the next SCLR code (login ID = Student ID = machine code) and
  * email the login. Skipped when the email or phone already belongs to a student (they get "Needs review").
  */
-export async function createStudentFrom(sub: IIdCardSubmission, byUserId?: string) {
+export async function createStudentFrom(sub: IIdCardSubmission, byUserId?: string): Promise<{ code: string; password: string } | void> {
   if (!sub.name.trim()) {
     sub.note = 'No name on the form';
-    return sub.save();
+    await sub.save();
+    return;
   }
   if (!EMAIL_RE.test(sub.email)) {
     sub.note = `"${sub.email || 'no email'}" is not a valid email address, so the login can't be sent`;
-    return sub.save();
+    await sub.save();
+    return;
   }
   let sameEmail: any = await User.findOne({ email: sub.email }).select('fullName role').lean();
   // An old student login with no student profile behind it (e.g. an early test sign-up) can't be used for
@@ -275,11 +277,13 @@ export async function createStudentFrom(sub: IIdCardSubmission, byUserId?: strin
     sub.note = earlierCreated
       ? `Filled the form again; ${who?.studentId} was already created and emailed`
       : `Already in ScholarLogic${who ? ` as ${who.studentId}` : ''} with this ${sameEmail ? 'email' : 'phone'}: no new student created`;
-    return sub.save();
+    await sub.save();
+    return;
   }
   const course: any = await mapCourse(sub.course);
   let created: any = null;
   let code = '';
+  const password = generatePassword();
   for (let attempt = 0; attempt < 5 && !created; attempt++) {
     code = await nextSclrCode();
     try {
@@ -288,7 +292,7 @@ export async function createStudentFrom(sub: IIdCardSubmission, byUserId?: strin
         email: sub.email,
         phone,
         courseId: course?._id || null,
-        password: generatePassword(),
+        password,
         customStudentId: code,
         registrationSource: 'GOOGLE_FORM',
         joinedDetails: `Added from the ID card form (code ${code})`,
@@ -297,12 +301,14 @@ export async function createStudentFrom(sub: IIdCardSubmission, byUserId?: strin
     } catch (err: any) {
       if (err?.statusCode === 409 && /Student ID/.test(String(err?.message))) continue; // code taken a moment ago: next one
       sub.note = `Could not create the student: ${String(err?.message || err).slice(0, 200)}`;
-      return sub.save();
+      await sub.save();
+    return;
     }
   }
   if (!created) {
     sub.note = 'Could not find a free SCLR code';
-    return sub.save();
+    await sub.save();
+    return;
   }
   await Student.updateOne({ _id: created.student._id }, { $set: { biometricId: code } });
   await AuditLog.create({
@@ -314,11 +320,42 @@ export async function createStudentFrom(sub: IIdCardSubmission, byUserId?: strin
   }).catch(() => undefined);
   try {
     await sendLoginFor(sub, String(created.student._id), byUserId);
-    sub.note = `New student ${code} created${course ? ` (${course.name})` : ''}; login emailed to ${sub.email}`;
+    sub.note = `Verified; new student ${code} created${course ? ` (${course.name})` : ''}; login emailed to ${sub.email}`;
     await sub.save();
   } catch {
     /* EMAIL_FAILED with the reason is saved; the student exists and the admin can send again */
   }
+  return { code, password };
+}
+
+/**
+ * New-student answers are never created automatically: they wait for an admin to verify them.
+ * This only writes down what the admin should know (missing name, bad email, already a student).
+ */
+async function precheckNewStudent(sub: IIdCardSubmission) {
+  const problems: string[] = [];
+  if (!sub.name.trim()) problems.push('no name on the form');
+  if (!EMAIL_RE.test(sub.email)) problems.push(`"${sub.email || 'no email'}" is not a valid email`);
+  const sameEmail: any = EMAIL_RE.test(sub.email) ? await User.findOne({ email: sub.email }).select('role').lean() : null;
+  const emailStudent: any = sameEmail ? await Student.findOne({ userId: sameEmail._id }).select('studentId').lean() : null;
+  const phone = normalizePhone(sub.phone);
+  const phoneStudent: any = phone.length === 10 ? await Student.findOne({ phone: new RegExp(`${phone.split('').join('\\D*')}$`) }).select('studentId').lean() : null;
+  const who = emailStudent || phoneStudent;
+  if (who) {
+    sub.studentId = who._id;
+    sub.loginId = who.studentId;
+    const earlier = await IdCardSubmission.findOne({ _id: { $ne: sub._id }, form: 'NEW_STUDENT', studentId: who._id, status: 'SENT' }).select('_id');
+    if (earlier) {
+      sub.status = 'DUPLICATE';
+      sub.note = `Filled the form again; ${who.studentId} was already verified and emailed`;
+      return sub.save();
+    }
+    problems.push(`already a student (${who.studentId}) with this ${emailStudent ? 'email' : 'phone'}`);
+  } else if (sameEmail && sameEmail.role !== 'STUDENT') {
+    problems.push('this email belongs to a staff account');
+  }
+  sub.note = problems.length ? `Check before verifying: ${problems.join('; ')}` : 'Waiting for admin verification. The ID card number and password are given when verified.';
+  return sub.save();
 }
 
 /** Stores one answer from the sheet the first time it is seen, then processes it */
@@ -337,7 +374,7 @@ async function ingest(payload: any, form: IdCardFormKind): Promise<'new' | 'know
     if (err?.code === 11000) return 'known'; // two syncs at once
     throw err;
   }
-  if (form === 'NEW_STUDENT') await createStudentFrom(sub);
+  if (form === 'NEW_STUDENT') await precheckNewStudent(sub);
   else await processNew(sub);
   return 'new';
 }

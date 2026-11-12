@@ -4,7 +4,7 @@ import { authenticateUser, authorizeRoles, AuthRequest } from '../middleware/aut
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import { IdCardSubmission } from '../models/IdCardSubmission';
-import { connectedForms, createStudentFrom, getLastIdCardSync, sendLoginFor, syncIdCardForm } from '../services/idCardFormService';
+import { connectedForms, createStudentFrom, getLastIdCardSync, nextSclrCode, sendLoginFor, syncIdCardForm } from '../services/idCardFormService';
 
 /** Admin → ID Card Form: answers to the "Student info" form, which ones got their login, and the ones to check */
 const router = Router();
@@ -41,6 +41,14 @@ router.get(
       .populate({ path: 'studentId', select: 'studentId phone userId', populate: { path: 'userId', select: 'fullName' } })
       .lean();
     res.json({ success: true, data: { submissions: subs.map(view), connected: connectedForms(), lastSync: getLastIdCardSync() } });
+  })
+);
+
+// The ID card number the next verified new student will get
+router.get(
+  '/next-code',
+  asyncHandler(async (_req: AuthRequest, res: Response) => {
+    res.json({ success: true, data: { code: await nextSclrCode() } });
   })
 );
 
@@ -87,10 +95,10 @@ router.post(
     if (email) sub.email = email;
     const name = String(req.body?.name || '').trim();
     if (name) sub.name = name;
-    await createStudentFrom(sub, req.user?.userId);
+    const made = await createStudentFrom(sub, req.user?.userId);
     // createStudentFrom updates the status on the same document
     if ((sub.status as string) !== 'SENT') throw new AppError(sub.note || 'The student could not be created', 400, 'CREATE_FAILED');
-    res.json({ success: true, message: sub.note, data: { submission: { status: sub.status, note: sub.note, loginId: sub.loginId } } });
+    res.json({ success: true, message: sub.note, data: { submission: { status: sub.status, note: sub.note, loginId: sub.loginId }, idCardNumber: made?.code || sub.loginId, password: made?.password || '', emailedTo: sub.emailedTo } });
   })
 );
 

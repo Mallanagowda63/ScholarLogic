@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, ExternalLink, Mail, RefreshCw, Search, Trash2, UserPlus, XCircle } from 'lucide-react';
+import { AlertTriangle, BadgeCheck, CheckCircle2, Copy, ExternalLink, IdCard, Mail, RefreshCw, Search, ShieldCheck, Trash2, XCircle } from 'lucide-react';
 import { api } from '../../services/api';
 import { Card, EmptyRow, Modal, PageHeader, Spinner, inputClass, primaryBtn, secondaryBtn, useToast } from './tracking/shared';
 
@@ -57,6 +57,8 @@ export const AdminIdCardForm: React.FC = () => {
   const [lastSync, setLastSync] = useState<{ form: FormKind; at: string; ok: boolean; message: string }[]>([]);
   const [formFilter, setFormFilter] = useState<FormKind | 'BOTH'>('BOTH');
   const [newName, setNewName] = useState('');
+  const [nextCode, setNextCode] = useState('');
+  const [issued, setIssued] = useState<{ name: string; code: string; password: string; email: string; emailed: boolean } | null>(null);
   const [tab, setTab] = useState<Status | 'TODO' | 'ALL'>('TODO');
   const [q, setQ] = useState('');
   const [syncing, setSyncing] = useState(false);
@@ -100,6 +102,13 @@ export const AdminIdCardForm: React.FC = () => {
     setPickQ(a.idCardCode || a.name);
     setEmail(a.email);
     setNewName(a.name);
+    if (a.form === 'NEW_STUDENT' && !a.student && a.status !== 'SENT') {
+      setNextCode('');
+      api
+        .get('/admin/id-card-form/next-code')
+        .then((res: any) => setNextCode(res.data.code))
+        .catch(() => undefined);
+    }
     if (!students) {
       api
         .get('/admin/student-logins')
@@ -129,7 +138,13 @@ export const AdminIdCardForm: React.FC = () => {
     setBusy(true);
     try {
       const res: any = await api.post(`/admin/id-card-form/${review._id}/create`, { email: email.trim(), name: newName.trim() });
-      toast.show(res.message);
+      setIssued({
+        name: newName.trim(),
+        code: res.data.idCardNumber,
+        password: res.data.password,
+        email: res.data.emailedTo || email.trim(),
+        emailed: res.data.submission?.status === 'SENT',
+      });
       setReview(null);
       await load();
     } catch (e: any) {
@@ -209,7 +224,7 @@ export const AdminIdCardForm: React.FC = () => {
     <div className="space-y-5 pb-12">
       <PageHeader
         title="ID Card Form"
-        subtitle="Two Google Forms. Student info: when the ID card number and the student's name or phone agree, their login is emailed. New student: a student is created with the next SCLR code and their login is emailed."
+        subtitle="Two Google Forms. Student info: when the ID card number and the student's name or phone agree, their login is emailed. New student: waits for an admin to verify; then the student gets the next SCLR ID card number and a password by email."
         action={
           <button type="button" className={primaryBtn} onClick={sync} disabled={syncing || !connected?.length}>
             <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} /> {syncing ? 'Checking…' : 'Check form now'}
@@ -337,7 +352,15 @@ export const AdminIdCardForm: React.FC = () => {
                           </button>
                         ) : (
                           <button type="button" className={`${primaryBtn} !px-2.5 !py-1 text-xs`} onClick={() => openReview(a)}>
-                            <CheckCircle2 className="h-3.5 w-3.5" /> Check & send
+                            {a.form === 'NEW_STUDENT' && !a.student ? (
+                              <>
+                                <ShieldCheck className="h-3.5 w-3.5" /> Verify & create
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle2 className="h-3.5 w-3.5" /> Check & send
+                              </>
+                            )}
                           </button>
                         )}
                       </td>
@@ -350,7 +373,102 @@ export const AdminIdCardForm: React.FC = () => {
         )}
       </Card>
 
-      {review && (
+      {review && review.form === 'NEW_STUDENT' && !review.student && review.status !== 'SENT' && (
+        <Modal title="Verify the new student" subtitle={`Form answer from ${review.name || 'unknown'} • ${when(review.submittedAt)}`} onClose={() => !busy && setReview(null)} wide>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div className="space-y-1.5 rounded-xl border border-slate-200 p-4 text-xs dark:border-slate-800">
+              <p className="text-[10px] font-bold uppercase text-slate-500">What they filled in</p>
+              <p className="text-sm font-bold text-slate-900 dark:text-white">{review.name || '—'}</p>
+              <p>Phone: {review.phone || '—'}</p>
+              <p>Email: {review.email || '—'}</p>
+              <p>Course: {review.course || '—'}</p>
+              {review.education && <p>Education: {review.education}</p>}
+              {review.idCardPicUrl && (
+                <a href={review.idCardPicUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-semibold text-brand-600 hover:underline">
+                  Open their photo <ExternalLink className="h-3 w-3" />
+                </a>
+              )}
+              {review.note && <p className="pt-1 text-amber-700 dark:text-amber-300">{review.note}</p>}
+            </div>
+            <div className="space-y-3">
+              <div className="rounded-xl bg-gradient-to-br from-brand-600 to-indigo-600 p-4 text-white shadow-lg shadow-brand-500/20">
+                <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wide text-brand-100">
+                  <IdCard className="h-3.5 w-3.5" /> ID card number they will get
+                </p>
+                <p className="mt-1 font-mono text-2xl font-black">{nextCode || '…'}</p>
+                <p className="text-[11px] text-brand-100">Also their Student ID and Login ID. A password is created when you verify.</p>
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold uppercase text-slate-500" htmlFor="idform-newname">
+                  Full name (as on the ID card)
+                </label>
+                <input id="idform-newname" className={inputClass} value={newName} onChange={(e) => setNewName(e.target.value)} />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold uppercase text-slate-500" htmlFor="idform-newemail">
+                  Email for the login
+                </label>
+                <input id="idform-newemail" type="email" className={inputClass} value={email} onChange={(e) => setEmail(e.target.value)} />
+              </div>
+            </div>
+          </div>
+          <p className="pt-3 text-xs text-slate-500">Nothing is created or sent until you press Verify. After that you see the ID card number and password, and the student gets them by email.</p>
+          <div className="flex flex-wrap justify-end gap-2 pt-4">
+            <button type="button" className={`${secondaryBtn} mr-auto`} disabled={busy} onClick={() => dismiss(review)}>
+              <XCircle className="h-4 w-4" /> Reject
+            </button>
+            <button type="button" className={secondaryBtn} disabled={busy} onClick={() => setReview(null)}>
+              Cancel
+            </button>
+            <button type="button" className={primaryBtn} disabled={busy || !newName.trim() || !/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(email.trim())} onClick={createStudent}>
+              <ShieldCheck className="h-4 w-4" /> {busy ? 'Creating…' : 'Verify, create & email login'}
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {issued && (
+        <Modal title="Student verified" subtitle={issued.name} onClose={() => setIssued(null)}>
+          <div className="text-center">
+            <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 text-white shadow-lg shadow-emerald-500/30">
+              <BadgeCheck className="h-8 w-8" />
+            </span>
+            <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">Write these on the ID card and give them to the student.</p>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <div className="rounded-2xl bg-brand-50 p-4 text-center dark:bg-brand-950/40">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">ID card number / Login ID</p>
+              <p className="mt-1 font-mono text-xl font-black text-brand-700 dark:text-brand-300">{issued.code}</p>
+            </div>
+            <div className="rounded-2xl bg-indigo-50 p-4 text-center dark:bg-indigo-950/40">
+              <p className="text-[10px] font-bold uppercase tracking-wide text-slate-500">Password</p>
+              <p className="mt-1 font-mono text-xl font-black text-indigo-700 dark:text-indigo-300">{issued.password || '—'}</p>
+            </div>
+          </div>
+          <p className={`mt-3 text-center text-xs font-semibold ${issued.emailed ? 'text-emerald-600' : 'text-rose-600'}`}>
+            {issued.emailed ? `Also emailed to ${issued.email}` : `The email to ${issued.email} could not be sent. Give these to the student by hand or press “Send again” in the list.`}
+          </p>
+          <div className="flex justify-end gap-2 pt-4">
+            <button
+              type="button"
+              className={secondaryBtn}
+              onClick={() =>
+                navigator.clipboard
+                  .writeText(`ScholarLogic login for ${issued.name}\nWebsite: https://scholarlogiclms.in/login\nID card / Login ID: ${issued.code}\nPassword: ${issued.password}`)
+                  .then(() => toast.show('Copied'))
+                  .catch(() => toast.show('Could not copy'))
+              }
+            >
+              <Copy className="h-4 w-4" /> Copy
+            </button>
+            <button type="button" className={primaryBtn} onClick={() => setIssued(null)}>
+              Done
+            </button>
+          </div>
+        </Modal>
+      )}
+
+      {review && !(review.form === 'NEW_STUDENT' && !review.student && review.status !== 'SENT') && (
         <Modal title="Check and send the login" subtitle={`Form answer from ${review.name || 'unknown'} • ${when(review.submittedAt)}`} onClose={() => !busy && setReview(null)} wide>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="space-y-1 rounded-xl border border-slate-200 p-3 text-xs dark:border-slate-800">
@@ -402,16 +520,6 @@ export const AdminIdCardForm: React.FC = () => {
               <input id="idform-email" type="email" className={inputClass} value={email} onChange={(e) => setEmail(e.target.value)} />
             </div>
           </div>
-          {review.form === 'NEW_STUDENT' && review.status !== 'SENT' && !review.student && (
-            <div className="mt-4 space-y-2 rounded-xl border border-indigo-200 bg-indigo-50/60 p-3 dark:border-indigo-900 dark:bg-indigo-950/20">
-              <p className="text-xs font-bold text-indigo-800 dark:text-indigo-300">Or create this person as a new student</p>
-              <input id="idform-newname" className={inputClass} value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Full name" />
-              <p className="text-[11px] text-slate-500">They get the next free SCLR code as Student ID and Login ID, a password, and an email with both (sent to the email above).</p>
-              <button type="button" className={primaryBtn} disabled={busy || !newName.trim() || !/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(email.trim())} onClick={createStudent}>
-                <UserPlus className="h-4 w-4" /> {busy ? 'Creating…' : 'Create student & send login'}
-              </button>
-            </div>
-          )}
           <p className="pt-3 text-xs text-slate-500">The student gets their own Login ID and password. If their profile has no email yet, this one is saved to it.</p>
           <div className="flex flex-wrap justify-end gap-2 pt-4">
             {review.status !== 'SENT' && review.status !== 'IGNORED' && (
