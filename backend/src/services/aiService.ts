@@ -90,10 +90,23 @@ Return ONLY a raw valid JSON object (no markdown, no backticks, no markdown code
 }
 `;
 
-        const response = await this.aiClient.models.generateContent({
-          model: env.GEMINI_MODEL || 'gemini-2.5-flash',
-          contents: prompt,
-        });
+        // Same model order as the resume AI: move on when one is overloaded, missing or slow
+        const models = [env.GEMINI_MODEL, ...String(process.env.GEMINI_FALLBACK_MODELS || 'gemini-3.5-flash,gemini-3.1-flash-lite,gemini-3.7-flash,gemini-3.8-flash,gemini-flash-latest,gemini-pro-latest').split(',')]
+          .map((m) => String(m || '').trim())
+          .filter((m, i, arr) => m && arr.indexOf(m) === i);
+        let response: any = null;
+        for (const model of models) {
+          try {
+            response = await Promise.race([
+              this.aiClient.models.generateContent({ model, contents: prompt }),
+              new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 45000)),
+            ]);
+            break;
+          } catch (e: any) {
+            console.warn(`⚠️ Gemini ${model} unavailable for job match: ${String(e?.message || e).slice(0, 80)}`);
+          }
+        }
+        if (!response) throw new Error('All Gemini models are busy');
 
         const rawText = response.text || '';
         const jsonMatch = rawText.match(/\{[\s\S]*\}/);

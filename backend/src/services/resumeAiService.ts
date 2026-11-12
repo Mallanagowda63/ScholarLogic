@@ -70,27 +70,43 @@ const ai = () => {
   client = client || new GoogleGenAI({ apiKey: env.GEMINI_API_KEY });
   return client;
 };
-const MODEL = () => env.GEMINI_MODEL || 'gemini-2.5-flash';
+// Models tried in order: when one is overloaded (503), rate-limited (429), missing (404) or slow, the next one answers.
+// Two rounds with a short pause, all within ~55 s so the page (and nginx) never time out.
+const MODELS = () =>
+  [env.GEMINI_MODEL, ...String(process.env.GEMINI_FALLBACK_MODELS || 'gemini-3.5-flash,gemini-3.1-flash-lite,gemini-3.7-flash,gemini-3.8-flash,gemini-flash-latest,gemini-pro-latest').split(',')]
+    .map((m) => String(m || '').trim())
+    .filter((m, i, arr) => m && arr.indexOf(m) === i);
+
+const withTimeout = <T,>(p: Promise<T>, ms: number) =>
+  Promise.race([p, new Promise<never>((_, rej) => setTimeout(() => rej(new Error(`no answer within ${Math.round(ms / 1000)}s`)), ms))]);
 
 async function askJson(parts: any[]): Promise<any> {
-  let lastError = '';
-  for (let attempt = 1; attempt <= 2; attempt++) {
-    try {
-      const res = await ai().models.generateContent({
-        model: MODEL(),
-        contents: [{ role: 'user', parts }],
-        config: { responseMimeType: 'application/json', temperature: 0.2 },
-      });
-      const text = res.text || '';
-      const json = text.match(/\{[\s\S]*\}/)?.[0];
-      if (json) return JSON.parse(json);
-      lastError = 'The AI did not return a result';
-    } catch (err: any) {
-      lastError = String(err?.message || err);
+  const deadline = Date.now() + 55000;
+  const errors: string[] = [];
+  for (let round = 1; round <= 2; round++) {
+    for (const model of MODELS()) {
+      const left = deadline - Date.now();
+      if (left < 4000) break;
+      try {
+        const res: any = await withTimeout(
+          ai().models.generateContent({ model, contents: [{ role: 'user', parts }], config: { responseMimeType: 'application/json', temperature: 0.2 } }),
+          Math.min(25000, left)
+        );
+        const json = String(res.text || '').match(/\{[\s\S]*\}/)?.[0];
+        if (json) return JSON.parse(json);
+        errors.push(`${model}: empty answer`);
+      } catch (err: any) {
+        const msg = String(err?.message || err);
+        errors.push(`${model}: ${msg.slice(0, 70)}`);
+        // A bad request (e.g. the file itself) fails the same on every model: stop early
+        if (/\b400\b|INVALID_ARGUMENT/i.test(msg) && !/model/i.test(msg)) round = 3;
+        if (round === 3) break;
+      }
     }
+    if (round < 2 && deadline - Date.now() > 8000) await new Promise((r) => setTimeout(r, 3000));
   }
-  if (/429|quota|rate/i.test(lastError)) throw new AppError('The AI is busy right now. Please try again in a minute.', 503, 'AI_BUSY');
-  throw new AppError(`The AI could not finish: ${lastError.slice(0, 160)}`, 502, 'AI_FAILED');
+  console.warn('⚠️ Resume AI failed on every model:', errors.join(' | '));
+  throw new AppError('Google’s AI is very busy right now. Please try again in a few minutes.', 503, 'AI_BUSY');
 }
 
 /** Uploaded resume (PDF / DOCX / TXT) → the editable resume sections */

@@ -225,6 +225,8 @@ export const ResumeBuilder: React.FC = () => {
   const [match, setMatch] = useState<ATSAnalysis | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Saved | null>(null);
   const [skillDraft, setSkillDraft] = useState('');
+  // Which resume the AI analysis looks at: the one open in the editor, or any saved version
+  const [analyseId, setAnalyseId] = useState<'CURRENT' | string>('CURRENT');
   const fileRef = useRef<HTMLInputElement>(null);
 
   const say = (text: string, ok = true) => {
@@ -317,11 +319,16 @@ export const ResumeBuilder: React.FC = () => {
     }
   };
 
+  const analysed = (): { data: ResumeData; id: string | null; label: string } => {
+    const v = analyseId !== 'CURRENT' ? saved.find((r) => r._id === analyseId) : null;
+    return v ? { data: normalize(v.data), id: v._id, label: v.versionName } : { data, id: currentId, label: versionName || 'Resume being edited' };
+  };
+
   const runReview = async () => {
     setBusy('review');
     setReview(null);
     try {
-      const res: any = await api.post('/resumes/review', { data, targetRole });
+      const res: any = await api.post('/resumes/review', { data: analysed().data, targetRole });
       setReview(res.data.review);
     } catch (e: any) {
       say(e.message, false);
@@ -335,7 +342,8 @@ export const ResumeBuilder: React.FC = () => {
     setBusy('match');
     setMatch(null);
     try {
-      const res: any = await api.post('/resumes/analyze', { data, resumeId: currentId, jobDescriptionText: job.text, jobTitle: job.title, companyName: job.company });
+      const a = analysed();
+      const res: any = await api.post('/resumes/analyze', { data: a.data, resumeId: a.id, jobDescriptionText: job.text, jobTitle: job.title, companyName: job.company });
       setMatch(res.data.analysis);
     } catch (err: any) {
       say(err.message, false);
@@ -632,6 +640,34 @@ export const ResumeBuilder: React.FC = () => {
 
       {/* AI ANALYSIS */}
       {tab === 'REVIEW' && (
+        <div className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900 sm:flex-row sm:items-center">
+          <label htmlFor="rb-analyse" className="flex items-center gap-2 text-xs font-bold text-slate-700 dark:text-slate-200">
+            <FileText className="h-4 w-4 text-brand-500" /> Resume to analyse
+          </label>
+          <select
+            id="rb-analyse"
+            className={`${inputCls} sm:max-w-md`}
+            value={analyseId}
+            onChange={(e) => {
+              setAnalyseId(e.target.value);
+              setReview(null);
+              setMatch(null);
+              const v = saved.find((r) => r._id === e.target.value);
+              if (v?.data?.headline) setTargetRole(v.data.headline);
+            }}
+          >
+            <option value="CURRENT">The one open in the editor{versionName ? ` (${versionName}${dirty ? ', unsaved changes' : ''})` : ''}</option>
+            {saved.map((r) => (
+              <option key={r._id} value={r._id}>
+                {r.versionName}
+                {r.isDefault ? ' ★ main' : ''} • {new Date(r.updatedAt).toLocaleDateString('en-IN')}
+              </option>
+            ))}
+          </select>
+          <span className="text-[11px] text-slate-500">The AI review and the job match use this resume.</span>
+        </div>
+      )}
+      {tab === 'REVIEW' && (
         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
           <div className="space-y-4">
             <div className="space-y-3 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm dark:border-slate-800 dark:bg-slate-900">
@@ -701,7 +737,15 @@ export const ResumeBuilder: React.FC = () => {
           </div>
 
           <div className="space-y-4">
-            {review && (
+            {review && analyseId !== 'CURRENT' && analyseId !== currentId && (
+              <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">
+                These results are for “{analysed().label}”. To apply the one-click fixes, open that version first.
+                <button type="button" className="ml-2 font-bold underline" onClick={() => { const v = saved.find((r) => r._id === analyseId); if (v) { openVersion(v); setTab('REVIEW'); setAnalyseId('CURRENT'); } }}>
+                  Open it
+                </button>
+              </div>
+            )}
+            {review && (analyseId === 'CURRENT' || analyseId === currentId) && (
               <div className="space-y-4 rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 to-brand-50 p-5 dark:border-violet-900 dark:from-violet-950/30 dark:to-brand-950/20">
                 <p className="flex items-center gap-2 text-sm font-bold text-slate-900 dark:text-white">
                   <Sparkles className="h-4 w-4 text-violet-500" /> One-click improvements
