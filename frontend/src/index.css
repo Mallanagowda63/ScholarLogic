@@ -30,3 +30,17 @@
 ::-webkit-scrollbar-thumb:hover {
   @apply bg-slate-400 dark:bg-slate-600;
 }
+
+/* ScholarLogic loading animation (components/BrandLoader.tsx and the first-load screen in index.html) */
+@keyframes sl-orbit { to { transform: rotate(360deg); } }
+@keyframes sl-pop { 0% { transform: scale(0.6) rotate(-12deg); opacity: 0; } 60% { transform: scale(1.08) rotate(3deg); opacity: 1; } 100% { transform: scale(1) rotate(0); } }
+@keyframes sl-fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@keyframes sl-bar { 0% { transform: translateX(-110%); } 100% { transform: translateX(330%); } }
+.sl-orbit { animation: sl-orbit 9s linear infinite; }
+.sl-orbit-dot { animation: sl-orbit 2.4s linear infinite; }
+.sl-pop { animation: sl-pop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.sl-fade { animation: sl-fade 0.35s ease-out both; }
+.sl-bar { animation: sl-bar 1.3s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .sl-orbit, .sl-orbit-dot, .sl-pop, .sl-fade, .sl-bar { animation: none; }
+}

@@ -1,5 +1,6 @@
-import React, { Suspense, lazy } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import React, { Suspense, lazy, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrandLoader } from './components/BrandLoader';
 import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { RoleGuard } from './components/RoleGuard';
@@ -21,16 +22,49 @@ import { About } from './pages/public/About';
 
 // Portal pages are code-split so public visitors don't download the whole app.
 // Pages use named exports, so map the named export to the `default` React.lazy expects.
-const lazyPage = <K extends string>(
-  loader: () => Promise<Record<K, React.ComponentType>>,
-  name: K
-) => lazy(() => loader().then((m) => ({ default: m[name] })));
+// Each portal's pages are also remembered here, so they can be downloaded quietly in the background
+// right after someone opens that portal: clicking around afterwards opens pages instantly.
+type Portal = 'admin' | 'student' | 'trainer' | 'placement';
+const portalLoaders: Record<Portal, Array<() => Promise<unknown>>> = { admin: [], student: [], trainer: [], placement: [] };
+const portalOf = (name: string): Portal =>
+  name.startsWith('Admin')
+    ? 'admin'
+    : name.startsWith('Trainer') || name === 'CourseContentEditor' || name === 'StudentDetailView'
+      ? 'trainer'
+      : name.startsWith('Placement')
+        ? 'placement'
+        : 'student';
 
-const PageFallback: React.FC = () => (
-  <div className="flex min-h-[50vh] items-center justify-center">
-    <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-500 border-t-transparent" />
-  </div>
-);
+const lazyPage = <K extends string>(loader: () => Promise<Record<K, React.ComponentType>>, name: K) => {
+  portalLoaders[portalOf(name)].push(loader);
+  return lazy(() => loader().then((m) => ({ default: m[name] })));
+};
+
+const PageFallback: React.FC = () => <BrandLoader />;
+
+// After the first page of a portal has shown, fetch the rest of that portal's pages while the browser is idle
+const prefetched = new Set<Portal>();
+const PortalPrefetcher: React.FC = () => {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    const portal = (['admin', 'student', 'trainer', 'placement'] as Portal[]).find((p) => pathname.startsWith(`/${p}`));
+    if (!portal || prefetched.has(portal)) return;
+    const conn = (navigator as any).connection;
+    if (conn?.saveData || /(^|-)2g$/.test(conn?.effectiveType || '')) return; // respect data saver and very slow networks
+    prefetched.add(portal);
+    const idle = (cb: () => void) => ((window as any).requestIdleCallback ? (window as any).requestIdleCallback(cb, { timeout: 3000 }) : setTimeout(cb, 1200));
+    const queue = [...portalLoaders[portal]];
+    const next = () => {
+      const load = queue.shift();
+      if (!load) return;
+      load()
+        .catch(() => undefined)
+        .finally(() => idle(next));
+    };
+    idle(next);
+  }, [pathname]);
+  return null;
+};
 
 // Student Pages
 const StudentDashboard = lazyPage(() => import('./pages/student/StudentDashboard'), 'StudentDashboard');
@@ -104,6 +138,7 @@ export const App: React.FC = () => {
     <ThemeProvider>
       <AuthProvider>
         <BrowserRouter>
+          <PortalPrefetcher />
           <Suspense fallback={<PageFallback />}>
           <Routes>
             {/* Public Marketing Routes */}

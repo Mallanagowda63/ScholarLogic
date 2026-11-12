@@ -8,12 +8,55 @@
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ScholarLogic — Career & Learning Hub</title>
+    <link rel="preload" as="image" href="/logo.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Font loads without holding up the first paint; the system font shows until it arrives -->
+    <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" media="print" onload="this.media='all'">
+    <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"></noscript>
+    <style>
+      /* First screen while the app starts (replaced as soon as React renders) */
+      .sl-boot { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; background: #f8fafc; color: #475569; }
+      .sl-boot-ring { position: relative; width: 112px; height: 112px; display: flex; align-items: center; justify-content: center; }
+      .sl-boot-ring::before { content: ''; position: absolute; inset: 0; border-radius: 50%; border: 2px dashed rgba(12, 142, 233, 0.45); animation: slb-spin 9s linear infinite; }
+      .sl-boot-dot { position: absolute; inset: 0; animation: slb-spin 2.4s linear infinite; }
+      .sl-boot-dot::after { content: ''; position: absolute; top: -6px; left: 50%; width: 12px; height: 12px; margin-left: -6px; border-radius: 50%; background: linear-gradient(135deg, #36abfa, #6366f1); box-shadow: 0 2px 8px rgba(12, 142, 233, 0.5); }
+      .sl-boot-icon { width: 56px; height: 56px; border-radius: 16px; background: linear-gradient(135deg, #0c8ee9, #4f46e5); display: flex; align-items: center; justify-content: center; box-shadow: 0 10px 24px rgba(12, 142, 233, 0.3); }
+      .sl-boot-icon svg { width: 28px; height: 28px; }
+      .sl-boot-icon .slb-cap, .sl-boot-icon .slb-bag { position: absolute; animation: slb-swap 3.2s ease-in-out infinite; }
+      .sl-boot-icon .slb-bag { animation-delay: -1.6s; }
+      .sl-boot img { height: 36px; width: auto; }
+      .sl-boot-bar { width: 192px; height: 6px; border-radius: 999px; background: #e2e8f0; overflow: hidden; }
+      .sl-boot-bar span { display: block; width: 33%; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #0c8ee9, #6366f1, #0070c7); animation: slb-bar 1.3s ease-in-out infinite; }
+      .sl-boot p { margin: 0; font-size: 14px; font-weight: 600; }
+      .sl-boot p span { display: inline-block; }
+      @keyframes slb-spin { to { transform: rotate(360deg); } }
+      @keyframes slb-bar { 0% { transform: translateX(-110%); } 100% { transform: translateX(330%); } }
+      @keyframes slb-swap { 0%, 45% { opacity: 1; transform: scale(1); } 50%, 95% { opacity: 0; transform: scale(0.6); } 100% { opacity: 1; transform: scale(1); } }
+      @media (prefers-color-scheme: dark) {
+        .sl-boot { background: #020617; color: #cbd5e1; }
+        .sl-boot-bar { background: #1e293b; }
+        .sl-boot img { filter: brightness(0) invert(1); }
+      }
+      @media (prefers-reduced-motion: reduce) { .sl-boot *, .sl-boot *::before, .sl-boot *::after { animation: none !important; } }
+    </style>
   </head>
   <body class="h-full bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 font-sans antialiased selection:bg-brand-500 selection:text-white">
-    <div id="root"></div>
+    <div id="root">
+      <div class="sl-boot" role="status" aria-label="Loading ScholarLogic">
+        <div class="sl-boot-ring">
+          <div class="sl-boot-dot"></div>
+          <div class="sl-boot-icon">
+            <svg class="slb-cap" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.42 10.92a1 1 0 0 0-.02-1.84L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.83l8.57 3.91a2 2 0 0 0 1.66 0z"/><path d="M22 10v6"/><path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5"/></svg>
+            <svg class="slb-bag" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/><rect width="20" height="14" x="2" y="6" rx="2"/></svg>
+          </div>
+        </div>
+        <img src="/logo.png" alt="ScholarLogic" />
+        <div class="sl-boot-bar"><span></span></div>
+        <p><span>Learning today, a career tomorrow…</span></p>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
