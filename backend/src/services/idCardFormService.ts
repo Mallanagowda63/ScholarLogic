@@ -5,6 +5,7 @@ import { env } from '../config/env';
 import { Student } from '../models/Student';
 import { User } from '../models/User';
 import { AuditLog } from '../models/AuditLog';
+import { BiometricDeviceUser } from '../models/BiometricIntegration';
 import { IdCardSubmission, IIdCardSubmission } from '../models/IdCardSubmission';
 import { openPassword, sealPassword } from '../utils/credentialVault';
 import { isPlaceholderEmail } from './trackingService';
@@ -31,17 +32,54 @@ export function normalizeIdCard(raw: string): string {
   const m = /scl\s*r?\s*[-_ ]?\s*(\d{1,5})/i.exec(s);
   if (m) return `SCLR${String(Number(m[1])).padStart(3, '0')}`;
   if (/^\d{1,4}$/.test(s)) return `SCLR${String(Number(s)).padStart(3, '0')}`; // just the number from the card
-  if (!s || /^(na|n\/a|nil|none|no|-)\b/i.test(s) || /not|didn|receive|recieve/i.test(s)) return '';
+  if (!s || /^(na|n\/a|nil|none|no|-)\b/i.test(s) || /not|don'?t|didn|have|receive|recieve/i.test(s)) return '';
   return s.toUpperCase().replace(/\s+/g, '');
 }
 
-const squash = (s: string) => String(s || '').toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/).filter((w) => w.length >= 3);
+/** The long RFID number printed on the card ("0004694760 071,41704" → 4694760), or '' */
+export const cardNumberIn = (raw: string) => {
+  const m = /(\d{6,12})/.exec(String(raw || ''));
+  return m ? String(Number(m[1])) : '';
+};
+
+/** Card ID as the website knows it: the SCLR code, also when the student typed the long card number instead */
+export async function resolveIdCode(raw: string): Promise<string> {
+  const code = normalizeIdCard(raw);
+  if (/^SCLR\d+$/.test(code)) return code;
+  const card = cardNumberIn(raw);
+  if (card) {
+    const viaStudent: any = await Student.findOne({ cardNumber: card }).select('biometricId studentId').lean();
+    if (viaStudent) return viaStudent.biometricId || viaStudent.studentId;
+    const viaMachine: any = await BiometricDeviceUser.findOne({ card }).select('pin').lean();
+    if (viaMachine?.pin) return String(viaMachine.pin).toUpperCase();
+  }
+  return code;
+}
+
+// Surnames and titles many students share: they never prove two names are the same person on their own
+const COMMON = new Set(['kumar', 'kumari', 'reddy', 'shaik', 'shaikh', 'sheikh', 'mohammed', 'mohammad', 'mohamed', 'muhammad', 'singh', 'gowda', 'naik', 'babu', 'rao', 'raju', 'devi', 'sri', 'shree', 'shri']);
+const squash = (s: string) => String(s || '').toLowerCase().replace(/[^a-z\s]/g, ' ').split(/\s+/).filter((w) => w.length >= 3 && !COMMON.has(w));
+
+/** Letters that differ between two words (Levenshtein distance) */
+const editDistance = (a: string, b: string) => {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++)
+    for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+  return d[a.length][b.length];
+};
+
+/** Same word allowing a small spelling difference: Sandhya/Sandya, Yuvaraj/Yuvuraj, Mohammed/Mohammaed */
+const sameWord = (w: string, x: string) =>
+  w === x ||
+  (x.length >= 4 && w.startsWith(x)) ||
+  (w.length >= 4 && x.startsWith(w)) ||
+  (Math.min(w.length, x.length) >= 5 && editDistance(w, x) <= (Math.min(w.length, x.length) >= 8 ? 2 : 1));
 
 /** Same person? At least one real name word in common (initials and short words are ignored) */
 export function namesMatch(a: string, b: string): boolean {
-  const wa = squash(a);
-  const wb = new Set(squash(b));
-  return wa.some((w) => wb.has(w) || [...wb].some((x) => (x.length >= 4 && w.startsWith(x)) || (w.length >= 4 && x.startsWith(w))));
+  const wb = squash(b);
+  return squash(a).some((w) => wb.some((x) => sameWord(w, x)));
 }
 
 // Answers arrive as question/answer pairs; find one by what the question says
@@ -66,7 +104,7 @@ function readFields(payload: any) {
     course: answerFor(answers, /course/i),
     education: answerFor(answers, /education|background|degree|qualification/i),
     idCardRaw,
-    idCardCode: normalizeIdCard(idCardRaw),
+    idCardCode: '',
     idCardPicUrl: answerFor(answers, /card\s*pic|card\s*photo|photo\s*of.*card|id\s*card\s*image/i),
   };
 }
@@ -177,6 +215,7 @@ async function processNew(sub: IIdCardSubmission) {
 /** Stores one answer from the sheet the first time it is seen, then processes it */
 async function ingest(payload: any): Promise<'new' | 'known' | 'empty'> {
   const fields = readFields(payload);
+  fields.idCardCode = await resolveIdCode(fields.idCardRaw);
   if (!fields.name && !fields.email && !fields.idCardRaw) return 'empty';
   const submittedAt = payload?.submittedAt && !Number.isNaN(new Date(payload.submittedAt).getTime()) ? new Date(payload.submittedAt) : new Date();
   const externalSubmissionId =
