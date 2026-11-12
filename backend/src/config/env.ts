@@ -34,6 +34,9 @@ export const env = {
   // "Student info" ID-card form: its own Apps Script web app and secret; students get their login emailed
   IDCARD_FORM_SYNC_URL: (process.env.IDCARD_FORM_SYNC_URL || '').trim(),
   IDCARD_FORM_SECRET: (process.env.IDCARD_FORM_SECRET || '').trim(),
+  // New-student ID card form: each answer creates a student with the next SCLR code and emails the login
+  NEWID_FORM_SYNC_URL: (process.env.NEWID_FORM_SYNC_URL || '').trim(),
+  NEWID_FORM_SECRET: (process.env.NEWID_FORM_SECRET || '').trim(),
 
   // eSSL/ZKTeco ADMS push: comma-separated device serial numbers allowed to post punches (empty = accept any)
   BIOMETRIC_DEVICE_SERIALS: (process.env.BIOMETRIC_DEVICE_SERIALS || '')

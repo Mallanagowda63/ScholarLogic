@@ -4,7 +4,7 @@ import { authenticateUser, authorizeRoles, AuthRequest } from '../middleware/aut
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import { IdCardSubmission } from '../models/IdCardSubmission';
-import { getLastIdCardSync, isIdCardSyncConfigured, sendLoginFor, syncIdCardForm } from '../services/idCardFormService';
+import { connectedForms, createStudentFrom, getLastIdCardSync, sendLoginFor, syncIdCardForm } from '../services/idCardFormService';
 
 /** Admin → ID Card Form: answers to the "Student info" form, which ones got their login, and the ones to check */
 const router = Router();
@@ -12,6 +12,7 @@ router.use(authenticateUser, authorizeRoles('ADMIN', 'SUPER_ADMIN'));
 
 const view = (s: any) => ({
   _id: s._id,
+  form: s.form || 'STUDENT_INFO',
   submittedAt: s.submittedAt,
   name: s.name,
   phone: s.phone,
@@ -39,16 +40,17 @@ router.get(
       .limit(1000)
       .populate({ path: 'studentId', select: 'studentId phone userId', populate: { path: 'userId', select: 'fullName' } })
       .lean();
-    res.json({ success: true, data: { submissions: subs.map(view), connected: isIdCardSyncConfigured(), lastSync: getLastIdCardSync() } });
+    res.json({ success: true, data: { submissions: subs.map(view), connected: connectedForms(), lastSync: getLastIdCardSync() } });
   })
 );
 
 router.post(
   '/sync',
   asyncHandler(async (_req: AuthRequest, res: Response) => {
-    const result = await syncIdCardForm('manual');
-    if (!result.ok) throw new AppError(result.message, 502, 'SYNC_FAILED');
-    res.json({ success: true, message: result.message, data: { result } });
+    const results = await syncIdCardForm('manual');
+    if (!results.length) throw new AppError('No form is connected yet', 400, 'NOT_CONNECTED');
+    if (results.every((r) => !r.ok)) throw new AppError(results.map((r) => r.message).join(' • '), 502, 'SYNC_FAILED');
+    res.json({ success: true, message: results.map((r) => r.message).join(' • '), data: { results } });
   })
 );
 
@@ -69,6 +71,26 @@ router.post(
       throw new AppError(String(err?.message || err), 400, 'SEND_FAILED');
     }
     res.json({ success: true, message: `Login emailed to ${sub.emailedTo}`, data: { submission: { status: sub.status, note: sub.note, emailedTo: sub.emailedTo, emailedAt: sub.emailedAt, loginId: sub.loginId } } });
+  })
+);
+
+// New-student answer an admin checked (e.g. fixed the email): create the student with the next SCLR code and email
+router.post(
+  '/:id/create',
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    if (!mongoose.isValidObjectId(req.params.id)) throw new AppError('Invalid answer', 400, 'INVALID_ID');
+    const sub = await IdCardSubmission.findById(req.params.id);
+    if (!sub) throw new AppError('Answer not found', 404, 'NOT_FOUND');
+    if (sub.form !== 'NEW_STUDENT') throw new AppError('Only answers from the new-student form create students', 400, 'WRONG_FORM');
+    if (sub.status === 'SENT') throw new AppError('A student was already created for this answer', 400, 'ALREADY_SENT');
+    const email = String(req.body?.email || '').trim().toLowerCase();
+    if (email) sub.email = email;
+    const name = String(req.body?.name || '').trim();
+    if (name) sub.name = name;
+    await createStudentFrom(sub, req.user?.userId);
+    // createStudentFrom updates the status on the same document
+    if ((sub.status as string) !== 'SENT') throw new AppError(sub.note || 'The student could not be created', 400, 'CREATE_FAILED');
+    res.json({ success: true, message: sub.note, data: { submission: { status: sub.status, note: sub.note, loginId: sub.loginId } } });
   })
 );
 

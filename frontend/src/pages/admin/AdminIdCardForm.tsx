@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, ExternalLink, Mail, RefreshCw, Search, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ExternalLink, Mail, RefreshCw, Search, UserPlus, XCircle } from 'lucide-react';
 import { api } from '../../services/api';
 import { Card, EmptyRow, Modal, PageHeader, Spinner, inputClass, primaryBtn, secondaryBtn, useToast } from './tracking/shared';
 
@@ -7,9 +7,13 @@ import { Card, EmptyRow, Modal, PageHeader, Spinner, inputClass, primaryBtn, sec
 // the student's name or phone agree, the login is emailed automatically; the rest wait here for a quick check.
 
 type Status = 'SENT' | 'NEEDS_REVIEW' | 'EMAIL_FAILED' | 'DUPLICATE' | 'IGNORED';
+type FormKind = 'STUDENT_INFO' | 'NEW_STUDENT';
+
+const FORM_LABEL: Record<FormKind, string> = { STUDENT_INFO: 'Student info', NEW_STUDENT: 'New student' };
 
 interface Answer {
   _id: string;
+  form: FormKind;
   submittedAt: string;
   name: string;
   phone: string;
@@ -49,8 +53,10 @@ const when = (d?: string | null) => (d ? new Date(d).toLocaleString('en-IN', { d
 export const AdminIdCardForm: React.FC = () => {
   const toast = useToast();
   const [answers, setAnswers] = useState<Answer[] | null>(null);
-  const [connected, setConnected] = useState(true);
-  const [lastSync, setLastSync] = useState<{ at: string; ok: boolean; message: string } | null>(null);
+  const [connected, setConnected] = useState<FormKind[] | null>(null);
+  const [lastSync, setLastSync] = useState<{ form: FormKind; at: string; ok: boolean; message: string }[]>([]);
+  const [formFilter, setFormFilter] = useState<FormKind | 'BOTH'>('BOTH');
+  const [newName, setNewName] = useState('');
   const [tab, setTab] = useState<Status | 'TODO' | 'ALL'>('TODO');
   const [q, setQ] = useState('');
   const [syncing, setSyncing] = useState(false);
@@ -67,7 +73,7 @@ export const AdminIdCardForm: React.FC = () => {
       .then((res: any) => {
         setAnswers(res.data.submissions);
         setConnected(res.data.connected);
-        setLastSync(res.data.lastSync);
+        setLastSync(res.data.lastSync || []);
       })
       .catch((e: any) => toast.show(e.message));
   useEffect(() => {
@@ -92,6 +98,7 @@ export const AdminIdCardForm: React.FC = () => {
     setPickId(a.student?._id || '');
     setPickQ(a.idCardCode || a.name);
     setEmail(a.email);
+    setNewName(a.name);
     if (!students) {
       api
         .get('/admin/student-logins')
@@ -105,6 +112,22 @@ export const AdminIdCardForm: React.FC = () => {
     setBusy(true);
     try {
       const res: any = await api.post(`/admin/id-card-form/${review._id}/send`, { studentId: pickId, email: email.trim() });
+      toast.show(res.message);
+      setReview(null);
+      await load();
+    } catch (e: any) {
+      toast.show(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // New-student answer: create the student with the next SCLR code and email the login
+  const createStudent = async () => {
+    if (!review) return;
+    setBusy(true);
+    try {
+      const res: any = await api.post(`/admin/id-card-form/${review._id}/create`, { email: email.trim(), name: newName.trim() });
       toast.show(res.message);
       setReview(null);
       await load();
@@ -131,22 +154,24 @@ export const AdminIdCardForm: React.FC = () => {
   const counts = useMemo(() => {
     const c: Record<string, number> = { ALL: 0, TODO: 0, SENT: 0, NEEDS_REVIEW: 0, EMAIL_FAILED: 0, DUPLICATE: 0, IGNORED: 0 };
     (answers || []).forEach((a) => {
+      if (formFilter !== 'BOTH' && a.form !== formFilter) return;
       c.ALL += 1;
       c[a.status] += 1;
       if (a.status === 'NEEDS_REVIEW' || a.status === 'EMAIL_FAILED') c.TODO += 1;
     });
     return c;
-  }, [answers]);
+  }, [answers, formFilter]);
 
   const visible = useMemo(() => {
     const term = q.trim().toLowerCase();
     return (answers || []).filter((a) => {
+      if (formFilter !== 'BOTH' && a.form !== formFilter) return false;
       if (tab === 'TODO' && a.status !== 'NEEDS_REVIEW' && a.status !== 'EMAIL_FAILED') return false;
       if (tab !== 'TODO' && tab !== 'ALL' && a.status !== tab) return false;
       if (!term) return true;
       return [a.name, a.email, a.phone, a.idCardRaw, a.idCardCode, a.loginId, a.student?.fullName, a.course].join(' ').toLowerCase().includes(term);
     });
-  }, [answers, tab, q]);
+  }, [answers, tab, q, formFilter]);
 
   const options = useMemo(() => {
     const term = pickQ.trim().toLowerCase();
@@ -168,26 +193,42 @@ export const AdminIdCardForm: React.FC = () => {
     <div className="space-y-5 pb-12">
       <PageHeader
         title="ID Card Form"
-        subtitle="Answers to the “Student info - ScholarLogic” Google Form. When the ID card number and the student's name or phone agree, their login is emailed automatically."
+        subtitle="Two Google Forms. Student info: when the ID card number and the student's name or phone agree, their login is emailed. New student: a student is created with the next SCLR code and their login is emailed."
         action={
-          <button type="button" className={primaryBtn} onClick={sync} disabled={syncing || !connected}>
+          <button type="button" className={primaryBtn} onClick={sync} disabled={syncing || !connected?.length}>
             <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} /> {syncing ? 'Checking…' : 'Check form now'}
           </button>
         }
       />
 
-      {!connected && (
-        <p className="flex items-start gap-2 rounded-xl bg-amber-50 p-3 text-sm font-semibold text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> The form is not connected yet. Add the Apps Script to the response sheet and put its web app link in the server settings.
+      {connected &&
+        (['STUDENT_INFO', 'NEW_STUDENT'] as FormKind[])
+          .filter((k) => !connected.includes(k))
+          .map((k) => (
+            <p key={k} className="flex items-start gap-2 rounded-xl bg-amber-50 p-3 text-sm font-semibold text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /> The {FORM_LABEL[k]} form is not connected yet. Add the Apps Script to its response sheet and put the web app link in the server settings.
+            </p>
+          ))}
+      {lastSync.map((r) => (
+        <p key={r.form} className={`text-xs ${r.ok ? 'text-slate-500' : 'text-rose-600'}`}>
+          Last check {when(r.at)}: {r.message}.
         </p>
-      )}
-      {lastSync && (
-        <p className={`text-xs ${lastSync.ok ? 'text-slate-500' : 'text-rose-600'}`}>
-          Last check {when(lastSync.at)}: {lastSync.message}. The form is checked by itself every 5 minutes.
-        </p>
-      )}
+      ))}
+      {connected && connected.length > 0 && <p className="text-xs text-slate-500">Connected forms are checked by themselves every 5 minutes.</p>}
 
       <Card className="p-4 space-y-3">
+        <div className="flex flex-wrap gap-2">
+          {(['BOTH', 'STUDENT_INFO', 'NEW_STUDENT'] as const).map((k) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setFormFilter(k)}
+              className={`rounded-full px-3 py-1 text-[11px] font-bold ${formFilter === k ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}
+            >
+              {k === 'BOTH' ? 'Both forms' : `${FORM_LABEL[k]} form`}
+            </button>
+          ))}
+        </div>
         <div className="flex flex-wrap gap-2">
           {tabs.map((t) => (
             <button
@@ -225,7 +266,12 @@ export const AdminIdCardForm: React.FC = () => {
                 ) : (
                   visible.map((a) => (
                     <tr key={a._id} className="align-top hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                      <td className="px-3 py-2.5 whitespace-nowrap text-slate-500">{when(a.submittedAt)}</td>
+                      <td className="px-3 py-2.5 whitespace-nowrap text-slate-500">
+                        {when(a.submittedAt)}
+                        <span className={`mt-1 block w-fit rounded px-1.5 py-0.5 text-[10px] font-bold ${a.form === 'NEW_STUDENT' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300' : 'bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300'}`}>
+                          {FORM_LABEL[a.form]}
+                        </span>
+                      </td>
                       <td className="px-3 py-2.5">
                         <p className="font-bold text-slate-900 dark:text-white">{a.name || '—'}</p>
                         <p className="text-slate-500">{a.email || 'no email'}</p>
@@ -235,7 +281,7 @@ export const AdminIdCardForm: React.FC = () => {
                         </p>
                       </td>
                       <td className="px-3 py-2.5">
-                        <p className="font-mono font-bold">{a.idCardCode || <span className="text-amber-600">none</span>}</p>
+                        <p className="font-mono font-bold">{a.form === 'NEW_STUDENT' ? <span className="font-sans font-normal text-slate-400">new code</span> : a.idCardCode || <span className="text-amber-600">none</span>}</p>
                         {a.idCardRaw && a.idCardRaw.toUpperCase() !== a.idCardCode && <p className="text-[10px] text-slate-400">typed “{a.idCardRaw}”</p>}
                         {a.idCardPicUrl && (
                           <a href={a.idCardPicUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[11px] font-semibold text-brand-600 hover:underline">
@@ -331,6 +377,16 @@ export const AdminIdCardForm: React.FC = () => {
               <input id="idform-email" type="email" className={inputClass} value={email} onChange={(e) => setEmail(e.target.value)} />
             </div>
           </div>
+          {review.form === 'NEW_STUDENT' && review.status !== 'SENT' && !review.student && (
+            <div className="mt-4 space-y-2 rounded-xl border border-indigo-200 bg-indigo-50/60 p-3 dark:border-indigo-900 dark:bg-indigo-950/20">
+              <p className="text-xs font-bold text-indigo-800 dark:text-indigo-300">Or create this person as a new student</p>
+              <input id="idform-newname" className={inputClass} value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Full name" />
+              <p className="text-[11px] text-slate-500">They get the next free SCLR code as Student ID and Login ID, a password, and an email with both (sent to the email above).</p>
+              <button type="button" className={primaryBtn} disabled={busy || !newName.trim() || !/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(email.trim())} onClick={createStudent}>
+                <UserPlus className="h-4 w-4" /> {busy ? 'Creating…' : 'Create student & send login'}
+              </button>
+            </div>
+          )}
           <p className="pt-3 text-xs text-slate-500">The student gets their own Login ID and password. If their profile has no email yet, this one is saved to it.</p>
           <div className="flex flex-wrap justify-end gap-2 pt-4">
             {review.status !== 'SENT' && review.status !== 'IGNORED' && (
