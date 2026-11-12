@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CheckCircle2, Copy, Download, Eye, EyeOff, KeyRound, Mail, MessageCircle, ScanLine, Search, XCircle } from 'lucide-react';
 import { api, assetUrl } from '../../services/api';
+import { EmailResultPopup } from '../../components/EmailResultPopup';
 import { Card, EmptyRow, Modal, PageHeader, Spinner, inputClass, primaryBtn, secondaryBtn, useToast } from './tracking/shared';
 
 // Admin → Student Login & ID Card: check the ID on a student's card and give them their login.
@@ -521,26 +522,7 @@ export const AdminStudentLogins: React.FC = () => {
         </Modal>
       )}
 
-      {emailResults && (
-        <Modal title="Emails finished" subtitle={`${emailResults.filter((r) => r.status === 'SENT').length} sent • ${emailResults.filter((r) => r.status === 'SKIPPED').length} skipped • ${emailResults.filter((r) => r.status === 'FAILED').length} failed`} onClose={() => setEmailResults(null)}>
-          <div className="max-h-72 space-y-1 overflow-y-auto text-xs">
-            {emailResults
-              .filter((r) => r.status !== 'SENT')
-              .map((r) => (
-                <p key={r._id} className={r.status === 'FAILED' ? 'text-rose-600' : 'text-amber-600'}>
-                  {r.status === 'FAILED' ? 'Failed' : 'Skipped'}: <b>{r.fullName}</b> ({r.reason})
-                </p>
-              ))}
-            {emailResults.every((r) => r.status === 'SENT') && <p className="text-emerald-600 font-semibold">Every selected student got their email.</p>}
-            {emailResults.some((r) => r.status === 'FAILED') && <p className="pt-2 text-slate-500">The failed ones are still selected, so you can try again.</p>}
-          </div>
-          <div className="flex justify-end pt-4">
-            <button type="button" className={primaryBtn} onClick={() => setEmailResults(null)}>
-              Done
-            </button>
-          </div>
-        </Modal>
-      )}
+      {emailResults && <EmailResultPopup results={emailResults} onClose={() => setEmailResults(null)} />}
       {toast.node}
     </div>
   );
