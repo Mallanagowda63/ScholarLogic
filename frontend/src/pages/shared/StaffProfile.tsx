@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AtSign, Camera, Lock, Save, Trash2, UserRound } from 'lucide-react';
+import { PasswordInput } from '../../components/PasswordInput';
 import { api, assetUrl } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { Card, ErrorNote, Field, PageHeader, Spinner, inputClass, primaryBtn } from '../admin/tracking/shared';
@@ -264,9 +265,8 @@ export const StaffProfile: React.FC = () => {
               <input id="sp-new-email" type="email" className={inputClass} value={emailForm.email} onChange={(e) => setEmailForm((f) => ({ ...f, email: e.target.value }))} autoComplete="username" required />
             </Field>
             <Field label="Your current password" required hint="Confirms it is you">
-              <input
+              <PasswordInput
                 id="sp-email-pw"
-                type="password"
                 className={inputClass}
                 value={emailForm.currentPassword}
                 onChange={(e) => setEmailForm((f) => ({ ...f, currentPassword: e.target.value }))}

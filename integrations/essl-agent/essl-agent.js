@@ -88,7 +88,7 @@ function decodeTime(t) {
   return `${t + 2000}-${p(month)}-${p(day)} ${p(hour)}:${p(min)}:${p(sec)}`;
 }
 
-function readDevice({ host, port, commKey, timeoutMs = 20000 }) {
+function readDevice({ host, port, commKey, timeoutMs = 60000 }) {
   return new Promise((resolve, reject) => {
     const sock = new net.Socket();
     let buf = Buffer.alloc(0);

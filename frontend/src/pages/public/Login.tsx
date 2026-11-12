@@ -3,6 +3,7 @@ import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
 import { GraduationCap } from 'lucide-react';
+import { PasswordInput } from '../../components/PasswordInput';
 
 export const Login: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -71,9 +72,9 @@ export const Login: React.FC = () => {
 
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">Password</label>
-            <input
-              type="password"
+            <PasswordInput
               required
+              autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"

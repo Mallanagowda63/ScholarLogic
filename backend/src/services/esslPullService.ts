@@ -152,7 +152,7 @@ async function doPull(trigger: 'manual' | 'auto'): Promise<PullResult> {
     // Hard limit for the whole read, so one stuck read can never block every later one
     const readOnce = () =>
       Promise.race([
-        readDevice({ host: env.ESSL_DEVICE_HOST, port: env.ESSL_DEVICE_PORT, commKey: env.ESSL_COMM_KEY }),
+        readDevice({ host: env.ESSL_DEVICE_HOST, port: env.ESSL_DEVICE_PORT, commKey: env.ESSL_COMM_KEY, timeoutMs: 60000 }),
         new Promise<never>((_, reject) => setTimeout(() => reject(new Error('Reading the machine took longer than 2 minutes')), 120000)),
       ]);
     // The machine sometimes drops a connection (e.g. while eSSL Web or another PC is talking to it): retry briefly
