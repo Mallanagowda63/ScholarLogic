@@ -6,6 +6,7 @@ import { seedTracking } from './scripts/seedTracking';
 import { seedTestData, assertSafeToSeed } from './scripts/seedTestData';
 import { startAutoSync } from './services/googleFormService';
 import { startMachinePull } from './services/esslPullService';
+import { startIdCardFormSync } from './services/idCardFormService';
 
 async function startServer() {
   try {
@@ -29,6 +30,7 @@ async function startServer() {
       startAutoSync();
       // Read users and punches from the eSSL machine (needs ESSL_DEVICE_HOST)
       startMachinePull();
+      startIdCardFormSync();
     });
 
     const gracefulShutdown = () => {

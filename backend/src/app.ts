@@ -22,6 +22,7 @@ import trackingRoutes from './routes/trackingRoutes';
 import bannerRoutes from './routes/bannerRoutes';
 import staffRoutes from './routes/staffRoutes';
 import studentLoginRoutes from './routes/studentLoginRoutes';
+import idCardFormRoutes from './routes/idCardFormRoutes';
 import esslAgentRoutes from './routes/esslAgentRoutes';
 import onlineAttendanceRoutes from './routes/onlineAttendanceRoutes';
 import placementReferralRoutes from './routes/placementReferralRoutes';
@@ -155,6 +156,7 @@ app.use('/api/notifications', notificationRoutes);
 // Before /api/admin so its routes aren't shadowed
 app.use('/api/admin/staff', staffRoutes);
 app.use('/api/admin/student-logins', studentLoginRoutes);
+app.use('/api/admin/id-card-form', idCardFormRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/trainer', trainerRoutes);
 app.use('/api/tracking', trackingRoutes);

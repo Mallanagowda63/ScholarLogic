@@ -31,6 +31,9 @@ export const env = {
   // Apps Script web-app URL (…/exec) that ScholarLogic pulls responses from, and how often (minutes, 0 = manual only)
   GOOGLE_FORM_SYNC_URL: (process.env.GOOGLE_FORM_SYNC_URL || '').trim(),
   GOOGLE_FORM_SYNC_INTERVAL_MINUTES: process.env.GOOGLE_FORM_SYNC_INTERVAL_MINUTES || '5',
+  // "Student info" ID-card form: its own Apps Script web app and secret; students get their login emailed
+  IDCARD_FORM_SYNC_URL: (process.env.IDCARD_FORM_SYNC_URL || '').trim(),
+  IDCARD_FORM_SECRET: (process.env.IDCARD_FORM_SECRET || '').trim(),
 
   // eSSL/ZKTeco ADMS push: comma-separated device serial numbers allowed to post punches (empty = accept any)
   BIOMETRIC_DEVICE_SERIALS: (process.env.BIOMETRIC_DEVICE_SERIALS || '')

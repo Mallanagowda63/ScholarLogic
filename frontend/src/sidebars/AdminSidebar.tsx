@@ -25,6 +25,7 @@ import {
   Fingerprint,
   IdCard,
   ScanLine,
+  FileSpreadsheet,
 } from 'lucide-react';
 
 export const AdminSidebar: React.FC = () => {
@@ -48,6 +49,7 @@ export const AdminSidebar: React.FC = () => {
     { name: 'Dashboard', path: '/admin/dashboard', icon: LayoutDashboard },
     { name: 'Students', path: '/admin/students', icon: Users },
     { name: 'Student Login & ID Card', path: '/admin/student-logins', icon: ScanLine },
+    { name: 'ID Card Form', path: '/admin/id-card-form', icon: FileSpreadsheet },
     { name: 'New Registrations', path: '/admin/registrations', icon: UserPlus },
     { name: 'Banners', path: '/admin/banners', icon: GalleryHorizontal },
     { name: 'Batches', path: '/admin/batches', icon: Layers },

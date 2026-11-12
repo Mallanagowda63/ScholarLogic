@@ -58,6 +58,7 @@ const OnlineCheckIn = lazyPage(() => import('./pages/public/OnlineCheckIn'), 'On
 const AdminOnlineAttendance = lazyPage(() => import('./pages/admin/AdminOnlineAttendance'), 'AdminOnlineAttendance');
 const AdminStaff = lazyPage(() => import('./pages/admin/AdminStaff'), 'AdminStaff');
 const AdminStudentLogins = lazyPage(() => import('./pages/admin/AdminStudentLogins'), 'AdminStudentLogins');
+const AdminIdCardForm = lazyPage(() => import('./pages/admin/AdminIdCardForm'), 'AdminIdCardForm');
 const AdminAccount = lazyPage(() => import('./pages/admin/AdminAccount'), 'AdminAccount');
 const AdminBatches = lazyPage(() => import('./pages/admin/AdminBatches'), 'AdminBatches');
 const AdminBatchDetail = lazyPage(() => import('./pages/admin/AdminOperations'), 'AdminBatchDetail');
@@ -192,6 +193,7 @@ export const App: React.FC = () => {
                 <Route path="/admin/banners" element={<AdminBanners />} />
                 <Route path="/admin/staff" element={<AdminStaff />} />
                 <Route path="/admin/student-logins" element={<AdminStudentLogins />} />
+                <Route path="/admin/id-card-form" element={<AdminIdCardForm />} />
                 <Route path="/admin/online-attendance" element={<AdminOnlineAttendance />} />
                 <Route path="/admin/account" element={<AdminAccount />} />
                 <Route path="/admin/profile" element={<StaffProfile />} />
