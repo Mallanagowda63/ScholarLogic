@@ -70,6 +70,7 @@ export const CourseJourneyCard: React.FC = () => {
               <span className={`absolute inset-x-0 top-0 h-1 ${toneFill[statusTone(s.status)]}`} />
               <p className="text-sm font-bold text-slate-900 dark:text-white">{s.name}</p>
               <StatusBadge status={s.status} className="mt-1" />
+              {s.sheetNote && <p className="mt-1 truncate text-[10px] text-slate-400" title={s.sheetNote.raw}>From class sheet: {s.sheetNote.raw.split(/\r?\n/)[0]}</p>}
               <p className="mt-2 text-[11px] text-slate-500">{s.progress.completed}/{s.progress.total} topics • {s.progress.percentage}%</p>
               <ProgressBar value={s.progress.percentage} tone={statusTone(s.status)} className="mt-1" />
             </button>

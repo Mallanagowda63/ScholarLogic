@@ -282,6 +282,11 @@ export const AdminStudentJourney: React.FC = () => {
                         <span className="font-bold text-slate-900 dark:text-white">{s.progress.percentage}%</span>
                       </div>
                       <ProgressBar value={s.progress.percentage} tone={tone} className="mt-1" />
+                      {s.sheetNote && (
+                        <p className="mt-2 rounded-lg bg-amber-50 px-2 py-1 text-[10px] text-amber-800 dark:bg-amber-950/40 dark:text-amber-300" title={s.sheetNote.raw}>
+                          Class sheet{s.sheetNote.section ? ` (${s.sheetNote.section})` : ''}: {s.sheetNote.raw.replace(/\s*\r?\n\s*/g, ' • ')}
+                        </p>
+                      )}
                       <dl className="mt-3 space-y-0.5 text-[11px] text-slate-500">
                         <div className="flex justify-between"><dt>Batch</dt><dd className="font-mono font-semibold text-slate-700 dark:text-slate-300">{s.batch?.batchCode || '—'}</dd></div>
                         <div className="flex justify-between"><dt>Trainer</dt><dd className="truncate pl-2 text-slate-700 dark:text-slate-300">{s.batch?.trainer?.fullName || '—'}</dd></div>

@@ -69,6 +69,8 @@ export interface IStudent extends Document {
   cardNumber?: string; // RFID card linked to the same Biometric ID (digits, no leading zeros)
   loginPassword?: string; // password the admin handed out, encrypted (utils/credentialVault); shown on Admin → Students
   loginSharedAt?: Date; // when an admin last sent the login details to the student (WhatsApp)
+  // Subject status from the office class sheet; used in the journey when the subject has no batch seat
+  sheetStatuses?: { subjectId: mongoose.Types.ObjectId; status: string; raw: string; course: string; section?: string; source?: string; importedAt?: Date }[];
   classRecords?: { course: string; batchMonth?: string; note?: string; subjects: { name: string; status: string }[]; source?: string; importedAt?: Date }[]; // office class sheet, as written there
   essl?: IEsslProfile;
   phone: string;
@@ -112,6 +114,18 @@ const StudentSchema = new Schema<IStudent>(
     cardNumber: { type: String, trim: true, unique: true, sparse: true },
     loginPassword: { type: String, select: false },
     loginSharedAt: { type: Date },
+    sheetStatuses: [
+      {
+        _id: false,
+        subjectId: { type: Schema.Types.ObjectId, ref: 'Subject', required: true },
+        status: { type: String, required: true },
+        raw: { type: String, default: '' },
+        course: { type: String, default: '' },
+        section: { type: String, default: '' },
+        source: { type: String, default: '' },
+        importedAt: { type: Date },
+      },
+    ],
     classRecords: [
       {
         _id: false,

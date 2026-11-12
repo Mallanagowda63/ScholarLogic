@@ -222,13 +222,19 @@ export function buildJourney(student: IStudent | any, ctx: JourneyContext) {
   const course = student.enrollment?.courseId ? ctx.coursesById.get(String(student.enrollment.courseId)) : undefined;
   const orderedCourseSubjects = course ? [...course.subjects].sort((a, b) => a.order - b.order) : [];
 
-  // Subjects in the course plus any subject the student was allocated outside it
+  // Status from the office class sheet, per subject (only used when the subject has no batch seat here)
+  const sheetBySubject = new Map<string, { status: string; raw: string; section?: string }>(
+    (student.sheetStatuses || []).map((x: any) => [String(x.subjectId), { status: x.status, raw: x.raw, section: x.section }])
+  );
+
+  // Subjects in the course plus any subject the student was allocated (or has a sheet status) outside it
   const subjectIds = [
     ...orderedCourseSubjects.map((cs) => String(cs.subjectId)),
-    ...allocations.map((a) => String(a.subjectId)).filter((id, i, arr) => arr.indexOf(id) === i),
+    ...allocations.map((a) => String(a.subjectId)),
+    ...[...sheetBySubject.keys()],
   ].filter((id, i, arr) => arr.indexOf(id) === i);
 
-  const hasStartedAnything = allocations.length > 0;
+  const hasStartedAnything = allocations.length > 0 || [...sheetBySubject.values()].some((x) => x.status !== 'UPCOMING');
 
   const subjects = subjectIds.map((subjectId) => {
     const subject = ctx.subjectsById.get(subjectId);
@@ -237,8 +243,9 @@ export function buildJourney(student: IStudent | any, ctx: JourneyContext) {
     const latest = subjectAllocations[subjectAllocations.length - 1];
     const latestBatch = latest ? ctx.batchesById.get(String(latest.batchId)) : null;
 
+    const sheet = latest ? undefined : sheetBySubject.get(subjectId);
     const covered = new Set<string>();
-    if (subjectAllocations.some((a) => a.status === 'COMPLETED')) {
+    if (subjectAllocations.some((a) => a.status === 'COMPLETED') || sheet?.status === 'COMPLETED') {
       (subject?.topics || []).forEach((t) => covered.add(String(t._id)));
     } else {
       subjectAllocations.forEach((a) => topicsCoveredInAllocation(a, ctx.updates).forEach((t) => covered.add(t)));
@@ -252,6 +259,7 @@ export function buildJourney(student: IStudent | any, ctx: JourneyContext) {
 
     let status: SubjectJourneyStatus;
     if (latest) status = journeyStatusFromAllocation(latest, latestBatch);
+    else if (sheet) status = sheet.status as SubjectJourneyStatus;
     else status = hasStartedAnything ? 'UPCOMING' : 'NOT_STARTED';
 
     const history = subjectAllocations
@@ -288,6 +296,8 @@ export function buildJourney(student: IStudent | any, ctx: JourneyContext) {
       inCourse: !!courseEntry,
       expectedDurationDays: courseEntry?.expectedDurationDays || subject?.expectedDurationDays || 30,
       status,
+      // Where the status came from when there is no batch seat: the office class sheet, as written there
+      sheetNote: sheet ? { raw: sheet.raw, section: sheet.section || '' } : null,
       progress: { completed: completedCount, total: topics.length, percentage: topics.length ? Math.round((completedCount / topics.length) * 100) : 0 },
       topics,
       currentTopic,
