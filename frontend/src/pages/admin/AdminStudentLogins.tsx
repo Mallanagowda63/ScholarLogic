@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { CheckCircle2, Copy, Download, Eye, EyeOff, KeyRound, Mail, MessageCircle, ScanLine, Search, XCircle } from 'lucide-react';
+import { CheckCircle2, Copy, Download, Eye, EyeOff, KeyRound, Loader2, Mail, MessageCircle, ScanLine, Search, Send, XCircle } from 'lucide-react';
 import { api, assetUrl } from '../../services/api';
 import { EmailResultPopup } from '../../components/EmailResultPopup';
 import { Card, EmptyRow, Modal, PageHeader, Spinner, inputClass, primaryBtn, secondaryBtn, useToast } from './tracking/shared';
@@ -28,7 +28,7 @@ interface StudentLogin {
   loginSharedAt: string | null;
 }
 
-type LoginFilter = 'ALL' | 'NEVER' | 'LOGGED' | 'NOPASS';
+type LoginFilter = 'ALL' | 'NEVER' | 'LOGGED' | 'NOPASS' | 'EMAIL' | 'NOEMAIL';
 
 interface EmailResult {
   _id: string;
@@ -191,8 +191,8 @@ export const AdminStudentLogins: React.FC = () => {
     const all: EmailResult[] = chosen
       .filter((s) => !s.email || !s.password)
       .map((s) => ({ _id: s._id, fullName: s.fullName, status: 'SKIPPED' as const, reason: !s.email ? 'No email address' : 'No password on record' }));
-    for (let i = 0; i < ready.length; i += 20) {
-      const group = ready.slice(i, i + 20);
+    for (let i = 0; i < ready.length; i += 5) {
+      const group = ready.slice(i, i + 5);
       try {
         const res: any = await api.post('/admin/student-logins/send-email', { ids: group.map((s) => s._id) });
         const results: EmailResult[] = res.data.results;
@@ -223,6 +223,8 @@ export const AdminStudentLogins: React.FC = () => {
       if (filter === 'NEVER' && s.hasLoggedIn) return false;
       if (filter === 'LOGGED' && !s.hasLoggedIn) return false;
       if (filter === 'NOPASS' && s.password) return false;
+      if (filter === 'EMAIL' && !s.email) return false;
+      if (filter === 'NOEMAIL' && s.email) return false;
       if (!term) return true;
       return [s.fullName, s.studentId, s.machineCode, s.phone, s.email, s.course].join(' ').toLowerCase().includes(term);
     });
@@ -230,6 +232,8 @@ export const AdminStudentLogins: React.FC = () => {
   const missing = (students || []).filter((s) => !s.password).length;
   const never = (students || []).filter((s) => !s.hasLoggedIn).length;
   const logged = (students || []).length - never;
+  const emailCount = (students || []).filter((s) => s.email).length;
+  const noEmailCount = (students || []).length - emailCount;
   const allVisibleSelected = visible.length > 0 && visible.every((s) => selected.has(s._id));
   const selectVisible = (on: boolean) =>
     setSelected((set) => {
@@ -373,19 +377,23 @@ export const AdminStudentLogins: React.FC = () => {
             <option value="NEVER">Never logged in ({never})</option>
             <option value="LOGGED">Logged in ({logged})</option>
             <option value="NOPASS">No password on record ({missing})</option>
+            <option value="EMAIL">With email ({emailCount})</option>
+            <option value="NOEMAIL">Without email ({noEmailCount})</option>
           </select>
           <button type="button" className={secondaryBtn} onClick={downloadList} disabled={!visible.length} title="Download this list with login IDs and passwords (opens in Excel)">
             <Download className="h-4 w-4" /> Download list
           </button>
         </div>
         {students && (
-          <div className="grid grid-cols-3 gap-2 text-center">
+          <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-3 lg:grid-cols-5">
             {[
               { k: 'LOGGED' as const, label: 'Logged in', n: logged, cls: 'text-emerald-600' },
               { k: 'NEVER' as const, label: 'Never logged in', n: never, cls: 'text-rose-600' },
               { k: 'NOPASS' as const, label: 'No password yet', n: missing, cls: 'text-amber-600' },
+              { k: 'EMAIL' as const, label: 'With email', n: emailCount, cls: 'text-sky-600' },
+              { k: 'NOEMAIL' as const, label: 'Without email', n: noEmailCount, cls: 'text-slate-500' },
             ].map((t) => (
-              <button key={t.k} type="button" onClick={() => setFilter(t.k)} className={`rounded-xl border p-2 ${filter === t.k ? 'border-brand-500 bg-brand-50 dark:bg-brand-950/30' : 'border-slate-200 dark:border-slate-800'}`}>
+              <button key={t.k} type="button" onClick={() => setFilter(filter === t.k ? 'ALL' : t.k)} title={filter === t.k ? 'Show all students' : `Show only: ${t.label}`} className={`rounded-xl border p-2 ${filter === t.k ? 'border-brand-500 bg-brand-50 dark:bg-brand-950/30' : 'border-slate-200 dark:border-slate-800'}`}>
                 <p className={`text-xl font-black ${t.cls}`}>{t.n}</p>
                 <p className="text-[11px] font-semibold text-slate-500">{t.label}</p>
               </button>
@@ -401,15 +409,62 @@ export const AdminStudentLogins: React.FC = () => {
             • {selected.size} selected{selected.size > 0 && `, ${chosenReady} with an email address`} • {withEmail} of {(students || []).length} students have an email
           </span>
           <span className="flex-1" />
-          {selected.size > 0 && (
+          {selected.size > 0 && !emailProgress && (
             <button type="button" className={secondaryBtn} onClick={() => setSelected(new Set())}>
               Clear
             </button>
           )}
-          <button type="button" className={primaryBtn} disabled={!chosenReady || !!emailProgress} onClick={() => setConfirmEmail(true)}>
-            <Mail className="h-4 w-4" /> {emailProgress ? `Sending ${emailProgress.done}/${emailProgress.total}…` : `Email login to selected (${chosenReady})`}
-          </button>
+          {emailProgress ? (
+            <span className="relative inline-flex items-center gap-2 overflow-hidden rounded-xl bg-gradient-to-r from-brand-600 to-indigo-600 px-4 py-2 text-xs font-bold text-white shadow-lg shadow-brand-500/30">
+              <span className="sl-shimmer pointer-events-none absolute inset-0" />
+              <Loader2 className="relative h-4 w-4 animate-spin" />
+              <span className="relative">
+                Sending {emailProgress.done}/{emailProgress.total}
+              </span>
+            </span>
+          ) : (
+            <button type="button" className={primaryBtn} disabled={!chosenReady} onClick={() => setConfirmEmail(true)}>
+              <Mail className="h-4 w-4" /> Email login to selected ({chosenReady})
+            </button>
+          )}
         </div>
+
+        {emailProgress && (
+          <div className="rounded-2xl border border-brand-100 bg-gradient-to-br from-brand-50 to-indigo-50 p-4 dark:border-brand-900/60 dark:from-brand-950/40 dark:to-indigo-950/30" role="status" aria-live="polite">
+            <div className="flex items-center gap-3">
+              <span className="relative flex h-10 w-10 shrink-0 items-center justify-center">
+                <span className="absolute inset-0 animate-ping rounded-full bg-brand-400/30" />
+                <span className="relative flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-brand-500 to-indigo-600 text-white shadow-md">
+                  <Send className="sl-fly h-4 w-4" />
+                </span>
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="text-sm font-bold text-slate-900 dark:text-white">Sending login emails…</p>
+                  <p className="text-sm font-black text-brand-700 dark:text-brand-300">{emailProgress.total ? Math.round((emailProgress.done / emailProgress.total) * 100) : 0}%</p>
+                </div>
+                <div className="mt-2 h-2.5 overflow-hidden rounded-full bg-white/80 dark:bg-slate-800">
+                  <div
+                    className="relative h-full overflow-hidden rounded-full bg-gradient-to-r from-brand-500 via-indigo-500 to-brand-600 transition-[width] duration-700 ease-out"
+                    style={{ width: `${Math.max(4, emailProgress.total ? (emailProgress.done / emailProgress.total) * 100 : 0)}%` }}
+                  >
+                    <span className="sl-shimmer absolute inset-0" />
+                  </div>
+                </div>
+                <p className="mt-1.5 text-[11px] text-slate-500 dark:text-slate-400">
+                  {emailProgress.done} of {emailProgress.total} sent • about {Math.max(1, Math.ceil(((emailProgress.total - emailProgress.done) * 0.9) / 60))} min left • keep this page open
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+        <style>{`
+          @keyframes sl-shimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+          .sl-shimmer { background: linear-gradient(90deg, transparent, rgba(255,255,255,0.45), transparent); animation: sl-shimmer 1.6s ease-in-out infinite; }
+          @keyframes sl-fly { 0%, 100% { transform: translate(0, 0) rotate(0deg); } 50% { transform: translate(2px, -2px) rotate(-8deg); } }
+          .sl-fly { animation: sl-fly 1.2s ease-in-out infinite; }
+          @media (prefers-reduced-motion: reduce) { .sl-shimmer, .sl-fly { animation: none; } }
+        `}</style>
 
         {!students ? (
           <Spinner />
