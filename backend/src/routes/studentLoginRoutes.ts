@@ -42,13 +42,18 @@ const card = (s: any, hasPhoto: boolean) => {
     loginActive: s.userId?.isActive !== false,
     photoUrl: hasPhoto ? `/api/auth/photo/${s.userId?._id}` : s.userId?.avatarUrl && !/unsplash/.test(s.userId.avatarUrl) ? s.userId.avatarUrl : '',
     password: openPassword(s.loginPassword),
+    // Login tracking started 2026-11-12; a saved session token means they signed in before that too
+    lastLoginAt: s.userId?.lastLoginAt || null,
+    loginCount: s.userId?.loginCount || 0,
+    hasLoggedIn: !!(s.userId?.lastLoginAt || s.userId?.refreshToken),
+    loginSharedAt: s.loginSharedAt || null,
   };
 };
 
 const findStudents = (filter: Record<string, unknown>) =>
   Student.find(filter)
-    .select('studentId biometricId phone enrollment enrollmentDate createdAt userId +loginPassword')
-    .populate('userId', 'fullName email isActive avatarUrl')
+    .select('studentId biometricId phone enrollment enrollmentDate createdAt userId loginSharedAt +loginPassword')
+    .populate('userId', 'fullName email isActive avatarUrl lastLoginAt loginCount refreshToken')
     .populate('enrollment.courseId', 'name')
     .sort({ studentId: 1 })
     .lean();
@@ -106,6 +111,27 @@ router.post(
       message: `New password created for ${user.fullName}`,
       data: { loginId: student.biometricId || student.studentId, password },
     });
+  })
+);
+
+// The admin sent the login details to the student (e.g. opened WhatsApp with them): remember when
+router.post(
+  '/:id/shared',
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    if (!mongoose.isValidObjectId(req.params.id)) throw new AppError('Invalid student', 400, 'INVALID_ID');
+    const via = String(req.body?.via || 'WHATSAPP').slice(0, 20);
+    const student = await Student.findByIdAndUpdate(req.params.id, { $set: { loginSharedAt: new Date() } }, { new: true }).select('studentId loginSharedAt');
+    if (!student) throw new AppError('Student not found', 404, 'NOT_FOUND');
+    await AuditLog.create({
+      userId: req.user?.userId,
+      userEmail: req.user?.email,
+      userRole: req.user?.role,
+      action: 'STUDENT_LOGIN_SHARED',
+      resource: 'STUDENT',
+      metadata: { studentId: student.studentId, via },
+      ipAddress: req.ip,
+    }).catch(() => undefined);
+    res.json({ success: true, data: { loginSharedAt: student.loginSharedAt } });
   })
 );
 

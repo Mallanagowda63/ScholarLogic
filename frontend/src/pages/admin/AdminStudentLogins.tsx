@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { CheckCircle2, Copy, Eye, EyeOff, KeyRound, ScanLine, Search, XCircle } from 'lucide-react';
+import { CheckCircle2, Copy, Download, Eye, EyeOff, KeyRound, MessageCircle, ScanLine, Search, XCircle } from 'lucide-react';
 import { api, assetUrl } from '../../services/api';
 import { Card, EmptyRow, Modal, PageHeader, Spinner, inputClass, primaryBtn, secondaryBtn, useToast } from './tracking/shared';
 
@@ -21,7 +21,28 @@ interface StudentLogin {
   loginActive: boolean;
   photoUrl: string;
   password: string | null;
+  lastLoginAt: string | null;
+  loginCount: number;
+  hasLoggedIn: boolean;
+  loginSharedAt: string | null;
 }
+
+type LoginFilter = 'ALL' | 'NEVER' | 'LOGGED' | 'NOPASS';
+
+const SITE = 'https://scholarlogiclms.in/login';
+
+// Indian mobile numbers for WhatsApp: 10 digits get 91 in front; returns '' when it is not a usable number
+const waNumber = (phone: string) => {
+  const d = (phone || '').replace(/\D/g, '').replace(/^0+/, '');
+  if (d.length === 10) return `91${d}`;
+  if (d.length === 12 && d.startsWith('91')) return d;
+  return '';
+};
+
+const loginMessage = (name: string, loginId: string, password: string) =>
+  `Hello ${name},\nYour ScholarLogic login:\nWebsite: ${SITE}\nLogin ID: ${loginId}\nPassword: ${password}\nPlease log in and keep this password private.\n- ScholarLogic`;
+
+const shortDate = (d: string | null) => (d ? new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : '');
 
 const initials = (name: string) =>
   name
@@ -38,7 +59,7 @@ export const AdminStudentLogins: React.FC = () => {
   const [checked, setChecked] = useState<{ ok: true; student: StudentLogin } | { ok: false; message: string } | null>(null);
   const [checking, setChecking] = useState(false);
   const [q, setQ] = useState('');
-  const [onlyMissing, setOnlyMissing] = useState(false);
+  const [filter, setFilter] = useState<LoginFilter>('ALL');
   const [shown, setShown] = useState<Set<string>>(new Set());
   const [confirmNew, setConfirmNew] = useState<StudentLogin | null>(null);
   const [created, setCreated] = useState<{ student: StudentLogin; loginId: string; password: string } | null>(null);
@@ -93,9 +114,51 @@ export const AdminStudentLogins: React.FC = () => {
 
   const copy = (s: { fullName: string }, loginId: string, password: string) =>
     navigator.clipboard
-      .writeText(`ScholarLogic login for ${s.fullName}\nWebsite: https://scholarlogiclms.in/login\nLogin ID: ${loginId}\nPassword: ${password}`)
+      .writeText(loginMessage(s.fullName, loginId, password))
       .then(() => toast.show('Login copied'))
       .catch(() => toast.show('Could not copy'));
+
+  // Opens WhatsApp (app or web) with the message typed; the admin presses Send there
+  const sendWhatsApp = (s: StudentLogin, password = s.password) => {
+    const num = waNumber(s.phone);
+    if (!num || !password) return;
+    window.open(`https://wa.me/${num}?text=${encodeURIComponent(loginMessage(s.fullName, s.loginId, password))}`, '_blank', 'noopener');
+    api
+      .post(`/admin/student-logins/${s._id}/shared`, { via: 'WHATSAPP' })
+      .then((res: any) => setStudents((list) => (list || []).map((x) => (x._id === s._id ? { ...x, loginSharedAt: res.data.loginSharedAt } : x))))
+      .catch(() => undefined);
+  };
+
+  const WhatsAppBtn: React.FC<{ s: StudentLogin; password?: string | null; big?: boolean }> = ({ s, password = s.password, big }) => {
+    const num = waNumber(s.phone);
+    const why = !password ? 'Generate a password first' : !num ? 'No valid mobile number for this student' : 'Send login on WhatsApp';
+    return (
+      <button
+        type="button"
+        title={why}
+        disabled={!password || !num}
+        onClick={() => sendWhatsApp(s, password)}
+        className={`inline-flex items-center gap-1.5 rounded-xl bg-emerald-600 font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40 ${big ? 'px-4 py-2 text-sm' : 'px-2.5 py-1 text-xs'}`}
+      >
+        <MessageCircle className={big ? 'h-4 w-4' : 'h-3.5 w-3.5'} /> WhatsApp
+      </button>
+    );
+  };
+
+  // Spreadsheet of the students in the current list (opens in Excel), e.g. to print login slips
+  const downloadList = () => {
+    const cell = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const rows = [
+      ['Name', 'Student ID', 'Login ID', 'Password', 'Phone', 'Course', 'Logged in', 'Last login', 'Login sent'],
+      ...visible.map((s) => [s.fullName, s.studentId, s.loginId, s.password || '', s.phone, s.course, s.hasLoggedIn ? 'Yes' : 'No', shortDate(s.lastLoginAt), shortDate(s.loginSharedAt)]),
+    ];
+    const blob = new Blob(['﻿' + rows.map((r) => r.map(cell).join(',')).join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `ScholarLogic-student-logins-${filter.toLowerCase()}-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
 
   const toggle = (id: string) =>
     setShown((set) => {
@@ -108,12 +171,27 @@ export const AdminStudentLogins: React.FC = () => {
   const visible = useMemo(() => {
     const term = q.trim().toLowerCase();
     return (students || []).filter((s) => {
-      if (onlyMissing && s.password) return false;
+      if (filter === 'NEVER' && s.hasLoggedIn) return false;
+      if (filter === 'LOGGED' && !s.hasLoggedIn) return false;
+      if (filter === 'NOPASS' && s.password) return false;
       if (!term) return true;
       return [s.fullName, s.studentId, s.machineCode, s.phone, s.course].join(' ').toLowerCase().includes(term);
     });
-  }, [students, q, onlyMissing]);
+  }, [students, q, filter]);
   const missing = (students || []).filter((s) => !s.password).length;
+  const never = (students || []).filter((s) => !s.hasLoggedIn).length;
+  const logged = (students || []).length - never;
+
+  const LoginStatus: React.FC<{ s: StudentLogin }> = ({ s }) =>
+    s.hasLoggedIn ? (
+      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 font-semibold text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300">
+        <CheckCircle2 className="h-3 w-3" /> {s.lastLoginAt ? `Last ${shortDate(s.lastLoginAt)}${s.loginCount > 1 ? ` • ${s.loginCount}×` : ''}` : 'Logged in before'}
+      </span>
+    ) : (
+      <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 font-semibold text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">
+        <XCircle className="h-3 w-3" /> Never logged in
+      </span>
+    );
 
   const PasswordCell: React.FC<{ s: StudentLogin }> = ({ s }) =>
     s.password ? (
@@ -208,10 +286,17 @@ export const AdminStudentLogins: React.FC = () => {
                   <span className="font-mono font-bold text-slate-900 dark:text-white">{checked.student.loginId}</span>
                   <span className="text-slate-500">Password</span>
                   <PasswordCell s={checked.student} />
+                  <span className="text-slate-500">Status</span>
+                  <span className="text-xs">
+                    <LoginStatus s={checked.student} />
+                  </span>
                 </div>
-                <button type="button" className={checked.student.password ? secondaryBtn : primaryBtn} disabled={busy} onClick={() => askGenerate(checked.student)}>
-                  <KeyRound className="h-4 w-4" /> {checked.student.password ? 'Create a new password' : 'Generate automatic password'}
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button type="button" className={checked.student.password ? secondaryBtn : primaryBtn} disabled={busy} onClick={() => askGenerate(checked.student)}>
+                    <KeyRound className="h-4 w-4" /> {checked.student.password ? 'Create a new password' : 'Generate automatic password'}
+                  </button>
+                  <WhatsAppBtn s={checked.student} big />
+                </div>
               </div>
             </div>
           </div>
@@ -224,19 +309,40 @@ export const AdminStudentLogins: React.FC = () => {
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <input id="login-search" className={`${inputClass} pl-9`} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, Student ID, phone or course" />
           </label>
-          <label className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 dark:text-slate-300">
-            <input type="checkbox" checked={onlyMissing} onChange={(e) => setOnlyMissing(e.target.checked)} /> Only students without a password on record ({missing})
-          </label>
+          <select id="login-filter" className={`${inputClass} sm:w-60`} value={filter} onChange={(e) => setFilter(e.target.value as LoginFilter)}>
+            <option value="ALL">All students ({(students || []).length})</option>
+            <option value="NEVER">Never logged in ({never})</option>
+            <option value="LOGGED">Logged in ({logged})</option>
+            <option value="NOPASS">No password on record ({missing})</option>
+          </select>
+          <button type="button" className={secondaryBtn} onClick={downloadList} disabled={!visible.length} title="Download this list with login IDs and passwords (opens in Excel)">
+            <Download className="h-4 w-4" /> Download list
+          </button>
         </div>
+        {students && (
+          <div className="grid grid-cols-3 gap-2 text-center">
+            {[
+              { k: 'LOGGED' as const, label: 'Logged in', n: logged, cls: 'text-emerald-600' },
+              { k: 'NEVER' as const, label: 'Never logged in', n: never, cls: 'text-rose-600' },
+              { k: 'NOPASS' as const, label: 'No password yet', n: missing, cls: 'text-amber-600' },
+            ].map((t) => (
+              <button key={t.k} type="button" onClick={() => setFilter(t.k)} className={`rounded-xl border p-2 ${filter === t.k ? 'border-brand-500 bg-brand-50 dark:bg-brand-950/30' : 'border-slate-200 dark:border-slate-800'}`}>
+                <p className={`text-xl font-black ${t.cls}`}>{t.n}</p>
+                <p className="text-[11px] font-semibold text-slate-500">{t.label}</p>
+              </button>
+            ))}
+          </div>
+        )}
+        <p className="text-[11px] text-slate-500">Login times are recorded from 12 Nov 2026. Students who logged in before that and are still signed in show "Logged in before".</p>
 
         {!students ? (
           <Spinner />
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[820px] text-xs">
+            <table className="w-full min-w-[1000px] text-xs">
               <thead className="border-b border-slate-200 bg-slate-50 text-[10px] font-bold uppercase text-slate-500 dark:border-slate-800 dark:bg-slate-800/60">
                 <tr>
-                  {['Student', 'Student ID', 'Course', 'Login ID', 'Password', ''].map((h) => (
+                  {['Student', 'Student ID', 'Course', 'Login ID', 'Password', 'Login status', ''].map((h) => (
                     <th key={h} className="px-3 py-3 text-left whitespace-nowrap">
                       {h}
                     </th>
@@ -245,7 +351,7 @@ export const AdminStudentLogins: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {visible.length === 0 ? (
-                  <EmptyRow colSpan={6} text="No students match." />
+                  <EmptyRow colSpan={7} text="No students match." />
                 ) : (
                   visible.map((s) => (
                     <tr key={s._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
@@ -256,7 +362,12 @@ export const AdminStudentLogins: React.FC = () => {
                       <td className="px-3 py-2.5 whitespace-nowrap">
                         <PasswordCell s={s} />
                       </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <LoginStatus s={s} />
+                        {s.loginSharedAt && <span className="ml-1 text-[10px] text-slate-400">sent {shortDate(s.loginSharedAt)}</span>}
+                      </td>
                       <td className="px-3 py-2.5 whitespace-nowrap text-right">
+                        <WhatsAppBtn s={s} />{' '}
                         <button type="button" className={`${secondaryBtn} !px-2.5 !py-1 text-xs`} onClick={() => check(undefined, s.studentId)}>
                           <ScanLine className="h-3.5 w-3.5" /> Check card
                         </button>{' '}
@@ -304,6 +415,7 @@ export const AdminStudentLogins: React.FC = () => {
             <button type="button" className={secondaryBtn} onClick={() => copy(created.student, created.loginId, created.password)}>
               <Copy className="h-4 w-4" /> Copy
             </button>
+            <WhatsAppBtn s={created.student} password={created.password} big />
             <button type="button" className={primaryBtn} onClick={() => setCreated(null)}>
               Done
             </button>

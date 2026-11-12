@@ -25,6 +25,8 @@ export interface IUser extends Document {
   isActive: boolean; // false = access removed by an admin; login and existing sessions are refused
   passwordChangedAt?: Date; // sessions issued before this are no longer accepted
   jobsSeenAt?: Date; // students: jobs posted after this show in the "new jobs" pop-up
+  lastLoginAt?: Date; // last successful sign-in with password (admins see who never logged in)
+  loginCount?: number;
   createdById?: mongoose.Types.ObjectId; // admin who created a staff account
   createdAt: Date;
   updatedAt: Date;
@@ -56,6 +58,8 @@ const UserSchema = new Schema<IUser>(
     isActive: { type: Boolean, default: true },
     passwordChangedAt: { type: Date },
     jobsSeenAt: { type: Date },
+    lastLoginAt: { type: Date },
+    loginCount: { type: Number, default: 0 },
     createdById: { type: Schema.Types.ObjectId, ref: 'User' },
   },
   { timestamps: true }

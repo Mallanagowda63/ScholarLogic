@@ -71,6 +71,8 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
 
   const tokens = generateTokens(tokenPayload);
   user.refreshToken = tokens.refreshToken;
+  user.lastLoginAt = new Date();
+  user.loginCount = (user.loginCount || 0) + 1;
   await user.save();
 
   res.json({
