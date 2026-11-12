@@ -28,6 +28,12 @@ export interface IBatch extends Document {
   // One shared Zoho folder per batch: the trainer uploads every class recording there, students open the same link
   recordingsLink?: string;
   recordingsLinkUpdatedAt?: Date;
+  // Live class: the link students use to join (a Zoho Meeting join link, or any meeting link the trainer pastes)
+  meetingLink?: string;
+  meetingStartLink?: string; // Zoho host link, only for the trainer
+  meetingKey?: string; // Zoho meeting key when created from ScholarLogic
+  nextClassAt?: Date;
+  meetingUpdatedAt?: Date;
   history: IBatchHistoryEntry[]; // append-only log of batch changes
   createdAt: Date;
   updatedAt: Date;
@@ -50,6 +56,11 @@ const BatchSchema = new Schema<IBatch>(
     classesConducted: { type: Number, default: 0 },
     recordingsLink: { type: String, default: '', trim: true },
     recordingsLinkUpdatedAt: { type: Date },
+    meetingLink: { type: String, default: '', trim: true },
+    meetingStartLink: { type: String, default: '', trim: true },
+    meetingKey: { type: String, default: '' },
+    nextClassAt: { type: Date },
+    meetingUpdatedAt: { type: Date },
     history: [
       {
         at: { type: Date, default: Date.now },

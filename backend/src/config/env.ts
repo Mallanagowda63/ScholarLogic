@@ -32,6 +32,11 @@ export const env = {
   GOOGLE_FORM_SYNC_URL: (process.env.GOOGLE_FORM_SYNC_URL || '').trim(),
   GOOGLE_FORM_SYNC_INTERVAL_MINUTES: process.env.GOOGLE_FORM_SYNC_INTERVAL_MINUTES || '5',
   // "Student info" ID-card form: its own Apps Script web app and secret; students get their login emailed
+  // Zoho Meeting (trainers connect their own Zoho account). India data centre by default.
+  ZOHO_CLIENT_ID: (process.env.ZOHO_CLIENT_ID || '').trim(),
+  ZOHO_CLIENT_SECRET: (process.env.ZOHO_CLIENT_SECRET || '').trim(),
+  ZOHO_ACCOUNTS_URL: (process.env.ZOHO_ACCOUNTS_URL || 'https://accounts.zoho.in').replace(/\/+$/, ''),
+  ZOHO_MEETING_URL: (process.env.ZOHO_MEETING_URL || 'https://meeting.zoho.in').replace(/\/+$/, ''),
   IDCARD_FORM_SYNC_URL: (process.env.IDCARD_FORM_SYNC_URL || '').trim(),
   IDCARD_FORM_SECRET: (process.env.IDCARD_FORM_SECRET || '').trim(),
   // New-student ID card form: each answer creates a student with the next SCLR code and emails the login

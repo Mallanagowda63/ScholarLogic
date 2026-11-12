@@ -34,6 +34,8 @@ import {
   getMyRecordings,
   updateBatch,
   deleteBatch,
+  setMeetingLink,
+  createBatchZohoMeeting,
   updateTrackedStudent,
 } from '../controllers/trackingController';
 import {
@@ -65,7 +67,9 @@ router.get('/me/recordings', authorizeRoles('STUDENT'), asyncHandler(getMyRecord
 router.get('/trainer/batches', authorizeRoles('TRAINER'), asyncHandler(listMyBatches));
 router.get('/batches/:id', adminOrTrainer, asyncHandler(getBatchDetail));
 router.post('/batches/:id/updates', adminOrTrainer, asyncHandler(submitDailyUpdate));
-router.put('/batches/:id/recordings-link', adminOrTrainer, asyncHandler(setRecordingsLink));
+router.put('/batches/:id/recordings-link', authorizeRoles('TRAINER'), asyncHandler(setRecordingsLink));
+router.put('/batches/:id/meeting-link', authorizeRoles('TRAINER'), asyncHandler(setMeetingLink));
+router.post('/batches/:id/zoho-meeting', authorizeRoles('TRAINER'), asyncHandler(createBatchZohoMeeting));
 
 // Admin
 router.get('/overview', admin, asyncHandler(getOverview));

@@ -5,9 +5,9 @@ import { Card, inputClass, primaryBtn, secondaryBtn } from './shared';
 
 // One Zoho link per batch: the trainer makes a shared folder once, uploads every class recording into it,
 // and students of the batch always open the same link.
-export const RecordingsLinkCard: React.FC<{ batch: any; onSaved: (message: string) => void }> = ({ batch, onSaved }) => {
+export const RecordingsLinkCard: React.FC<{ batch: any; onSaved: (message: string) => void; canEdit?: boolean }> = ({ batch, onSaved, canEdit = true }) => {
   const saved: string = batch.recordingsLink || '';
-  const [editing, setEditing] = useState(!saved);
+  const [editing, setEditing] = useState(!saved && canEdit);
   const [value, setValue] = useState(saved);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -38,7 +38,9 @@ export const RecordingsLinkCard: React.FC<{ batch: any; onSaved: (message: strin
           <p className="text-xs text-slate-500">
             {saved
               ? 'Students of this batch open this one link for every recording. Just keep uploading new recordings into the same Zoho folder.'
-              : 'Add this once for the batch: make a folder in Zoho WorkDrive, share it ("anyone with the link can view"), and paste the link here. Then upload every recording into that folder; no new link needed each class.'}
+              : !canEdit
+                ? 'The trainer of this batch adds the recordings link. Admins can only see it.'
+                : 'Add this once for the batch: make a folder in Zoho WorkDrive, share it ("anyone with the link can view"), and paste the link here. Then upload every recording into that folder; no new link needed each class.'}
           </p>
         </div>
         {saved && !editing && (
@@ -46,16 +48,18 @@ export const RecordingsLinkCard: React.FC<{ batch: any; onSaved: (message: strin
             <a href={saved} target="_blank" rel="noopener noreferrer" className={primaryBtn}>
               <FolderOpen className="h-4 w-4" /> Open folder <ExternalLink className="h-3 w-3" />
             </a>
-            <button type="button" className={secondaryBtn} onClick={() => setEditing(true)}>
-              <Pencil className="h-4 w-4" /> Change
-            </button>
+            {canEdit && (
+              <button type="button" className={secondaryBtn} onClick={() => setEditing(true)}>
+                <Pencil className="h-4 w-4" /> Change
+              </button>
+            )}
           </div>
         )}
       </div>
 
       {saved && !editing && <p className="mt-2 truncate font-mono text-[11px] text-slate-400">{saved}</p>}
 
-      {editing && (
+      {editing && canEdit && (
         <form onSubmit={save} className="mt-3 flex flex-col gap-2 sm:flex-row">
           <input
             id="recordings-link"

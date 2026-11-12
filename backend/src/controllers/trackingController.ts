@@ -11,6 +11,7 @@ import { Attendance } from '../models/Attendance';
 import { Lesson } from '../models/Lesson';
 import { AuditLog } from '../models/AuditLog';
 import { Notification } from '../models/Notification';
+import { createZohoMeeting } from '../services/zohoOAuthService';
 import { getNextStudentId } from '../models/Counter';
 import { Subject } from '../models/tracking/Subject';
 import { TrackCourse } from '../models/tracking/TrackCourse';
@@ -731,12 +732,12 @@ export const listMyBatches = async (req: AuthRequest, res: Response) => {
   res.json({ success: true, data: { batches: await listBatchSummaries({ trainerId: req.user?.userId }) } });
 };
 
-// Trainer (or admin): the batch's one recordings link, e.g. a Zoho WorkDrive shared folder. Empty removes it.
+// Trainer only: the batch's one recordings link, e.g. a Zoho WorkDrive shared folder. Empty removes it. Admins only see it.
 export const setRecordingsLink = async (req: AuthRequest, res: Response) => {
   const batch = await Batch.findById(oid(req.params.id, 'batch'));
   if (!batch) throw new AppError('Batch not found', 404, 'NOT_FOUND');
-  if (!isAdmin(req) && String(batch.trainerId) !== String(req.user?.userId)) {
-    throw new AppError('You can only update batches assigned to you', 403, 'FORBIDDEN');
+  if (req.user?.role !== 'TRAINER' || String(batch.trainerId) !== String(req.user?.userId)) {
+    throw new AppError('Only the trainer of this batch can change the recordings link', 403, 'FORBIDDEN');
   }
   const raw = String(req.body?.recordingsLink ?? '').trim();
   let link = '';
@@ -787,13 +788,85 @@ export const setRecordingsLink = async (req: AuthRequest, res: Response) => {
 };
 
 // Student: the recordings link of every batch they are in (current first)
+const httpsLink = (raw: unknown) => {
+  const v = String(raw ?? '').trim();
+  if (!v) return '';
+  let url: URL;
+  try {
+    url = new URL(/^https?:\/\//i.test(v) ? v : `https://${v}`);
+  } catch {
+    throw new AppError('This is not a valid link. Copy the meeting link and paste it here.', 400, 'INVALID_URL');
+  }
+  if (!['http:', 'https:'].includes(url.protocol) || !url.hostname.includes('.')) throw new AppError('This is not a valid link', 400, 'INVALID_URL');
+  return url.toString();
+};
+
+const myTrainerBatch = async (req: AuthRequest) => {
+  const batch = await Batch.findById(oid(req.params.id, 'batch'));
+  if (!batch) throw new AppError('Batch not found', 404, 'NOT_FOUND');
+  if (req.user?.role !== 'TRAINER' || String(batch.trainerId) !== String(req.user?.userId)) {
+    throw new AppError('Only the trainer of this batch can set its class meeting', 403, 'FORBIDDEN');
+  }
+  return batch;
+};
+
+// Tell the batch's current students about their class link
+const notifyBatchStudents = async (batch: any, title: string, message: string) => {
+  const allocations = await StudentBatchAllocation.find({ batchId: batch._id, status: { $in: ACTIVE_ALLOCATION_STATUSES } }).select('studentId').lean();
+  const students = await Student.find({ _id: { $in: allocations.map((a) => a.studentId) } }).select('userId').lean();
+  const docs = students.filter((s) => s.userId).map((s) => ({ userId: s.userId, title, message, type: 'COURSE' as const, linkUrl: '/student/dashboard' }));
+  if (docs.length) await Notification.insertMany(docs);
+  return docs.length;
+};
+
+const whenText = (d?: Date | null) => (d ? new Date(d).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
+
+// Trainer pastes a class meeting link (Zoho, Google Meet, ...) and optionally the next class time. Empty removes it.
+export const setMeetingLink = async (req: AuthRequest, res: Response) => {
+  const batch = await myTrainerBatch(req);
+  const link = httpsLink(req.body?.meetingLink);
+  const at = req.body?.nextClassAt ? new Date(req.body.nextClassAt) : null;
+  if (at && Number.isNaN(at.getTime())) throw new AppError('Pick a valid class date and time', 400, 'INVALID_DATE');
+  const changed = (batch.meetingLink || '') !== link;
+  batch.meetingLink = link;
+  batch.meetingStartLink = link ? batch.meetingStartLink && !changed ? batch.meetingStartLink : '' : '';
+  batch.meetingKey = link && !changed ? batch.meetingKey : '';
+  batch.nextClassAt = link ? at || undefined : undefined;
+  batch.meetingUpdatedAt = new Date();
+  batch.history.push({ at: new Date(), action: 'MEETING_LINK', details: link ? `Class meeting link set${at ? ` for ${whenText(at)}` : ''}` : 'Class meeting link removed', byUserId: req.user?.userId as any });
+  await batch.save();
+  const told = link ? await notifyBatchStudents(batch, 'Class link ready', `Join your ${batch.batchCode} class${at ? ` on ${whenText(at)}` : ''} from your dashboard.`) : 0;
+  res.json({ success: true, message: link ? `Class link saved${told ? `. ${told} students were told.` : ''}` : 'Class link removed', data: { batch } });
+};
+
+// Trainer creates the class in their own Zoho Meeting account; students get the join link
+export const createBatchZohoMeeting = async (req: AuthRequest, res: Response) => {
+  const batch = await myTrainerBatch(req);
+  const start = new Date(req.body?.startAt);
+  if (Number.isNaN(start.getTime())) throw new AppError('Pick the class date and time', 400, 'INVALID_DATE');
+  if (start.getTime() < Date.now() - 5 * 60000) throw new AppError('The class time is in the past', 400, 'INVALID_DATE');
+  const duration = Number(req.body?.durationMinutes) || 60;
+  const subject: any = await Subject.findById(batch.subjectId).select('name').lean();
+  const topic = String(req.body?.topic || `${subject?.name || 'Class'} - ${batch.batchCode}`).trim();
+  const meeting = await createZohoMeeting(String(req.user!.userId), { topic, agenda: `ScholarLogic batch ${batch.batchCode}`, start, durationMinutes: duration });
+  batch.meetingLink = meeting.joinLink;
+  batch.meetingStartLink = meeting.startLink;
+  batch.meetingKey = meeting.meetingKey;
+  batch.nextClassAt = start;
+  batch.meetingUpdatedAt = new Date();
+  batch.history.push({ at: new Date(), action: 'ZOHO_MEETING', details: `Zoho meeting created for ${whenText(start)} (${duration} min)`, byUserId: req.user?.userId as any });
+  await batch.save();
+  const told = await notifyBatchStudents(batch, 'Class scheduled', `${topic} on ${whenText(start)}. Join from your dashboard.`);
+  res.json({ success: true, message: `Zoho meeting created for ${whenText(start)}${told ? `. ${told} students were told.` : ''}`, data: { batch } });
+};
+
 export const getMyRecordings = async (req: AuthRequest, res: Response) => {
   const student = await Student.findOne({ userId: req.user?.userId }).select('_id').lean();
   if (!student) throw new AppError('Student profile not found', 404, 'NOT_FOUND');
   const allocations = await StudentBatchAllocation.find({ studentId: student._id, status: { $nin: ['MOVED', 'DROPPED'] } })
     .sort({ allocationDate: -1 })
     .lean();
-  const batches = await Batch.find({ _id: { $in: allocations.map((a) => a.batchId) } }).select('batchCode subjectId trainerId recordingsLink recordingsLinkUpdatedAt status').lean();
+  const batches = await Batch.find({ _id: { $in: allocations.map((a) => a.batchId) } }).select('batchCode subjectId trainerId recordingsLink recordingsLinkUpdatedAt meetingLink nextClassAt timing status').lean();
   const [subjects, trainers] = await Promise.all([
     Subject.find({ _id: { $in: batches.map((b) => b.subjectId) } }).select('name').lean(),
     User.find({ _id: { $in: batches.map((b) => b.trainerId).filter(Boolean) } }).select('fullName').lean(),
@@ -813,6 +886,9 @@ export const getMyRecordings = async (req: AuthRequest, res: Response) => {
         current: ACTIVE_ALLOCATION_STATUSES.includes(a.status),
         recordingsLink: b.recordingsLink || '',
         updatedAt: b.recordingsLinkUpdatedAt,
+        meetingLink: ACTIVE_ALLOCATION_STATUSES.includes(a.status) ? b.meetingLink || '' : '',
+        nextClassAt: ACTIVE_ALLOCATION_STATUSES.includes(a.status) ? b.nextClassAt || null : null,
+        timing: b.timing || '',
       };
     })
     .filter(Boolean);

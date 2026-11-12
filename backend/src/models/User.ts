@@ -25,6 +25,8 @@ export interface IUser extends Document {
   isActive: boolean; // false = access removed by an admin; login and existing sessions are refused
   passwordChangedAt?: Date; // sessions issued before this are no longer accepted
   jobsSeenAt?: Date; // students: jobs posted after this show in the "new jobs" pop-up
+  // Trainer's own Zoho Meeting account, connected once from ScholarLogic (refresh token kept encrypted)
+  zoho?: { refreshToken?: string; email?: string; zsoid?: string; zuid?: string; connectedAt?: Date };
   lastLoginAt?: Date; // last successful sign-in with password (admins see who never logged in)
   loginCount?: number;
   createdById?: mongoose.Types.ObjectId; // admin who created a staff account
@@ -58,6 +60,13 @@ const UserSchema = new Schema<IUser>(
     isActive: { type: Boolean, default: true },
     passwordChangedAt: { type: Date },
     jobsSeenAt: { type: Date },
+    zoho: {
+      refreshToken: { type: String, select: false },
+      email: { type: String, default: '' },
+      zsoid: { type: String, default: '' },
+      zuid: { type: String, default: '' },
+      connectedAt: { type: Date },
+    },
     lastLoginAt: { type: Date },
     loginCount: { type: Number, default: 0 },
     createdById: { type: Schema.Types.ObjectId, ref: 'User' },
