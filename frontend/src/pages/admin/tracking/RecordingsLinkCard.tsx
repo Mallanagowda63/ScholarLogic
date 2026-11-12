@@ -66,7 +66,7 @@ export const RecordingsLinkCard: React.FC<{ batch: any; onSaved: (message: strin
             autoComplete="off"
           />
           <button type="submit" className={primaryBtn} disabled={busy || (!value.trim() && !saved)}>
-            <Save className="h-4 w-4" /> {busy ? 'Saving…' : value.trim() ? 'Save link' : 'Remove link'}
+            <Save className="h-4 w-4" /> {busy ? 'Saving…' : saved && !value.trim() ? 'Remove link' : 'Save link'}
           </button>
           {saved && (
             <button
