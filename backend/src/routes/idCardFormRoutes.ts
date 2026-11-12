@@ -35,7 +35,7 @@ const view = (s: any) => ({
 router.get(
   '/',
   asyncHandler(async (_req: AuthRequest, res: Response) => {
-    const subs = await IdCardSubmission.find({})
+    const subs = await IdCardSubmission.find({ status: { $ne: 'DELETED' } })
       .sort({ submittedAt: -1 })
       .limit(1000)
       .populate({ path: 'studentId', select: 'studentId phone userId', populate: { path: 'userId', select: 'fullName' } })
@@ -91,6 +91,22 @@ router.post(
     // createStudentFrom updates the status on the same document
     if ((sub.status as string) !== 'SENT') throw new AppError(sub.note || 'The student could not be created', 400, 'CREATE_FAILED');
     res.json({ success: true, message: sub.note, data: { submission: { status: sub.status, note: sub.note, loginId: sub.loginId } } });
+  })
+);
+
+// Delete an answer from this list. Kept hidden (not erased) so the next form check doesn't bring it back.
+// A student who was already created or emailed stays as they are.
+router.delete(
+  '/:id',
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    if (!mongoose.isValidObjectId(req.params.id)) throw new AppError('Invalid answer', 400, 'INVALID_ID');
+    const sub = await IdCardSubmission.findById(req.params.id);
+    if (!sub) throw new AppError('Answer not found', 404, 'NOT_FOUND');
+    sub.status = 'DELETED';
+    sub.note = `Deleted by an admin. Before: ${sub.note}`.slice(0, 500);
+    if (req.user?.userId) sub.reviewedById = new mongoose.Types.ObjectId(req.user.userId);
+    await sub.save();
+    res.json({ success: true, message: `Answer from ${sub.name || 'this person'} deleted` });
   })
 );
 

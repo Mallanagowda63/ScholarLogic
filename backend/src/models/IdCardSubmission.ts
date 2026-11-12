@@ -7,7 +7,8 @@ export type IdCardStatus =
   | 'NEEDS_REVIEW' // no / unknown ID, or the name and phone don't match that student
   | 'EMAIL_FAILED' // matched, but the email could not be sent (retry from the admin page)
   | 'DUPLICATE' // the same student already got their login from an earlier answer
-  | 'IGNORED'; // an admin dismissed it
+  | 'IGNORED' // an admin dismissed it
+  | 'DELETED'; // an admin deleted it: hidden, but kept so the next form check doesn't import it again
 
 export type IdCardFormKind = 'STUDENT_INFO' | 'NEW_STUDENT';
 
@@ -54,7 +55,7 @@ const IdCardSubmissionSchema = new Schema<IIdCardSubmission>(
     tenthPercentage: { type: String, default: '', trim: true },
     twelfthPercentage: { type: String, default: '', trim: true },
     answers: [{ _id: false, question: String, answer: String }],
-    status: { type: String, enum: ['SENT', 'NEEDS_REVIEW', 'EMAIL_FAILED', 'DUPLICATE', 'IGNORED'], default: 'NEEDS_REVIEW', index: true },
+    status: { type: String, enum: ['SENT', 'NEEDS_REVIEW', 'EMAIL_FAILED', 'DUPLICATE', 'IGNORED', 'DELETED'], default: 'NEEDS_REVIEW', index: true },
     note: { type: String, default: '' },
     studentId: { type: Schema.Types.ObjectId, ref: 'Student', index: true },
     loginId: { type: String, default: '' },

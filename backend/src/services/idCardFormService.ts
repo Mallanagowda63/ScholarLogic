@@ -246,7 +246,20 @@ export async function createStudentFrom(sub: IIdCardSubmission, byUserId?: strin
     sub.note = `"${sub.email || 'no email'}" is not a valid email address, so the login can't be sent`;
     return sub.save();
   }
-  const sameEmail: any = await User.findOne({ email: sub.email }).select('fullName role').lean();
+  let sameEmail: any = await User.findOne({ email: sub.email }).select('fullName role').lean();
+  // An old student login with no student profile behind it (e.g. an early test sign-up) can't be used for
+  // anything; clear it so this person can be created properly. Real students and staff are never touched.
+  if (sameEmail?.role === 'STUDENT' && !(await Student.exists({ userId: sameEmail._id }))) {
+    await User.deleteOne({ _id: sameEmail._id });
+    await AuditLog.create({
+      userId: byUserId,
+      userRole: byUserId ? 'ADMIN' : 'SYSTEM',
+      action: 'EMPTY_STUDENT_LOGIN_REMOVED',
+      resource: 'USER',
+      metadata: { email: sub.email, fullName: sameEmail.fullName, reason: 'Student login without a student profile, replaced by the ID card form' },
+    }).catch(() => undefined);
+    sameEmail = null;
+  }
   const phone = normalizePhone(sub.phone);
   const samePhone: any = phone.length === 10 ? await Student.findOne({ phone: new RegExp(`${phone.split('').join('\\D*')}$`) }).select('studentId').lean() : null;
   if (sameEmail || samePhone) {

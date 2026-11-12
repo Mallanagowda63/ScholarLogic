@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, ExternalLink, Mail, RefreshCw, Search, UserPlus, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ExternalLink, Mail, RefreshCw, Search, Trash2, UserPlus, XCircle } from 'lucide-react';
 import { api } from '../../services/api';
 import { Card, EmptyRow, Modal, PageHeader, Spinner, inputClass, primaryBtn, secondaryBtn, useToast } from './tracking/shared';
 
@@ -66,6 +66,7 @@ export const AdminIdCardForm: React.FC = () => {
   const [pickId, setPickId] = useState('');
   const [email, setEmail] = useState('');
   const [busy, setBusy] = useState(false);
+  const [deleting, setDeleting] = useState<Answer | null>(null);
 
   const load = () =>
     api
@@ -131,6 +132,21 @@ export const AdminIdCardForm: React.FC = () => {
       toast.show(res.message);
       setReview(null);
       await load();
+    } catch (e: any) {
+      toast.show(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeAnswer = async () => {
+    if (!deleting) return;
+    setBusy(true);
+    try {
+      const res: any = await api.delete(`/admin/id-card-form/${deleting._id}`);
+      setAnswers((list) => (list || []).filter((x) => x._id !== deleting._id));
+      setDeleting(null);
+      toast.show(res.message || 'Answer deleted');
     } catch (e: any) {
       toast.show(e.message);
     } finally {
@@ -306,6 +322,15 @@ export const AdminIdCardForm: React.FC = () => {
                         </p>
                       </td>
                       <td className="px-3 py-2.5 whitespace-nowrap text-right">
+                        <button
+                          type="button"
+                          title="Delete this answer"
+                          aria-label={`Delete the answer from ${a.name || 'this person'}`}
+                          onClick={() => setDeleting(a)}
+                          className="mr-1.5 inline-flex items-center rounded-lg p-1.5 align-middle text-slate-400 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/40"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                         {a.status === 'SENT' || a.status === 'DUPLICATE' ? (
                           <button type="button" className={`${secondaryBtn} !px-2.5 !py-1 text-xs`} onClick={() => openReview(a)}>
                             <Mail className="h-3.5 w-3.5" /> Send again
@@ -399,6 +424,26 @@ export const AdminIdCardForm: React.FC = () => {
             </button>
             <button type="button" className={primaryBtn} disabled={busy || !pickId || !/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(email.trim())} onClick={send}>
               <Mail className="h-4 w-4" /> {busy ? 'Sending…' : 'Send login by email'}
+            </button>
+          </div>
+        </Modal>
+      )}
+      {deleting && (
+        <Modal title="Delete this answer?" subtitle={`${deleting.name || 'Unknown'} • ${deleting.email || 'no email'} • ${when(deleting.submittedAt)}`} onClose={() => !busy && setDeleting(null)}>
+          <div className="flex gap-3 rounded-xl bg-rose-50 p-3 text-sm text-rose-800 dark:bg-rose-950/40 dark:text-rose-300">
+            <Trash2 className="mt-0.5 h-5 w-5 shrink-0" />
+            <p>
+              It disappears from this list and won’t come back when the form is checked again.
+              {deleting.student ? ` The student ${deleting.student.fullName} (${deleting.loginId || deleting.student.studentId}) stays in ScholarLogic.` : ' No student is created for it.'}
+            </p>
+          </div>
+          <p className="pt-2 text-xs text-slate-500">To remove it from Google too, delete the row in the form's response sheet.</p>
+          <div className="flex justify-end gap-2 pt-4">
+            <button type="button" className={secondaryBtn} disabled={busy} onClick={() => setDeleting(null)}>
+              Keep it
+            </button>
+            <button type="button" disabled={busy} onClick={removeAnswer} className="inline-flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white shadow hover:bg-rose-700 disabled:opacity-50">
+              <Trash2 className="h-4 w-4" /> {busy ? 'Deleting…' : 'Delete answer'}
             </button>
           </div>
         </Modal>
