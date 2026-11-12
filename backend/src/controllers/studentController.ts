@@ -10,6 +10,7 @@ import { Exam } from '../models/Exam';
 import { Result } from '../models/Result';
 import { Application } from '../models/Application';
 import { ResumeAnalysis } from '../models/ResumeAnalysis';
+import { Resume } from '../models/Resume';
 import { AppError } from '../middleware/errorHandler';
 
 export const getStudentDashboard = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -61,8 +62,12 @@ export const getStudentDashboard = async (req: AuthRequest, res: Response): Prom
     .limit(3);
 
   // 4. Resume ATS Score for THIS student
-  const latestAnalysis = await ResumeAnalysis.findOne({ studentId: student._id }).sort({ createdAt: -1 });
+  const latestAnalysis: any = await ResumeAnalysis.findOne({ studentId: student._id }).sort({ createdAt: -1 }).lean();
   const atsScore = latestAnalysis ? latestAnalysis.atsScore : null;
+  const resumeScore = latestAnalysis
+    ? { score: latestAnalysis.atsScore, kind: latestAnalysis.kind || 'JOB_MATCH', target: latestAnalysis.target || '', resumeName: latestAnalysis.resumeName || '', at: latestAnalysis.createdAt }
+    : null;
+  const hasResume = !!(await Resume.exists({ studentId: student._id }));
 
   // 5. Job Applications Metrics for THIS student (Zero fallback!)
   const totalApplications = await Application.countDocuments({ studentId: student._id });
@@ -151,6 +156,8 @@ export const getStudentDashboard = async (req: AuthRequest, res: Response): Prom
         learningProgressPct,
         enrolledCoursesCount,
         atsScore,
+        resumeScore,
+        hasResume,
         totalApplications,
         shortlistedApplications,
         pendingInterviews,

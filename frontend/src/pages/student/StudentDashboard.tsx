@@ -118,14 +118,28 @@ export const StudentDashboard: React.FC = () => {
           trend={metrics.learningProgressPct > 0 ? `${metrics.learningProgressPct}% Completed` : 'Start your first course'}
         />
 
-        <StatCard
-          title="Resume ATS Score"
-          value={metrics.atsScore !== null && metrics.atsScore !== undefined ? `${metrics.atsScore}%` : 'Not analyzed'}
-          subtitle={metrics.atsScore !== null ? 'Latest Resume ATS Match' : 'Upload resume to analyze'}
-          icon={Sparkles}
-          color="purple"
-          trend={metrics.atsScore !== null ? `Score Verified` : 'No analysis yet'}
-        />
+        <Link to="/student/resume" className="block rounded-2xl transition-transform hover:-translate-y-0.5" title="Open Resume AI Builder">
+          <StatCard
+            title={metrics.resumeScore?.kind === 'JOB_MATCH' ? 'Resume Job Match' : 'Resume Score'}
+            value={metrics.resumeScore ? `${metrics.resumeScore.score}/100` : metrics.hasResume ? 'Not analysed' : 'No resume yet'}
+            subtitle={
+              metrics.resumeScore
+                ? metrics.resumeScore.kind === 'JOB_MATCH'
+                  ? `Match with ${metrics.resumeScore.target || 'a job'}`
+                  : `AI review${metrics.resumeScore.target ? ` for ${metrics.resumeScore.target}` : ''}${metrics.resumeScore.resumeName ? ` • ${metrics.resumeScore.resumeName}` : ''}`
+                : metrics.hasResume
+                  ? 'Open the Resume AI Builder and press “Analyse my resume”'
+                  : 'Upload your resume in the Resume AI Builder'
+            }
+            icon={Sparkles}
+            color="purple"
+            trend={
+              metrics.resumeScore
+                ? `${metrics.resumeScore.score >= 75 ? 'Strong' : metrics.resumeScore.score >= 50 ? 'Good, can improve' : 'Needs work'} • ${new Date(metrics.resumeScore.at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}`
+                : 'Analyse it with AI →'
+            }
+          />
+        </Link>
 
         <StatCard
           title="Applications"

@@ -81,9 +81,29 @@ export const uploadResumeFile = async (req: AuthRequest, res: Response): Promise
 
 /** AI review of the resume being edited */
 export const reviewMyResume = async (req: AuthRequest, res: Response): Promise<void> => {
-  await myStudent(req);
+  const student = await myStudent(req);
   const data = cleanData(req.body?.data);
-  const review = await reviewResume(data, String(req.body?.targetRole || data.headline || '').slice(0, 120));
+  const role = String(req.body?.targetRole || data.headline || '').slice(0, 120);
+  const review = await reviewResume(data, role);
+  // Remember the score (dashboard "Resume score"): on the version reviewed, else the student's main/latest one
+  const { resumeId } = req.body || {};
+  const resume =
+    (resumeId && mongoose.isValidObjectId(resumeId) ? await Resume.findOne({ _id: resumeId, studentId: student._id }) : null) ||
+    (await Resume.findOne({ studentId: student._id, isDefault: true })) ||
+    (await Resume.findOne({ studentId: student._id }).sort({ updatedAt: -1 })) ||
+    (await Resume.create({ studentId: student._id, title: `${data.fullName} - Resume`, versionName: 'Draft (saved for AI review)', template: 'MODERN', data, rawText: resumeToText(data) }));
+  await ResumeAnalysis.create({
+    studentId: student._id,
+    resumeId: resume._id,
+    kind: 'REVIEW',
+    target: role,
+    resumeName: resume.versionName,
+    atsScore: review.score,
+    contentImprovements: review.improvements,
+    formattingIssues: review.missingSections.map((m) => `Missing: ${m}`),
+    recommendedKeywords: review.suggestedSkills,
+    analyzedAt: new Date(),
+  }).catch(() => undefined);
   res.json({ success: true, data: { review } });
 };
 
@@ -106,6 +126,9 @@ export const analyzeResume = async (req: AuthRequest, res: Response): Promise<vo
     studentId: student._id,
     resumeId: resume._id,
     jobDescriptionId: jdDoc._id,
+    kind: 'JOB_MATCH',
+    target: [jobTitle, companyName].filter(Boolean).join(' at '),
+    resumeName: resume.versionName,
     atsScore: out.atsScore,
     breakdown: out.breakdown,
     matchedSkills: out.matchedSkills,

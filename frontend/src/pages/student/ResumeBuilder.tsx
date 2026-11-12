@@ -328,7 +328,8 @@ export const ResumeBuilder: React.FC = () => {
     setBusy('review');
     setReview(null);
     try {
-      const res: any = await api.post('/resumes/review', { data: analysed().data, targetRole });
+      const a = analysed();
+      const res: any = await api.post('/resumes/review', { data: a.data, resumeId: a.id, targetRole });
       setReview(res.data.review);
     } catch (e: any) {
       say(e.message, false);
