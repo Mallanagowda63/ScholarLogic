@@ -119,9 +119,16 @@ export const analyzeResume = async (req: AuthRequest, res: Response): Promise<vo
   res.json({ success: true, message: 'Job match complete', data: { analysis: analysisDoc, resumeId: resume._id } });
 };
 
+// Versions the old resume page made by itself, filled with sample details (+91 98765 43210, the hidden
+// system email, "Passionate developer."). The student never wrote them, so they are not shown.
+const isOldSample = (r: any) => {
+  const d = r.data || {};
+  return /98765\s?43210/.test(d.phone || '') || (isPlaceholderEmail(d.email || '') && !(r.rawText || '').trim()) || /^(Passionate developer\.|Motivated software engineering student)/.test(d.summary || '');
+};
+
 export const getMyResumes = async (req: AuthRequest, res: Response): Promise<void> => {
   const student = await myStudent(req);
-  const resumes = await Resume.find({ studentId: student._id }).sort({ updatedAt: -1 });
+  const resumes = (await Resume.find({ studentId: student._id }).sort({ updatedAt: -1 })).filter((r) => !isOldSample(r));
   res.json({ success: true, data: { resumes } });
 };
 
