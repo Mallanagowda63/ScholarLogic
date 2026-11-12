@@ -72,25 +72,72 @@ export class EmailService {
     if (!this.transporter || this.providerType === 'ethereal') throw new Error('Email is not set up on the server (RESEND_API_KEY)');
     const esc = (v: string) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
     const loginUrl = `${siteUrl.replace(/\/+$/, '')}/login`;
-    const html = `
-      <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 24px; color: #1e293b;">
-        <h2 style="color: #0c8ee9; margin: 0 0 16px;">ScholarLogic</h2>
-        <p>Dear <strong>${esc(name)}</strong>,</p>
-        <p>Your ScholarLogic student login is ready. Use these details to sign in:</p>
-        <table style="background: #f1f5f9; border-radius: 10px; padding: 14px 18px; margin: 16px 0; font-size: 15px;">
-          <tr><td style="color: #64748b; padding: 4px 16px 4px 0;">Website</td><td><a href="${esc(loginUrl)}" style="color: #0c8ee9;">${esc(loginUrl)}</a></td></tr>
-          <tr><td style="color: #64748b; padding: 4px 16px 4px 0;">Login ID</td><td style="font-family: monospace; font-weight: bold;">${esc(loginId)}</td></tr>
-          <tr><td style="color: #64748b; padding: 4px 16px 4px 0;">Password</td><td style="font-family: monospace; font-weight: bold;">${esc(password)}</td></tr>
-        </table>
-        <p><a href="${esc(loginUrl)}" style="display: inline-block; background: #0c8ee9; color: #fff; text-decoration: none; padding: 10px 20px; border-radius: 8px; font-weight: bold;">Log in to ScholarLogic</a></p>
-        <p style="font-size: 13px; color: #64748b;">Keep this password private. If you did not expect this email, contact the ScholarLogic office.</p>
-        <p>Regards,<br/>ScholarLogic Team</p>
-      </div>`;
-    const text = `Dear ${name},\n\nYour ScholarLogic student login:\nWebsite: ${loginUrl}\nLogin ID: ${loginId}\nPassword: ${password}\n\nKeep this password private.\n\nScholarLogic Team`;
+    const replyTo = process.env.EMAIL_REPLY_TO || 'tech@scholarlogic.net';
+    const font = "font-family: 'Segoe UI', Arial, Helvetica, sans-serif;";
+    const row = (label: string, value: string, mono = true) => `
+              <tr>
+                <td style="${font} padding: 10px 0; border-bottom: 1px solid #e2e8f0; color: #64748b; font-size: 13px; width: 110px;">${label}</td>
+                <td style="${mono ? "font-family: Consolas, 'Courier New', monospace;" : font} padding: 10px 0; border-bottom: 1px solid #e2e8f0; color: #0f172a; font-size: 16px; font-weight: bold;">${value}</td>
+              </tr>`;
+    // Table layout with inline styles: renders the same in Gmail, Outlook and phone mail apps
+    const html = `<!doctype html>
+<html><body style="margin: 0; padding: 0; background: #f1f5f9;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background: #f1f5f9; padding: 24px 12px;">
+    <tr><td align="center">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 560px; background: #ffffff; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 8px rgba(15,23,42,0.06);">
+        <tr>
+          <td style="background: #0c8ee9; background-image: linear-gradient(135deg, #0c8ee9, #4f46e5); padding: 26px 32px;">
+            <p style="${font} margin: 0; color: #ffffff; font-size: 22px; font-weight: 800; letter-spacing: 0.3px;">ScholarLogic</p>
+            <p style="${font} margin: 4px 0 0; color: #dbeafe; font-size: 13px;">Student Learning Portal</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 30px 32px 8px;">
+            <p style="${font} margin: 0 0 14px; color: #0f172a; font-size: 16px;">Dear <strong>${esc(name)}</strong>,</p>
+            <p style="${font} margin: 0 0 20px; color: #334155; font-size: 15px; line-height: 1.6;">Welcome to ScholarLogic! Your student account is ready. Use the login details below to sign in to the portal, where you can see your attendance, courses, tests and job openings.</p>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 6px 20px;">
+              ${row('Website', `<a href="${esc(loginUrl)}" style="color: #0c8ee9; text-decoration: none;">${esc(loginUrl.replace(/^https?:\/\//, ''))}</a>`, false)}
+              ${row('Login ID', esc(loginId))}
+              <tr>
+                <td style="${font} padding: 10px 0; color: #64748b; font-size: 13px; width: 110px;">Password</td>
+                <td style="font-family: Consolas, 'Courier New', monospace; padding: 10px 0; color: #0f172a; font-size: 16px; font-weight: bold;">${esc(password)}</td>
+              </tr>
+            </table>
+            <table role="presentation" cellpadding="0" cellspacing="0" style="margin: 26px 0 8px;">
+              <tr><td style="border-radius: 10px; background: #0c8ee9;">
+                <a href="${esc(loginUrl)}" style="${font} display: inline-block; padding: 13px 30px; color: #ffffff; font-size: 15px; font-weight: bold; text-decoration: none;">Log in to ScholarLogic &rarr;</a>
+              </td></tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 12px 32px 26px;">
+            <p style="${font} margin: 0 0 6px; color: #0f172a; font-size: 14px; font-weight: bold;">How to log in</p>
+            <ol style="${font} margin: 0 0 18px; padding-left: 20px; color: #475569; font-size: 14px; line-height: 1.7;">
+              <li>Open <a href="${esc(loginUrl)}" style="color: #0c8ee9;">${esc(loginUrl.replace(/^https?:\/\//, ''))}</a> on your phone or computer.</li>
+              <li>Type your <strong>Login ID</strong> and <strong>Password</strong> exactly as shown above.</li>
+              <li>Tap the eye icon to check the password before you sign in.</li>
+            </ol>
+            <p style="${font} margin: 0; padding: 12px 14px; background: #fef3c7; border-radius: 8px; color: #92400e; font-size: 13px; line-height: 1.5;">&#128274; Keep your password private. Do not share it with anyone. ScholarLogic staff will never ask for it.</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 18px 32px; background: #f8fafc; border-top: 1px solid #e2e8f0;">
+            <p style="${font} margin: 0 0 4px; color: #475569; font-size: 13px;">Need help? Reply to this email or call <a href="tel:+919008625716" style="color: #0c8ee9; text-decoration: none;">+91 90086 25716</a>.</p>
+            <p style="${font} margin: 0; color: #94a3b8; font-size: 12px;">Regards, ScholarLogic Team</p>
+          </td>
+        </tr>
+      </table>
+      <p style="${font} margin: 14px 0 0; color: #94a3b8; font-size: 11px;">You received this because you are a ScholarLogic student.</p>
+    </td></tr>
+  </table>
+</body></html>`;
+    const text = `Dear ${name},\n\nWelcome to ScholarLogic! Your student account is ready.\n\nWebsite:  ${loginUrl}\nLogin ID: ${loginId}\nPassword: ${password}\n\nHow to log in:\n1. Open ${loginUrl}\n2. Type your Login ID and Password exactly as shown above.\n\nKeep your password private. Do not share it with anyone.\n\nNeed help? Reply to this email or call +91 90086 25716.\n\nRegards,\nScholarLogic Team`;
     const info = await this.transporter.sendMail({
       from: process.env.EMAIL_FROM || 'ScholarLogic <noreply@scholarlogiclms.in>',
+      replyTo,
       to,
-      subject: 'Your ScholarLogic login details',
+      subject: `${name.split(' ')[0] || 'Student'}, your ScholarLogic login details`,
       html,
       text,
     });
