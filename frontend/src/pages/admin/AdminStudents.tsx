@@ -226,6 +226,9 @@ export const AdminStudents: React.FC = () => {
             <span className="text-xs text-slate-500">
               Showing <b className="text-slate-800 dark:text-slate-200">{visible.length}</b> of {students.length} students
             </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 px-2.5 py-1 text-[11px] font-semibold text-sky-700 dark:bg-sky-950/40 dark:text-sky-300">
+              <span className="h-2.5 w-2.5 rounded-sm bg-sky-500" /> Blue rows = online students ({visible.filter((x) => x.mode === 'ONLINE').length})
+            </span>
           </div>
           <Card className="overflow-hidden">
             <div className="overflow-x-auto">
@@ -244,7 +247,7 @@ export const AdminStudents: React.FC = () => {
                     <EmptyRow colSpan={14} text={students.length ? 'No students match your filters.' : 'No students yet. Add your first student.'} />
                   ) : (
                     visible.map((s) => (
-                      <tr key={s._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                      <tr key={s._id} className={s.mode === 'ONLINE' ? 'bg-sky-50 shadow-[inset_4px_0_0_#0ea5e9] hover:bg-sky-100 dark:bg-sky-950/30 dark:hover:bg-sky-950/50' : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'}>
                         <td className="px-3 py-3 font-mono font-bold text-brand-600 dark:text-brand-400 whitespace-nowrap">
                           <Link to={`/admin/students/${s._id}`}>{s.studentId}</Link>
                         </td>
@@ -258,7 +261,15 @@ export const AdminStudents: React.FC = () => {
                           </span>
                         </td>
                         <td className="px-3 py-3 whitespace-nowrap text-slate-600 dark:text-slate-300">{s.course?.name || '—'}</td>
-                        <td className="px-3 py-3 whitespace-nowrap">{fmtMode(s.mode)}</td>
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          {s.mode === 'ONLINE' ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-sky-600 px-2 py-0.5 text-[10px] font-bold text-white">
+                              <span className="h-1.5 w-1.5 rounded-full bg-white" /> Online
+                            </span>
+                          ) : (
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{fmtMode(s.mode)}</span>
+                          )}
+                        </td>
                         <td className="px-3 py-3 whitespace-nowrap">
                           {s.currentSubject ? (
                             <>
