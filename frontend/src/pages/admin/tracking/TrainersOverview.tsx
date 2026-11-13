@@ -38,7 +38,7 @@ const Chip: React.FC<{ label: string; value: number; warn?: boolean }> = ({ labe
 export const TrainersOverview: React.FC = () => {
   const [trainers, setTrainers] = useState<any[] | null>(null);
   const [q, setQ] = useState('');
-  const [show, setShow] = useState<'ALL' | 'TEACHING'>('ALL');
+  const [show, setShow] = useState<'ALL' | 'TEACHING' | 'FREE'>('ALL');
 
   useEffect(() => {
     api
@@ -53,6 +53,7 @@ export const TrainersOverview: React.FC = () => {
   );
   const visible = sorted.filter((t) => {
     if (show === 'TEACHING' && !t.assignedBatches) return false;
+    if (show === 'FREE' && t.assignedBatches) return false;
     const term = q.trim().toLowerCase();
     return !term || [t.fullName, t.email, ...t.currentSubjects, ...t.batches.map((b: any) => b.batchCode)].join(' ').toLowerCase().includes(term);
   });
@@ -86,7 +87,7 @@ export const TrainersOverview: React.FC = () => {
         <Tile icon={CalendarClock} label="Classes conducted" value={totals.classes} tone="bg-violet-100 text-violet-700 dark:bg-violet-950/50 dark:text-violet-300" />
         <Tile
           icon={totals.delayed ? AlertTriangle : CheckCircle2}
-          label={totals.delayed ? 'Delayed batches' : 'Without a batch'}
+          label={totals.delayed ? 'Delayed batches' : `Free trainers`}
           value={totals.delayed || trainers.length - teaching}
           tone={totals.delayed ? 'bg-orange-100 text-orange-700 dark:bg-orange-950/50 dark:text-orange-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}
         />
@@ -102,6 +103,7 @@ export const TrainersOverview: React.FC = () => {
             [
               ['ALL', `All (${trainers.length})`],
               ['TEACHING', `Teaching (${teaching})`],
+              ['FREE', `Free (${trainers.length - teaching})`],
             ] as const
           ).map(([k, label]) => (
             <button
