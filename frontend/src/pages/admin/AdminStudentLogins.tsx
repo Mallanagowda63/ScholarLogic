@@ -28,7 +28,7 @@ interface StudentLogin {
   loginSharedAt: string | null;
 }
 
-type LoginFilter = 'ALL' | 'NEVER' | 'LOGGED' | 'NOPASS' | 'EMAIL' | 'NOEMAIL';
+type LoginFilter = 'ALL' | 'NEVER' | 'LOGGED' | 'NOPASS' | 'EMAIL' | 'NOEMAIL' | 'SENT' | 'NOTSENT';
 
 interface EmailResult {
   _id: string;
@@ -225,6 +225,8 @@ export const AdminStudentLogins: React.FC = () => {
       if (filter === 'NOPASS' && s.password) return false;
       if (filter === 'EMAIL' && !s.email) return false;
       if (filter === 'NOEMAIL' && s.email) return false;
+      if (filter === 'SENT' && !s.loginSharedAt) return false;
+      if (filter === 'NOTSENT' && s.loginSharedAt) return false;
       if (!term) return true;
       return [s.fullName, s.studentId, s.machineCode, s.phone, s.email, s.course].join(' ').toLowerCase().includes(term);
     });
@@ -234,6 +236,8 @@ export const AdminStudentLogins: React.FC = () => {
   const logged = (students || []).length - never;
   const emailCount = (students || []).filter((s) => s.email).length;
   const noEmailCount = (students || []).length - emailCount;
+  const sentCount = (students || []).filter((s) => s.loginSharedAt).length;
+  const notSentCount = (students || []).length - sentCount;
   const allVisibleSelected = visible.length > 0 && visible.every((s) => selected.has(s._id));
   const selectVisible = (on: boolean) =>
     setSelected((set) => {
@@ -379,6 +383,8 @@ export const AdminStudentLogins: React.FC = () => {
             <option value="NOPASS">No password on record ({missing})</option>
             <option value="EMAIL">With email ({emailCount})</option>
             <option value="NOEMAIL">Without email ({noEmailCount})</option>
+            <option value="SENT">Login sent to student ({sentCount})</option>
+            <option value="NOTSENT">Login not sent yet ({notSentCount})</option>
           </select>
           <button type="button" className={secondaryBtn} onClick={downloadList} disabled={!visible.length} title="Download this list with login IDs and passwords (opens in Excel)">
             <Download className="h-4 w-4" /> Download list
