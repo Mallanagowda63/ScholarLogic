@@ -158,6 +158,23 @@ export const AdminBatches: React.FC = () => {
   const [removeBusy, setRemoveBusy] = useState(false);
   const [removeError, setRemoveError] = useState('');
   const toast = useToast();
+  const [trainerList, setTrainerList] = useState<any[]>([]);
+  const [assigning, setAssigning] = useState('');
+
+  // Quick assign / change trainer right from the table
+  const assignTrainer = async (b: any, trainerId: string) => {
+    setAssigning(b._id);
+    try {
+      await api.put(`/tracking/batches/${b._id}`, { trainerId });
+      const t = trainerList.find((x) => x._id === trainerId);
+      setBatches((list) => list.map((x) => (x._id === b._id ? { ...x, trainer: t ? { _id: t._id, fullName: t.fullName } : null } : x)));
+      toast.show(t ? `${t.fullName} is now the trainer of ${b.batchCode}` : `Trainer removed from ${b.batchCode}`);
+    } catch (e: any) {
+      toast.show(e.message);
+    } finally {
+      setAssigning('');
+    }
+  };
 
   const askRemove = (b: any) => {
     setRemoveError('');
@@ -185,6 +202,7 @@ export const AdminBatches: React.FC = () => {
       .then((res: any) => setBatches(res.data?.batches || []))
       .catch(console.error)
       .finally(() => setLoading(false));
+    api.get('/tracking/trainers').then((r: any) => setTrainerList((r.data?.trainers || []).filter((t: any) => t.isActive !== false))).catch(() => {});
   }, []);
 
   const subjects = useMemo(() => [...new Set(batches.map((b) => b.subject?.name).filter(Boolean))].sort(), [batches]);
@@ -260,7 +278,24 @@ export const AdminBatches: React.FC = () => {
                         </Link>
                       </td>
                       <td className="px-3 py-3 font-semibold text-slate-800 dark:text-slate-200">{b.subject?.name}</td>
-                      <td className="px-3 py-3">{b.trainer?.fullName || <span className="text-amber-600">Unassigned</span>}</td>
+                      <td className="px-3 py-3" onClick={(e) => e.stopPropagation()}>
+                        <select
+                          aria-label={`Trainer of ${b.batchCode}`}
+                          value={b.trainer?._id || ''}
+                          disabled={assigning === b._id}
+                          onChange={(e) => assignTrainer(b, e.target.value)}
+                          className={`max-w-[160px] cursor-pointer rounded-lg border px-2 py-1 text-xs font-semibold ${
+                            b.trainer ? 'border-slate-200 bg-white text-slate-800 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200' : 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300'
+                          }`}
+                        >
+                          <option value="">{b.trainer ? '— Remove trainer —' : 'Assign trainer…'}</option>
+                          {trainerList.map((t) => (
+                            <option key={t._id} value={t._id}>
+                              {t.fullName}
+                            </option>
+                          ))}
+                        </select>
+                      </td>
                       <td className="px-3 py-3">{fmtMode(b.mode)}</td>
                       <td className="px-3 py-3 whitespace-nowrap">{b.timing}</td>
                       <td className="px-3 py-3 whitespace-nowrap">{fmtDate(b.startDate)}</td>
