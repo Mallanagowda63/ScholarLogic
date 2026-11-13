@@ -51,6 +51,7 @@ export const AdminStudents: React.FC = () => {
     }
   };
   const [pendingRegistrations, setPendingRegistrations] = useState(0);
+  const [trainerNames, setTrainerNames] = useState<string[]>([]);
   const [q, setQ] = useState('');
   const [f, setF] = useState({ course: '', subject: '', batch: '', trainer: '', mode: '', status: '', month: '', allocation: '' });
 
@@ -65,6 +66,7 @@ export const AdminStudents: React.FC = () => {
   useEffect(load, []);
   useEffect(() => {
     api.get('/tracking/registrations').then((r: any) => setPendingRegistrations(r.data?.counts?.PENDING || 0)).catch(() => {});
+    api.get('/tracking/trainers').then((r: any) => setTrainerNames((r.data?.trainers || []).map((t: any) => t.fullName))).catch(() => {});
   }, []);
 
   const options = useMemo(() => {
@@ -73,9 +75,11 @@ export const AdminStudents: React.FC = () => {
       course: uniq(students.map((s) => s.course?.name)),
       subject: uniq(students.map((s) => s.currentSubject?.name)),
       batch: uniq(students.map((s) => s.currentBatch?.batchCode)),
-      trainer: uniq(students.map((s) => s.currentBatch?.trainer?.fullName)),
+      // Every trainer is listed, even one with no students yet, plus "No trainer yet"
+      trainer: [...uniq([...trainerNames, ...students.map((s) => s.currentBatch?.trainer?.fullName)]), NONE],
     };
-  }, [students]);
+  }, [students, trainerNames]);
+  const trainerCount = (name: string) => students.filter((s) => (s.currentBatch?.trainer?.fullName || NONE) === name).length;
 
   const visible = useMemo(() => {
     const term = q.trim().toLowerCase();
@@ -87,7 +91,7 @@ export const AdminStudents: React.FC = () => {
       if (f.course && (f.course === NONE ? !!s.course?.name : s.course?.name !== f.course)) return false;
       if (f.subject && (f.subject === NONE ? !!s.currentSubject?.name : s.currentSubject?.name !== f.subject)) return false;
       if (f.batch && s.currentBatch?.batchCode !== f.batch) return false;
-      if (f.trainer && s.currentBatch?.trainer?.fullName !== f.trainer) return false;
+      if (f.trainer && (s.currentBatch?.trainer?.fullName || NONE) !== f.trainer) return false;
       if (f.mode && s.mode !== f.mode) return false;
       if (f.status && s.trainingStatus !== f.status) return false;
       if (f.allocation && s.allocationStatus !== f.allocation) return false;
@@ -169,7 +173,7 @@ export const AdminStudents: React.FC = () => {
           {select('course', 'All courses', [...options.course, ...(courseTabs.some(([c]) => c === NONE) ? [NONE] : [])], (o) => (o === NONE ? 'No course yet' : o))}
           {select('subject', 'All subjects', [...options.subject, ...(subjectChips.list.some(([c]) => c === NONE) ? [NONE] : [])], (o) => (o === NONE ? 'No subject yet' : o))}
           {select('batch', 'All batches', options.batch)}
-          {select('trainer', 'All trainers', options.trainer)}
+          {select('trainer', 'All trainers', options.trainer, (o) => `${o === NONE ? 'No trainer yet' : o} (${trainerCount(o)})`)}
           {select('mode', 'Any mode', ['ONLINE', 'OFFLINE'], fmtMode)}
           {select('status', 'Any status', STATUS_OPTIONS, (o) => o.replace('_', ' '))}
           <input type="month" className={`${inputClass} !py-1.5 text-xs`} value={f.month} onChange={setFilter('month')} aria-label="Joining month" title="Joining month" />
