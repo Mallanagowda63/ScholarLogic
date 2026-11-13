@@ -4,7 +4,7 @@ import { api } from '../../../services/api';
 import { RecordingsLinkCard } from './RecordingsLinkCard';
 import { ClassMeetingCard } from './ClassMeetingCard';
 import { ClassRecordingsList } from './ClassRecordingsList';
-import { ArrowLeft, UserPlus, Pencil, CheckCircle2, Circle, PlayCircle, Ban, Flag, Search, ClipboardCheck } from 'lucide-react';
+import { ArrowLeft, UserPlus, UserMinus, Pencil, CheckCircle2, Circle, PlayCircle, Ban, Flag, Search, ClipboardCheck } from 'lucide-react';
 import {
   AllocationStatusModal,
   Card,
@@ -366,8 +366,18 @@ export const BatchDetailView: React.FC<{ batchId: string; role: Role }> = ({ bat
               <h1 className="font-mono text-2xl font-extrabold text-slate-900 dark:text-white">{b.batchCode}</h1>
               <StatusBadge status={b.status} />
             </div>
-            <p className="text-sm font-semibold text-slate-600 dark:text-slate-300">
-              {b.subject?.name} • {b.timing} • {fmtMode(b.mode)} • {b.trainer?.fullName || 'No trainer'}
+            <p className="flex flex-wrap items-center gap-x-1 text-sm font-semibold text-slate-600 dark:text-slate-300">
+              {b.subject?.name} • {b.timing} • {fmtMode(b.mode)} • {b.trainer?.fullName || <span className="text-amber-600">No trainer</span>}
+              {isAdmin && b.trainer && (
+                <button
+                  type="button"
+                  onClick={() => setDialog({ kind: 'untrainer' })}
+                  className="ml-1 inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-[11px] font-bold text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40"
+                  title={`Remove ${b.trainer.fullName} from this batch`}
+                >
+                  <UserMinus className="h-3.5 w-3.5" /> Remove trainer
+                </button>
+              )}
             </p>
           </div>
           {isAdmin && (
@@ -606,6 +616,36 @@ export const BatchDetailView: React.FC<{ batchId: string; role: Role }> = ({ bat
       </div>
 
       {dialog?.kind === 'edit' && <EditBatchModal batch={b} onClose={() => setDialog(null)} onDone={done} />}
+      {dialog?.kind === 'untrainer' && (
+        <Modal title={`Remove ${b.trainer?.fullName || 'the trainer'} from ${b.batchCode}?`} subtitle="The batch stays; it just has no trainer until you choose a new one." onClose={() => setDialog(null)}>
+          <ul className="list-disc space-y-1 pl-5 text-sm text-slate-600 dark:text-slate-300">
+            <li>{b.trainer?.fullName} no longer sees this batch or its students.</li>
+            <li>Students, attendance, class updates and recordings stay as they are.</li>
+            <li>The change is saved in the batch history.</li>
+          </ul>
+          <div className="flex justify-end gap-2 pt-4">
+            <button type="button" className={secondaryBtn} onClick={() => setDialog(null)}>
+              Keep trainer
+            </button>
+            <button
+              type="button"
+              className="inline-flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white shadow hover:bg-rose-700"
+              onClick={async () => {
+                try {
+                  await api.put(`/tracking/batches/${b._id}`, { trainerId: '' });
+                  setDialog(null);
+                  done('Trainer removed from the batch');
+                } catch (e: any) {
+                  setDialog(null);
+                  done(e.message);
+                }
+              }}
+            >
+              <UserMinus className="h-4 w-4" /> Remove trainer
+            </button>
+          </div>
+        </Modal>
+      )}
       {dialog?.kind === 'add' && <AddStudentModal batch={b} onClose={() => setDialog(null)} onDone={done} />}
       {dialog?.kind === 'realloc' && (
         <ReallocateModal
