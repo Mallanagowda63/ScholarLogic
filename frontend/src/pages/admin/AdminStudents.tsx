@@ -24,6 +24,17 @@ const ALLOCATION_OPTIONS = ['ALLOCATED', 'WAITING', 'REALLOCATION_REQUIRED', 'PA
 const STATUS_OPTIONS = ['ACTIVE', 'ON_HOLD', 'DROPPED', 'REJOINED'];
 // Tab value for students with no course / no current subject yet
 const NONE = '__NONE__';
+const SHEET = 'sheet:';
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+// Class-sheet batch names are typed many ways ("July Aug2026", "Jul-aug 2026", "May -Jun26"); group them as "Jul-Aug 2026"
+const sheetKey = (raw?: string) => {
+  if (!raw || raw.trim() === '(top)') return '';
+  const months = (raw.toLowerCase().match(/[a-z]+/g) || []).map((w) => w.slice(0, 3)).filter((m) => MONTHS.includes(m));
+  const yr = raw.match(/(\d)(\d{2})(?!.*\d)|(\d{2})(?!.*\d)/);
+  if (!months.length) return SHEET + raw.trim();
+  const label = months.map((m) => m[0].toUpperCase() + m.slice(1)).join('-');
+  return `${SHEET}${label}${yr ? ` 20${yr[2] || yr[3]}` : ''}`;
+};
 
 export const AdminStudents: React.FC = () => {
   const navigate = useNavigate();
@@ -52,6 +63,7 @@ export const AdminStudents: React.FC = () => {
   };
   const [pendingRegistrations, setPendingRegistrations] = useState(0);
   const [trainerNames, setTrainerNames] = useState<string[]>([]);
+  const [batchCodes, setBatchCodes] = useState<string[]>([]);
   const [q, setQ] = useState('');
   const [f, setF] = useState({ course: '', subject: '', batch: '', trainer: '', mode: '', status: '', month: '', allocation: '' });
 
@@ -66,6 +78,7 @@ export const AdminStudents: React.FC = () => {
   useEffect(load, []);
   useEffect(() => {
     api.get('/tracking/registrations').then((r: any) => setPendingRegistrations(r.data?.counts?.PENDING || 0)).catch(() => {});
+    api.get('/tracking/batches').then((r: any) => setBatchCodes((r.data?.batches || []).map((b: any) => b.batchCode))).catch(() => {});
     api.get('/tracking/trainers').then((r: any) => setTrainerNames((r.data?.trainers || []).map((t: any) => t.fullName))).catch(() => {});
   }, []);
 
@@ -74,11 +87,18 @@ export const AdminStudents: React.FC = () => {
     return {
       course: uniq(students.map((s) => s.course?.name)),
       subject: uniq(students.map((s) => s.currentSubject?.name)),
-      batch: uniq(students.map((s) => s.currentBatch?.batchCode)),
+      // Website batches, then the class-sheet batches (e.g. "Jul-Aug 2026"), then "No batch yet"
+      batch: [
+        ...uniq([...batchCodes, ...students.map((s) => s.currentBatch?.batchCode)]),
+        ...uniq(students.map((s) => (s.currentBatch ? '' : sheetKey(s.sheetBatch)))),
+        NONE,
+      ],
       // Every trainer is listed, even one with no students yet, plus "No trainer yet"
       trainer: [...uniq([...trainerNames, ...students.map((s) => s.currentBatch?.trainer?.fullName)]), NONE],
     };
-  }, [students, trainerNames]);
+  }, [students, trainerNames, batchCodes]);
+  const batchOf = (s: any) => s.currentBatch?.batchCode || sheetKey(s.sheetBatch) || NONE;
+  const batchCount = (name: string) => students.filter((s) => batchOf(s) === name).length;
   const trainerCount = (name: string) => students.filter((s) => (s.currentBatch?.trainer?.fullName || NONE) === name).length;
 
   const visible = useMemo(() => {
@@ -90,7 +110,7 @@ export const AdminStudents: React.FC = () => {
       }
       if (f.course && (f.course === NONE ? !!s.course?.name : s.course?.name !== f.course)) return false;
       if (f.subject && (f.subject === NONE ? !!s.currentSubject?.name : s.currentSubject?.name !== f.subject)) return false;
-      if (f.batch && s.currentBatch?.batchCode !== f.batch) return false;
+      if (f.batch && batchOf(s) !== f.batch) return false;
       if (f.trainer && (s.currentBatch?.trainer?.fullName || NONE) !== f.trainer) return false;
       if (f.mode && s.mode !== f.mode) return false;
       if (f.status && s.trainingStatus !== f.status) return false;
@@ -172,7 +192,7 @@ export const AdminStudents: React.FC = () => {
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8">
           {select('course', 'All courses', [...options.course, ...(courseTabs.some(([c]) => c === NONE) ? [NONE] : [])], (o) => (o === NONE ? 'No course yet' : o))}
           {select('subject', 'All subjects', [...options.subject, ...(subjectChips.list.some(([c]) => c === NONE) ? [NONE] : [])], (o) => (o === NONE ? 'No subject yet' : o))}
-          {select('batch', 'All batches', options.batch)}
+          {select('batch', 'All batches', options.batch, (o) => `${o === NONE ? 'No batch yet' : o.startsWith(SHEET) ? `${o.slice(SHEET.length)} • class sheet` : o} (${batchCount(o)})`)}
           {select('trainer', 'All trainers', options.trainer, (o) => `${o === NONE ? 'No trainer yet' : o} (${trainerCount(o)})`)}
           {select('mode', 'Any mode', ['ONLINE', 'OFFLINE'], fmtMode)}
           {select('status', 'Any status', STATUS_OPTIONS, (o) => o.replace('_', ' '))}
