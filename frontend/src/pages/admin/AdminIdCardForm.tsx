@@ -59,7 +59,7 @@ export const AdminIdCardForm: React.FC = () => {
   const [newName, setNewName] = useState('');
   const [nextCode, setNextCode] = useState('');
   const [issued, setIssued] = useState<{ name: string; code: string; password: string; email: string; emailed: boolean } | null>(null);
-  const [tab, setTab] = useState<Status | 'TODO' | 'ALL'>('TODO');
+  const [tab, setTab] = useState<Status | 'TODO' | 'ALL'>('ALL');
   const [q, setQ] = useState('');
   const [syncing, setSyncing] = useState(false);
   const [review, setReview] = useState<Answer | null>(null);
@@ -213,11 +213,11 @@ export const AdminIdCardForm: React.FC = () => {
   const picked = (students || []).find((s) => s._id === pickId) || (review?.student && review.student._id === pickId ? { ...review.student, loginId: review.loginId, email: '' } : null);
 
   const tabs: { k: typeof tab; label: string }[] = [
+    { k: 'ALL', label: 'All' },
     { k: 'TODO', label: 'To check' },
     { k: 'SENT', label: 'Login emailed' },
     { k: 'DUPLICATE', label: 'Already sent' },
     { k: 'IGNORED', label: 'Dismissed' },
-    { k: 'ALL', label: 'All' },
   ];
 
   return (
@@ -299,6 +299,9 @@ export const AdminIdCardForm: React.FC = () => {
                     <tr key={a._id} className="align-top hover:bg-slate-50 dark:hover:bg-slate-800/40">
                       <td className="px-3 py-2.5 whitespace-nowrap text-slate-500">
                         {when(a.submittedAt)}
+                        {Date.now() - new Date(a.submittedAt).getTime() < 86400000 && (
+                          <span className="ml-1.5 rounded bg-rose-500 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-white">New</span>
+                        )}
                         <span className={`mt-1 block w-fit rounded px-1.5 py-0.5 text-[10px] font-bold ${a.form === 'NEW_STUDENT' ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300' : 'bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300'}`}>
                           {FORM_LABEL[a.form]}
                         </span>
