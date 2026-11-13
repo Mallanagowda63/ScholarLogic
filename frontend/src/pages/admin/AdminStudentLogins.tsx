@@ -28,7 +28,10 @@ interface StudentLogin {
   loginSharedAt: string | null;
 }
 
-type LoginFilter = 'ALL' | 'NEVER' | 'LOGGED' | 'NOPASS' | 'EMAIL' | 'NOEMAIL' | 'SENT' | 'NOTSENT';
+type LoginFilter = 'ALL' | 'NEVER' | 'LOGGED' | 'NOPASS' | 'EMAIL' | 'NOEMAIL' | 'SENT' | 'NOTSENT' | 'SCLR' | 'NOSCLR' | 'READY';
+
+// Students whose login ID is an SCLR card number (from the eSSL machine or the ID card form)
+const hasSclr = (s: { loginId: string; studentId: string }) => /^SCLR\d+$/i.test(s.loginId || s.studentId || '');
 
 interface EmailResult {
   _id: string;
@@ -227,6 +230,9 @@ export const AdminStudentLogins: React.FC = () => {
       if (filter === 'NOEMAIL' && s.email) return false;
       if (filter === 'SENT' && !s.loginSharedAt) return false;
       if (filter === 'NOTSENT' && s.loginSharedAt) return false;
+      if (filter === 'SCLR' && !hasSclr(s)) return false;
+      if (filter === 'NOSCLR' && hasSclr(s)) return false;
+      if (filter === 'READY' && !(s.email && hasSclr(s) && !s.loginSharedAt && s.password)) return false;
       if (!term) return true;
       return [s.fullName, s.studentId, s.machineCode, s.phone, s.email, s.course].join(' ').toLowerCase().includes(term);
     });
@@ -238,6 +244,8 @@ export const AdminStudentLogins: React.FC = () => {
   const noEmailCount = (students || []).length - emailCount;
   const sentCount = (students || []).filter((s) => s.loginSharedAt).length;
   const notSentCount = (students || []).length - sentCount;
+  const sclrCount = (students || []).filter(hasSclr).length;
+  const readyCount = (students || []).filter((s) => s.email && hasSclr(s) && !s.loginSharedAt && s.password).length;
   const allVisibleSelected = visible.length > 0 && visible.every((s) => selected.has(s._id));
   const selectVisible = (on: boolean) =>
     setSelected((set) => {
@@ -385,6 +393,9 @@ export const AdminStudentLogins: React.FC = () => {
             <option value="NOEMAIL">Without email ({noEmailCount})</option>
             <option value="SENT">Login sent to student ({sentCount})</option>
             <option value="NOTSENT">Login not sent yet ({notSentCount})</option>
+            <option value="SCLR">With SCLR ID ({sclrCount})</option>
+            <option value="NOSCLR">Without SCLR ID ({(students || []).length - sclrCount})</option>
+            <option value="READY">★ Ready to email: email + SCLR ID, login not sent ({readyCount})</option>
           </select>
           <button type="button" className={secondaryBtn} onClick={downloadList} disabled={!visible.length} title="Download this list with login IDs and passwords (opens in Excel)">
             <Download className="h-4 w-4" /> Download list
