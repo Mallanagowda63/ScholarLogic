@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Clapperboard, ExternalLink, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { api } from '../../../services/api';
 import { Card, inputClass, primaryBtn, secondaryBtn } from './shared';
+import { RecordingsLinkCard } from './RecordingsLinkCard';
 
 // Batch → one row per class recording. Zoho recordings of meetings created here are added by themselves
 // (every hour, or "Get recordings from Zoho"); the trainer can also add any recording link by hand.
@@ -123,11 +124,13 @@ export const ClassRecordingsList: React.FC<{ batch: any; canEdit: boolean; onSav
           ))}
         </ul>
       )}
+      {list.length === 0 && !canEdit && !batch.recordingsLink && <p className="mt-3 text-xs text-slate-400">No recordings yet.</p>}
       {list.length > 8 && (
         <button type="button" className="mt-2 text-[11px] font-bold text-brand-600 hover:underline" onClick={() => setShowAll((v) => !v)}>
           {showAll ? 'Show fewer' : `Show all ${list.length}`}
         </button>
       )}
+      <RecordingsLinkCard key={batch.recordingsLink || 'none'} batch={batch} onSaved={onSaved} canEdit={canEdit} />
     </Card>
   );
 };
