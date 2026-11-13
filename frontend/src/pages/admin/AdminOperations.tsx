@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { api } from '../../services/api';
 import { BatchDetailView } from './tracking/BatchDetailView';
-import { Card, EmptyRow, PageHeader, ProgressBar, Spinner, StatusBadge, fmtDate, fmtMode, inputClass, statusTone } from './tracking/shared';
+import { TrainersOverview } from './tracking/TrainersOverview';
+import { Card, EmptyRow, PageHeader, Spinner, StatusBadge, fmtDate, inputClass } from './tracking/shared';
 
 export const AdminBatchDetail: React.FC = () => {
   const { id } = useParams();
@@ -10,71 +11,7 @@ export const AdminBatchDetail: React.FC = () => {
 };
 
 // Factual operational tracking only — no ratings
-export const AdminTrainers: React.FC = () => {
-  const [trainers, setTrainers] = useState<any[] | null>(null);
-  useEffect(() => {
-    api.get('/tracking/trainers').then((r: any) => setTrainers(r.data?.trainers || [])).catch(() => setTrainers([]));
-  }, []);
-  if (!trainers) return <Spinner />;
-  return (
-    <div className="space-y-5 pb-12">
-      <PageHeader title="Trainers" subtitle="Assigned batches, classes conducted and topic progress per trainer." />
-      {trainers.length === 0 && <Card className="p-10 text-center text-sm text-slate-500">No trainer accounts found.</Card>}
-      {trainers.map((t) => (
-        <Card key={t._id} className="p-5">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <h3 className="text-base font-bold text-slate-900 dark:text-white">{t.fullName}</h3>
-              <p className="text-xs text-slate-500">{t.currentSubjects.join(', ') || 'No current subjects'}</p>
-            </div>
-            <div className="grid grid-cols-4 gap-6 text-center">
-              {[
-                ['Assigned batches', t.assignedBatches],
-                ['Classes conducted', t.classesConducted],
-                ['Topics completed', t.topicsCompleted],
-                ['Delayed batches', t.delayedBatches],
-              ].map(([l, v]) => (
-                <div key={l as string}>
-                  <p className={`text-xl font-extrabold ${l === 'Delayed batches' && Number(v) > 0 ? 'text-orange-500' : 'text-slate-900 dark:text-white'}`}>{v}</p>
-                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{l}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-          {t.batches.length > 0 && (
-            <div className="mt-4 overflow-x-auto">
-              <table className="w-full min-w-[640px] text-left text-xs">
-                <thead className="text-[10px] font-bold uppercase text-slate-400">
-                  <tr>
-                    {['Batch', 'Subject', 'Timing', 'Students', 'Progress', 'Expected completion', 'Status'].map((h) => (
-                      <th key={h} className="py-2 pr-3">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {t.batches.map((b: any) => (
-                    <tr key={b._id}>
-                      <td className="py-2 pr-3 font-mono font-bold"><Link to={`/admin/batches/${b._id}`} className="text-brand-600 dark:text-brand-400 hover:underline">{b.batchCode}</Link></td>
-                      <td className="py-2 pr-3">{b.subject?.name}</td>
-                      <td className="py-2 pr-3">{b.timing} • {fmtMode(b.mode)}</td>
-                      <td className="py-2 pr-3">{b.studentCount}</td>
-                      <td className="py-2 pr-3 w-40">
-                        <span className="font-bold">{b.progress.completed}/{b.progress.total} • {b.progress.percentage}%</span>
-                        <ProgressBar value={b.progress.percentage} tone={statusTone(b.status)} className="mt-1" />
-                      </td>
-                      <td className="py-2 pr-3">{fmtDate(b.estimatedCompletion)}</td>
-                      <td className="py-2 pr-3"><StatusBadge status={b.status} /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </Card>
-      ))}
-    </div>
-  );
-};
+export const AdminTrainers: React.FC = () => <TrainersOverview />;
 
 // Allocated vs actually attended, per batch
 export const AdminAttendance: React.FC = () => {

@@ -1154,7 +1154,7 @@ export const getMonthlyPlanning = async (req: AuthRequest, res: Response) => {
 };
 
 export const listTrainers = async (_req: AuthRequest, res: Response) => {
-  const trainers = await User.find({ role: 'TRAINER' }).select('fullName email').sort({ fullName: 1 }).lean();
+  const trainers = await User.find({ role: 'TRAINER' }).select('fullName email isActive zoho.connectedAt zoho.email profile.specialization').sort({ fullName: 1 }).lean();
   const batches = await listBatchSummaries({ trainerId: { $in: trainers.map((t) => t._id) } });
   res.json({
     success: true,
@@ -1166,6 +1166,10 @@ export const listTrainers = async (_req: AuthRequest, res: Response) => {
           _id: t._id,
           fullName: t.fullName,
           email: t.email,
+          isActive: t.isActive !== false,
+          zohoConnected: !!t.zoho?.connectedAt,
+          specialization: t.profile?.specialization || '',
+          studentsTeaching: live.reduce((s, b) => s + (b.studentCount || 0), 0),
           assignedBatches: live.length,
           currentSubjects: [...new Set(live.map((b) => b.subject?.name).filter(Boolean))],
           classesConducted: own.reduce((s, b) => s + (b.classesConducted || 0), 0),
