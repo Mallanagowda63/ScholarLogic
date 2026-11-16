@@ -668,6 +668,60 @@ export const deleteBatch = async (req: AuthRequest, res: Response) => {
   });
 };
 
+/**
+ * Who can join this batch: a batch teaches one subject, and every course that has that subject can send students
+ * (e.g. an SQL batch takes JFS, PFS, DA and DS students together). For each student: done / in a batch / waiting.
+ */
+export const getBatchEligible = async (req: AuthRequest, res: Response) => {
+  const batch = await Batch.findById(oid(req.params.id, 'batch')).lean();
+  if (!batch) throw new AppError('Batch not found', 404, 'NOT_FOUND');
+  const subjectId = String(batch.subjectId);
+  const courses = await TrackCourse.find({ 'subjects.subjectId': batch.subjectId }).select('name code').sort({ name: 1 }).lean();
+  const courseById = new Map(courses.map((c: any) => [String(c._id), { _id: c._id, name: c.name, code: c.code }]));
+  const students = await Student.find({ 'enrollment.courseId': { $in: courses.map((c) => c._id) } })
+    .select('studentId phone enrollment sheetStatuses userId')
+    .populate('userId', 'fullName')
+    .lean();
+  const allocations = await StudentBatchAllocation.find({ subjectId: batch.subjectId, studentId: { $in: students.map((s) => s._id) } })
+    .sort({ allocationDate: 1 })
+    .lean();
+  const batchCodes = new Map(
+    (await Batch.find({ _id: { $in: [...new Set(allocations.map((a) => String(a.batchId)))] } }).select('batchCode').lean()).map((b: any) => [String(b._id), b.batchCode])
+  );
+  const latestByStudent = new Map<string, any>();
+  allocations.forEach((a) => latestByStudent.set(String(a.studentId), a));
+
+  const rows = students.map((st: any) => {
+    const a = latestByStudent.get(String(st._id));
+    const sheet = (st.sheetStatuses || []).find((x: any) => String(x.subjectId) === subjectId);
+    let state = 'WAITING';
+    let note = '';
+    if (a && ACTIVE_ALLOCATION_STATUSES.includes(a.status)) {
+      state = String(a.batchId) === String(batch._id) ? 'THIS_BATCH' : 'IN_BATCH';
+      note = batchCodes.get(String(a.batchId)) || '';
+    } else if (a?.status === 'COMPLETED' || (!a && sheet?.status === 'COMPLETED')) {
+      state = 'COMPLETED';
+    } else if (!a && sheet && ['ATTENDING', 'RE_ATTENDING', 'BATCH_ALLOCATED'].includes(sheet.status)) {
+      state = 'SHEET';
+      note = sheet.raw || sheet.status;
+    }
+    const enrollStatus = st.enrollment?.status;
+    if (enrollStatus === 'ON_HOLD' || enrollStatus === 'DROPPED') state = enrollStatus;
+    return {
+      _id: st._id,
+      studentId: st.studentId,
+      fullName: st.userId?.fullName || 'Student',
+      phone: st.phone,
+      mode: st.enrollment?.mode || 'OFFLINE',
+      preferredTiming: st.enrollment?.preferredTiming || '',
+      course: courseById.get(String(st.enrollment?.courseId)) || null,
+      state,
+      note,
+    };
+  });
+  res.json({ success: true, data: { courses: [...courseById.values()], students: rows } });
+};
+
 export const getBatchDetail = async (req: AuthRequest, res: Response) => {
   const batch = await Batch.findById(oid(req.params.id, 'batch')).lean();
   if (!batch) throw new AppError('Batch not found', 404, 'NOT_FOUND');

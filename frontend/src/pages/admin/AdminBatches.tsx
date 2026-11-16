@@ -33,6 +33,7 @@ const suggestCode = (name: string, taken: Set<string>) => {
 const CreateBatchModal: React.FC<{ onClose: () => void; onDone: (id: string) => void }> = ({ onClose, onDone }) => {
   const [subjects, setSubjects] = useState<any[]>([]);
   const [trainers, setTrainers] = useState<any[]>([]);
+  const [courses, setCourses] = useState<any[]>([]);
   // Subject is typed: an existing one is picked by name (or "Name (CODE)"), a new name is created on submit
   const [subjectText, setSubjectText] = useState('');
   const [form, setForm] = useState({ subjectId: '', trainerId: '', mode: 'OFFLINE', timing: '', startDate: new Date().toISOString().slice(0, 10), expectedEndDate: '', capacity: '25', batchCode: '', remarks: '' });
@@ -41,6 +42,7 @@ const CreateBatchModal: React.FC<{ onClose: () => void; onDone: (id: string) => 
   useEffect(() => {
     api.get('/tracking/subjects').then((r: any) => setSubjects(r.data?.subjects || [])).catch(() => {});
     api.get('/tracking/trainers').then((r: any) => setTrainers(r.data?.trainers || [])).catch(() => {});
+    api.get('/tracking/courses').then((r: any) => setCourses(r.data?.courses || [])).catch(() => {});
   }, []);
   const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const typed = subjectText.trim();
@@ -91,6 +93,14 @@ const CreateBatchModal: React.FC<{ onClose: () => void; onDone: (id: string) => 
               </option>
             ))}
           </datalist>
+          {matched && (
+            <span className="mt-1 block text-[11px] font-semibold text-brand-600 dark:text-brand-400">
+              {(() => {
+                const forCourses = courses.filter((c) => (c.subjects || []).some((x: any) => String(x.subjectId?._id || x.subjectId) === String(matched._id))).map((c) => c.code);
+                return forCourses.length ? `Common batch: students from ${forCourses.join(', ')} can join` : 'No course has this subject yet';
+              })()}
+            </span>
+          )}
           {newCode && (
             <span className="mt-1 block text-[11px] text-emerald-600">
               New subject "{typed}" (code {newCode}, 30 days) will be added. Add its topics later under Subjects.

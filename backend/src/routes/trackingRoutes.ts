@@ -13,6 +13,7 @@ import {
   createBatch,
   createTrackedStudent,
   getBatchDetail,
+  getBatchEligible,
   getGlobalTimeline,
   getMonthlyPlanning,
   getMyJourney,
@@ -68,6 +69,7 @@ router.get('/me/recordings', authorizeRoles('STUDENT'), asyncHandler(getMyRecord
 
 // Trainer
 router.get('/trainer/batches', authorizeRoles('TRAINER'), asyncHandler(listMyBatches));
+router.get('/batches/:id/eligible', admin, asyncHandler(getBatchEligible));
 router.get('/batches/:id', adminOrTrainer, asyncHandler(getBatchDetail));
 router.post('/batches/:id/updates', adminOrTrainer, asyncHandler(submitDailyUpdate));
 router.put('/batches/:id/recordings-link', authorizeRoles('TRAINER'), asyncHandler(setRecordingsLink));

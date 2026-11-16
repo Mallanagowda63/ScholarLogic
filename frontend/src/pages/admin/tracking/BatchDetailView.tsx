@@ -96,56 +96,176 @@ const EditBatchModal: React.FC<{ batch: any; onClose: () => void; onDone: (m: st
   );
 };
 
+const STATE_LABEL: Record<string, [string, string]> = {
+  WAITING: ['Waiting', 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300'],
+  SHEET: ['Class sheet', 'bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300'],
+  IN_BATCH: ['In batch', 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300'],
+  THIS_BATCH: ['In this batch', 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300'],
+  COMPLETED: ['Done', 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'],
+  ON_HOLD: ['On hold', 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'],
+  DROPPED: ['Dropped', 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'],
+};
+const CAN_ADD = ['WAITING', 'SHEET'];
+
+// Add students by course: a batch teaches one subject, and every course with that subject can join it
+// (SQL → JFS, PFS, DA, DS together). Shows who still needs the subject, course by course, with tick-boxes.
 const AddStudentModal: React.FC<{ batch: any; onClose: () => void; onDone: (m: string) => void }> = ({ batch, onClose, onDone }) => {
-  const [students, setStudents] = useState<any[]>([]);
+  const [data, setData] = useState<{ courses: any[]; students: any[] } | null>(null);
+  const [course, setCourse] = useState('');
+  const [show, setShow] = useState<'NEED' | 'ALL'>('NEED');
   const [q, setQ] = useState('');
+  const [picked, setPicked] = useState<Set<string>>(new Set());
   const [error, setError] = useState('');
-  const [busy, setBusy] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState('');
   useEffect(() => {
-    api.get('/tracking/students').then((r: any) => setStudents(r.data?.students || [])).catch(() => {});
-  }, []);
-  const candidates = students.filter((s) => {
-    if (!s.course || ['ON_HOLD', 'DROPPED'].includes(s.trainingStatus)) return false;
-    if (s.currentBatch?._id === batch._id) return false;
-    const term = q.trim().toLowerCase();
-    return !term || [s.fullName, s.studentId, s.phone].join(' ').toLowerCase().includes(term);
-  });
-  const add = async (s: any) => {
-    setBusy(s._id);
-    setError('');
-    try {
-      await api.post(`/tracking/students/${s._id}/allocate`, { batchId: batch._id });
-      onDone(`${s.fullName} added to ${batch.batchCode}`);
-    } catch (e: any) {
-      setError(e.message);
-    } finally {
-      setBusy(null);
+    api
+      .get(`/tracking/batches/${batch._id}/eligible`)
+      .then((r: any) => setData(r.data))
+      .catch((e: any) => setError(e.message));
+  }, [batch._id]);
+
+  const students = data?.students || [];
+  const need = (s: any) => CAN_ADD.includes(s.state);
+  const countFor = (code: string) => students.filter((s) => (!code || s.course?.code === code) && (show === 'ALL' || need(s))).length;
+  const list = students
+    .filter((s) => {
+      if (course && s.course?.code !== course) return false;
+      if (show === 'NEED' && !need(s)) return false;
+      const term = q.trim().toLowerCase();
+      return !term || [s.fullName, s.studentId, s.phone, s.course?.code].join(' ').toLowerCase().includes(term);
+    })
+    .sort((a, b) => Number(need(b)) - Number(need(a)) || (a.course?.code || '').localeCompare(b.course?.code || '') || a.fullName.localeCompare(b.fullName));
+  const addable = list.filter(need);
+  const seats = Math.max(0, batch.availableSeats ?? 0);
+  const toggle = (id: string) =>
+    setPicked((p) => {
+      const n = new Set(p);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  const allPicked = addable.length > 0 && addable.every((s) => picked.has(s._id));
+
+  const addSelected = async () => {
+    const chosen = students.filter((s) => picked.has(s._id));
+    if (chosen.length > seats) {
+      setError(`Only ${seats} seat${seats === 1 ? '' : 's'} free in ${batch.batchCode}. Untick ${chosen.length - seats}, or raise the seats with Edit.`);
+      return;
     }
+    setBusy(true);
+    setError('');
+    const failed: string[] = [];
+    for (let i = 0; i < chosen.length; i++) {
+      setProgress(`Adding ${i + 1} of ${chosen.length}…`);
+      try {
+        await api.post(`/tracking/students/${chosen[i]._id}/allocate`, { batchId: batch._id });
+      } catch (e: any) {
+        failed.push(`${chosen[i].fullName}: ${e.message}`);
+      }
+    }
+    setBusy(false);
+    setProgress('');
+    const ok = chosen.length - failed.length;
+    if (failed.length) {
+      setError(`${ok} added. Not added:\n${failed.join('\n')}`);
+      if (ok) onDone(`${ok} student${ok === 1 ? '' : 's'} added to ${batch.batchCode}`);
+      return;
+    }
+    onDone(`${ok} student${ok === 1 ? '' : 's'} added to ${batch.batchCode}`);
   };
+
+  const chip = (active: boolean) =>
+    `shrink-0 rounded-full px-3 py-1 text-[11px] font-bold ${active ? 'bg-brand-600 text-white shadow' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300'}`;
+
   return (
-    <Modal title={`Add student to ${batch.batchCode}`} subtitle={`${batch.subject?.name} • ${batch.timing} • ${batch.availableSeats} seats free`} onClose={onClose}>
-      <ErrorNote text={error} />
-      <label className="relative mb-3 block">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-        <input className={`${inputClass} pl-9`} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, Student ID or phone" autoFocus />
-      </label>
-      <ul className="max-h-80 divide-y divide-slate-100 dark:divide-slate-800 overflow-y-auto">
-        {candidates.map((s) => (
-          <li key={s._id} className="flex items-center justify-between gap-3 py-2.5 text-xs">
-            <div>
-              <p className="font-bold text-slate-900 dark:text-white">{s.fullName}</p>
-              <p className="text-slate-500">
-                <span className="font-mono">{s.studentId}</span> • {s.course?.name} • prefers {s.preferredTiming || '—'} • {fmtMode(s.mode)}
-                {s.currentBatch && <> • now in {s.currentBatch.batchCode}</>}
-              </p>
-            </div>
-            <button type="button" className={primaryBtn} disabled={busy === s._id || batch.availableSeats <= 0} onClick={() => add(s)}>
-              {busy === s._id ? 'Adding…' : 'Add'}
+    <Modal
+      wide
+      title={`Add students to ${batch.batchCode}`}
+      subtitle={`${batch.subject?.name} • ${batch.timing} • ${seats} seat${seats === 1 ? '' : 's'} free${data?.courses?.length ? ` • for ${data.courses.map((c: any) => c.code).join(', ')}` : ''}`}
+      onClose={onClose}
+    >
+      {error && <p className="mb-3 whitespace-pre-line rounded-lg bg-rose-50 p-2 text-xs font-semibold text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">{error}</p>}
+      {!data ? (
+        !error && <Spinner />
+      ) : data.courses.length === 0 ? (
+        <p className="py-6 text-center text-xs text-slate-500">No course has {batch.subject?.name} in its subjects yet.</p>
+      ) : (
+        <>
+          <div className="mb-2 flex gap-2 overflow-x-auto pb-1" aria-label="Course">
+            <button type="button" className={chip(!course)} onClick={() => setCourse('')}>
+              All courses • {countFor('')}
             </button>
-          </li>
-        ))}
-        {candidates.length === 0 && <li className="py-6 text-center text-xs text-slate-500">No eligible students found.</li>}
-      </ul>
+            {data.courses.map((c: any) => (
+              <button key={c.code} type="button" className={chip(course === c.code)} onClick={() => setCourse(c.code)} title={c.name}>
+                {c.code} • {countFor(c.code)}
+              </button>
+            ))}
+          </div>
+          <div className="mb-3 flex flex-col gap-2 sm:flex-row">
+            <label className="relative block flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input className={`${inputClass} pl-9`} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, Student ID or phone" autoFocus />
+            </label>
+            <select className={`${inputClass} sm:w-56`} value={show} onChange={(e) => setShow(e.target.value as any)} aria-label="Show">
+              <option value="NEED">Still need {batch.subject?.name}</option>
+              <option value="ALL">Everyone in these courses</option>
+            </select>
+          </div>
+          <div className="mb-1 flex items-center justify-between px-1 text-[11px] text-slate-500">
+            <label className="inline-flex cursor-pointer items-center gap-2 font-semibold">
+              <input
+                type="checkbox"
+                checked={allPicked}
+                disabled={!addable.length}
+                onChange={() =>
+                  setPicked((p) => {
+                    const n = new Set(p);
+                    addable.forEach((s) => (allPicked ? n.delete(s._id) : n.add(s._id)));
+                    return n;
+                  })
+                }
+              />
+              Select all shown ({addable.length})
+            </label>
+            <span>{list.length} shown</span>
+          </div>
+          <ul className="max-h-[50vh] divide-y divide-slate-100 overflow-y-auto rounded-xl border border-slate-100 dark:divide-slate-800 dark:border-slate-800">
+            {list.map((s) => {
+              const can = need(s);
+              const [label, tone] = STATE_LABEL[s.state] || [s.state, ''];
+              return (
+                <li key={s._id} className={`flex items-center gap-3 px-3 py-2.5 text-xs ${can ? 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40' : 'opacity-60'}`} onClick={() => can && toggle(s._id)}>
+                  <input type="checkbox" checked={picked.has(s._id)} disabled={!can} onChange={() => toggle(s._id)} onClick={(e) => e.stopPropagation()} aria-label={`Pick ${s.fullName}`} />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold text-slate-900 dark:text-white">{s.fullName}</p>
+                    <p className="truncate text-slate-500">
+                      <span className="font-mono">{s.studentId}</span> • {s.course?.code} • {fmtMode(s.mode)}
+                      {s.preferredTiming ? ` • prefers ${s.preferredTiming}` : ''}
+                    </p>
+                  </div>
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${tone}`} title={s.note || ''}>
+                    {label}
+                    {s.note && s.state !== 'SHEET' ? ` ${s.note}` : ''}
+                  </span>
+                </li>
+              );
+            })}
+            {list.length === 0 && <li className="py-6 text-center text-xs text-slate-500">No students here.</li>}
+          </ul>
+          <div className="mt-4 flex items-center justify-between gap-2">
+            <span className="text-xs text-slate-500">{progress || `${picked.size} selected`}</span>
+            <div className="flex gap-2">
+              <button type="button" className={secondaryBtn} onClick={onClose}>
+                Close
+              </button>
+              <button type="button" className={primaryBtn} disabled={busy || picked.size === 0} onClick={addSelected}>
+                <UserPlus className="h-4 w-4" /> {busy ? 'Adding…' : `Add ${picked.size || ''} to ${batch.batchCode}`}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </Modal>
   );
 };
