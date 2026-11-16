@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { queueStudentUpdateEmail, shouldEmail } from './studentUpdateEmail';
 import { Student, IStudent } from '../models/Student';
 import { User } from '../models/User';
 import { Attendance } from '../models/Attendance';
@@ -149,7 +150,7 @@ export async function addTimeline(
   actor?: AuthUserPayload,
   date = new Date()
 ) {
-  return StudentTimeline.create({
+  const entry = await StudentTimeline.create({
     studentId,
     type,
     title,
@@ -159,6 +160,9 @@ export async function addTimeline(
     byUserId: actor?.userId,
     byName: actor?.fullName || '',
   });
+  // Tell the student by email when an admin changed something (batch, subject, status, mode)
+  if (shouldEmail(type, title, actor?.role)) queueStudentUpdateEmail(studentId, type, title, details, refs);
+  return entry;
 }
 
 interface JourneyContext {
