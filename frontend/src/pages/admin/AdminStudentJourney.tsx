@@ -308,7 +308,7 @@ export const AdminStudentJourney: React.FC = () => {
                           className={`max-w-[120px] cursor-pointer rounded-full border px-2 py-0.5 text-[10px] font-bold ${MARK_TONE[markOf(s.status)]}`}
                         >
                           {Object.entries(MARK_LABEL).map(([k, label]) => (
-                            <option key={k} value={k}>
+                            <option key={k} value={k} className="bg-white font-semibold text-slate-800 dark:bg-slate-900 dark:text-slate-100">
                               {label}
                             </option>
                           ))}
