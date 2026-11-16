@@ -37,7 +37,7 @@ export type TrainingStatus = 'ACTIVE' | 'ON_HOLD' | 'DROPPED' | 'REJOINED';
 export interface IEnrollment {
   courseId?: mongoose.Types.ObjectId; // TrackCourse
   joiningDate?: Date;
-  mode: 'ONLINE' | 'OFFLINE';
+  mode: 'ONLINE' | 'OFFLINE' | 'HYBRID';
   preferredTiming: string;
   status: TrainingStatus;
   remarks: string;
@@ -54,7 +54,7 @@ export interface IStatusHistoryEntry {
 }
 
 export interface IModeHistoryEntry {
-  mode: 'ONLINE' | 'OFFLINE';
+  mode: 'ONLINE' | 'OFFLINE' | 'HYBRID';
   from: Date;
   to?: Date;
   reason: string;
@@ -192,7 +192,7 @@ const StudentSchema = new Schema<IStudent>(
     enrollment: {
       courseId: { type: Schema.Types.ObjectId, ref: 'TrackCourse', index: true },
       joiningDate: { type: Date },
-      mode: { type: String, enum: ['ONLINE', 'OFFLINE'], default: 'OFFLINE' },
+      mode: { type: String, enum: ['ONLINE', 'OFFLINE', 'HYBRID'], default: 'OFFLINE' },
       preferredTiming: { type: String, default: '' },
       status: { type: String, enum: ['ACTIVE', 'ON_HOLD', 'DROPPED', 'REJOINED'], default: 'ACTIVE' },
       remarks: { type: String, default: '' },
@@ -215,7 +215,7 @@ const StudentSchema = new Schema<IStudent>(
     ],
     modeHistory: [
       {
-        mode: { type: String, enum: ['ONLINE', 'OFFLINE'] },
+        mode: { type: String, enum: ['ONLINE', 'OFFLINE', 'HYBRID'] },
         from: { type: Date, default: Date.now },
         to: { type: Date },
         reason: { type: String, default: '' },

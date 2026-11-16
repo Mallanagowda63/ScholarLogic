@@ -60,7 +60,7 @@ router.get(
   asyncHandler(async (req: AuthRequest, res: Response) => {
     const student = await Student.findOne({ userId: req.user!.userId }).select('_id enrollment');
     if (!student) throw new AppError('Student profile not found', 404, 'STUDENT_NOT_FOUND');
-    if (student.enrollment?.mode !== 'ONLINE') throw new AppError('QR attendance is for online students only', 403, 'NOT_ONLINE');
+    if (!['ONLINE', 'HYBRID'].includes(student.enrollment?.mode as string)) throw new AppError('QR attendance is for online and hybrid students only', 403, 'NOT_ONLINE');
     const day = todayIST();
     const today = await OnlineAttendance.findOne({ studentId: student._id, localDate: day }).lean();
     const token = jwt.sign({ typ: TOKEN_TYPE, sid: String(student._id), day }, env.JWT_SECRET, { expiresIn: QR_TTL_SECONDS });
@@ -109,7 +109,7 @@ router.post(
     if (topic.length < 3) throw new AppError('Write the class or topic you attended today', 400, 'TOPIC_REQUIRED');
     if (req.body?.confirm !== true) throw new AppError('Tick the box to confirm you attended today', 400, 'CONFIRM_REQUIRED');
     const card = await studentCard(sid);
-    if (card.mode !== 'ONLINE') throw new AppError('QR attendance is for online students only', 403, 'NOT_ONLINE');
+    if (!['ONLINE', 'HYBRID'].includes(card.mode)) throw new AppError('QR attendance is for online and hybrid students only', 403, 'NOT_ONLINE');
 
     const existing = await OnlineAttendance.findOne({ studentId: sid, localDate: day }).lean();
     if (existing) {
@@ -149,7 +149,7 @@ router.get(
     const date = /^\d{4}-\d{2}-\d{2}$/.test(String(req.query.date || '')) ? String(req.query.date) : todayIST();
     const [records, onlineStudents]: [any[], any[]] = await Promise.all([
       OnlineAttendance.find({ localDate: date }).sort({ checkedInAt: 1 }).populate({ path: 'studentId', select: 'studentId userId', populate: { path: 'userId', select: 'fullName' } }).lean(),
-      Student.find({ 'enrollment.mode': 'ONLINE' }).select('studentId userId').populate('userId', 'fullName').lean(),
+      Student.find({ 'enrollment.mode': { $in: ['ONLINE', 'HYBRID'] } }).select('studentId userId').populate('userId', 'fullName').lean(),
     ]);
     const marked = new Set(records.map((r) => String(r.studentId?._id)));
     res.json({

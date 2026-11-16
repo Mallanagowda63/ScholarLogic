@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
-import { Search, UserPlus, Eye, Pencil, CalendarPlus, ArrowRightLeft, RotateCcw, History, Trash2, X } from 'lucide-react';
+import { Search, UserPlus, Eye, Pencil, CalendarPlus, ArrowRightLeft, RotateCcw, History, Trash2, Wifi, X } from 'lucide-react';
 import {
   Card,
   EmptyRow,
   Modal,
+  ModeChangeModal,
   PageHeader,
   ProgressBar,
   Spinner,
@@ -44,6 +45,7 @@ export const AdminStudents: React.FC = () => {
   const [showNew, setShowNew] = useState(false);
   // Delete: confirmation modal; the student's login and records are removed permanently
   const [deleting, setDeleting] = useState<any | null>(null);
+  const [modeFor, setModeFor] = useState<any | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState('');
   const confirmDelete = async () => {
@@ -112,7 +114,7 @@ export const AdminStudents: React.FC = () => {
       if (f.subject && (f.subject === NONE ? !!s.currentSubject?.name : s.currentSubject?.name !== f.subject)) return false;
       if (f.batch && batchOf(s) !== f.batch) return false;
       if (f.trainer && (s.currentBatch?.trainer?.fullName || NONE) !== f.trainer) return false;
-      if (f.mode && s.mode !== f.mode) return false;
+      if (f.mode && (f.mode === 'CONVERTED' ? !s.convertedToOnline : s.mode !== f.mode)) return false;
       if (f.status && s.trainingStatus !== f.status) return false;
       if (f.allocation && s.allocationStatus !== f.allocation) return false;
       if (f.month && !(s.joiningDate || '').startsWith(f.month)) return false;
@@ -194,7 +196,7 @@ export const AdminStudents: React.FC = () => {
           {select('subject', 'All subjects', [...options.subject, ...(subjectChips.list.some(([c]) => c === NONE) ? [NONE] : [])], (o) => (o === NONE ? 'No subject yet' : o))}
           {select('batch', 'All batches', options.batch, (o) => `${o === NONE ? 'No batch yet' : o.startsWith(SHEET) ? `${o.slice(SHEET.length)} • class sheet` : o} (${batchCount(o)})`)}
           {select('trainer', 'All trainers', options.trainer, (o) => `${o === NONE ? 'No trainer yet' : o} (${trainerCount(o)})`)}
-          {select('mode', 'Any mode', ['ONLINE', 'OFFLINE'], fmtMode)}
+          {select('mode', 'Any mode', ['ONLINE', 'OFFLINE', 'HYBRID', 'CONVERTED'], (o) => { const n = o === 'CONVERTED' ? students.filter((x) => x.convertedToOnline).length : students.filter((x) => x.mode === o).length; return `${o === 'CONVERTED' ? 'Converted to online' : fmtMode(o)} (${n})`; })}
           {select('status', 'Any status', STATUS_OPTIONS, (o) => o.replace('_', ' '))}
           <input type="month" className={`${inputClass} !py-1.5 text-xs`} value={f.month} onChange={setFilter('month')} aria-label="Joining month" title="Joining month" />
           {select('allocation', 'Allocation', ALLOCATION_OPTIONS, (o) => o.replace(/_/g, ' '))}
@@ -287,8 +289,19 @@ export const AdminStudents: React.FC = () => {
                         <td className="px-3 py-3 whitespace-nowrap text-slate-600 dark:text-slate-300">{s.course?.name || '—'}</td>
                         <td className="px-3 py-3 whitespace-nowrap">
                           {s.mode === 'ONLINE' ? (
-                            <span className="inline-flex items-center gap-1 rounded-full bg-sky-600 px-2 py-0.5 text-[10px] font-bold text-white">
-                              <span className="h-1.5 w-1.5 rounded-full bg-white" /> Online
+                            <>
+                              <span className="inline-flex items-center gap-1 rounded-full bg-sky-600 px-2 py-0.5 text-[10px] font-bold text-white">
+                                <span className="h-1.5 w-1.5 rounded-full bg-white" /> Online
+                              </span>
+                              {s.convertedToOnline && (
+                                <span className="mt-0.5 block text-[10px] font-semibold text-sky-700 dark:text-sky-300" title={s.convertedAt ? `Since ${fmtDate(s.convertedAt)}` : ''}>
+                                  ↻ Converted{s.convertedAt ? ` ${fmtDate(s.convertedAt)}` : ''}
+                                </span>
+                              )}
+                            </>
+                          ) : s.mode === 'HYBRID' ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-bold text-white">
+                              <span className="h-1.5 w-1.5 rounded-full bg-white" /> Hybrid
                             </span>
                           ) : (
                             <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{fmtMode(s.mode)}</span>
@@ -367,6 +380,15 @@ export const AdminStudents: React.FC = () => {
                             ))}
                             <button
                               type="button"
+                              title={s.mode === 'ONLINE' ? 'Change mode' : 'Convert to online / change mode'}
+                              aria-label={`Change mode of ${s.fullName}`}
+                              onClick={() => setModeFor(s)}
+                              className="rounded-lg bg-cyan-50 p-2 text-cyan-600 ring-1 ring-cyan-200 transition hover:bg-cyan-100 dark:bg-cyan-950/40 dark:text-cyan-300 dark:ring-cyan-900"
+                            >
+                              <Wifi className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
                               title="Delete"
                               aria-label={`Delete ${s.fullName}`}
                               onClick={() => {
@@ -400,6 +422,18 @@ export const AdminStudents: React.FC = () => {
             toast.show(msg);
             if (id) navigate(`/admin/students/${id}?action=allocate`);
             else load();
+          }}
+        />
+      )}
+      {modeFor && (
+        <ModeChangeModal
+          student={{ _id: modeFor._id, fullName: modeFor.fullName, studentId: modeFor.studentId }}
+          current={modeFor.mode || 'OFFLINE'}
+          onClose={() => setModeFor(null)}
+          onDone={(msg) => {
+            setModeFor(null);
+            toast.show(msg);
+            load();
           }}
         />
       )}

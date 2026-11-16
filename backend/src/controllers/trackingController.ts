@@ -135,6 +135,11 @@ const summarizeStudent = (student: any, journey: ReturnType<typeof buildJourney>
   email: publicEmail(student.userId?.email),
   phone: student.phone,
   mode: student.enrollment?.mode || 'OFFLINE',
+  // Switched to online after starting offline or hybrid
+  convertedToOnline:
+    student.enrollment?.mode === 'ONLINE' && (student.modeHistory || []).some((m: any) => m.mode && m.mode !== 'ONLINE'),
+  convertedAt:
+    student.enrollment?.mode === 'ONLINE' ? [...(student.modeHistory || [])].reverse().find((m: any) => m.mode === 'ONLINE' && !m.to)?.from || null : null,
   preferredTiming: student.enrollment?.preferredTiming || '',
   joiningDate: student.enrollment?.joiningDate || student.enrollmentDate,
   trainingStatus: journey.trainingStatus,
@@ -165,7 +170,7 @@ const summarizeStudent = (student: any, journey: ReturnType<typeof buildJourney>
 
 export const listTrackedStudents = async (_req: AuthRequest, res: Response) => {
   // Only the fields the list and journey need, as plain objects: much faster with hundreds of students
-  const students: any[] = await Student.find({}).select('studentId phone enrollment enrollmentDate registrationSource userId createdAt biometricId cardNumber sheetStatuses').populate('userId', 'fullName email').sort({ createdAt: -1 }).lean();
+  const students: any[] = await Student.find({}).select('studentId phone enrollment enrollmentDate registrationSource userId createdAt biometricId cardNumber sheetStatuses modeHistory').populate('userId', 'fullName email').sort({ createdAt: -1 }).lean();
   const ctx = await loadJourneyContext(students.map((s) => s._id));
   res.json({ success: true, data: { students: students.map((s) => summarizeStudent(s, buildJourney(s, ctx))) } });
 };
@@ -497,7 +502,7 @@ export const changeMode = async (req: AuthRequest, res: Response) => {
   const student = await Student.findById(oid(req.params.id, 'student'));
   if (!student) throw new AppError('Student not found', 404, 'NOT_FOUND');
   const { mode, reason = '' } = req.body;
-  if (!['ONLINE', 'OFFLINE'].includes(mode)) throw new AppError('Mode must be ONLINE or OFFLINE', 400, 'INVALID_MODE');
+  if (!['ONLINE', 'OFFLINE', 'HYBRID'].includes(mode)) throw new AppError('Mode must be Online, Offline or Hybrid', 400, 'INVALID_MODE');
   const from = student.enrollment?.mode || 'OFFLINE';
   if (from === mode) throw new AppError(`Student is already ${mode.toLowerCase()}`, 409, 'NO_CHANGE');
 
@@ -510,7 +515,7 @@ export const changeMode = async (req: AuthRequest, res: Response) => {
   (student.enrollment as any).mode = mode;
   await student.save();
 
-  const label = (m: string) => (m === 'ONLINE' ? 'Online' : 'Offline');
+  const label = (m: string) => (m === 'ONLINE' ? 'Online' : m === 'HYBRID' ? 'Hybrid' : 'Offline');
   await addTimeline(student._id, 'MODE_CHANGED', `Mode changed ${label(from)} → ${label(mode)}`, reason, {}, req.user);
   res.json({ success: true, message: 'Mode updated' });
 };
@@ -1106,7 +1111,7 @@ export const submitDailyUpdate = async (req: AuthRequest, res: Response) => {
 // ---------------------------------------------------------------------------
 
 export const getOverview = async (_req: AuthRequest, res: Response) => {
-  const students: any[] = await Student.find({}).select('studentId phone enrollment enrollmentDate registrationSource userId createdAt biometricId cardNumber sheetStatuses').populate('userId', 'fullName email').lean();
+  const students: any[] = await Student.find({}).select('studentId phone enrollment enrollmentDate registrationSource userId createdAt biometricId cardNumber sheetStatuses modeHistory').populate('userId', 'fullName email').lean();
   const ctx = await loadJourneyContext(students.map((s) => s._id));
   const summaries = students.map((s) => summarizeStudent(s, buildJourney(s, ctx)));
   const batches = await listBatchSummaries();

@@ -9,7 +9,7 @@ import { api } from '../../../services/api';
 export const fmtDate = (d?: string | Date | null) =>
   d ? new Date(d).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
 
-export const fmtMode = (m?: string) => (m === 'ONLINE' ? 'Online' : m === 'OFFLINE' ? 'Offline' : '—');
+export const fmtMode = (m?: string) => (m === 'ONLINE' ? 'Online' : m === 'OFFLINE' ? 'Offline' : m === 'HYBRID' ? 'Hybrid' : '—');
 
 export const humanize = (s?: string | null) =>
   s ? s.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase()) : '—';
@@ -521,7 +521,7 @@ export const ModeChangeModal: React.FC<{ student: StudentRef; current: string; o
   onClose,
   onDone,
 }) => {
-  const next = current === 'ONLINE' ? 'OFFLINE' : 'ONLINE';
+  const [next, setNext] = useState(current === 'ONLINE' ? 'OFFLINE' : 'ONLINE');
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -540,8 +540,30 @@ export const ModeChangeModal: React.FC<{ student: StudentRef; current: string; o
   return (
     <Modal title={`Change mode: ${fmtMode(current)} → ${fmtMode(next)}`} subtitle={`${student.fullName}. Previous mode period is kept in history.`} onClose={onClose}>
       <ErrorNote text={error} />
+      <div className="mb-3 grid grid-cols-3 gap-2" role="radiogroup" aria-label="New mode">
+        {(['ONLINE', 'OFFLINE', 'HYBRID'] as const).map((m) => (
+          <button
+            key={m}
+            type="button"
+            role="radio"
+            aria-checked={next === m}
+            disabled={m === current}
+            onClick={() => setNext(m)}
+            className={`rounded-xl border px-3 py-2 text-xs font-bold transition ${
+              m === current
+                ? 'cursor-not-allowed border-dashed border-slate-200 text-slate-400 dark:border-slate-700'
+                : next === m
+                  ? 'border-brand-500 bg-brand-50 text-brand-700 ring-2 ring-brand-500/20 dark:bg-brand-950/40 dark:text-brand-300'
+                  : 'border-slate-200 text-slate-600 hover:border-slate-300 dark:border-slate-700 dark:text-slate-300'
+            }`}
+          >
+            {fmtMode(m)}
+            {m === current && <span className="block text-[10px] font-normal">now</span>}
+          </button>
+        ))}
+      </div>
       <Field label="Reason">
-        <input className={inputClass} value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Relocated to another city" />
+        <input className={inputClass} value={reason} onChange={(e) => setReason(e.target.value)} placeholder={next === 'ONLINE' ? 'e.g. Moved to another city, now attends online' : 'e.g. Relocated to another city'} />
       </Field>
       <div className="mt-4 flex justify-end gap-2">
         <button type="button" className={secondaryBtn} onClick={onClose}>
@@ -629,6 +651,7 @@ export const StudentFormModal: React.FC<{ initial?: any; onClose: () => void; on
             <select className={inputClass} value={form.mode} onChange={set('mode')}>
               <option value="OFFLINE">Offline</option>
               <option value="ONLINE">Online</option>
+              <option value="HYBRID">Hybrid</option>
             </select>
           </Field>
         )}

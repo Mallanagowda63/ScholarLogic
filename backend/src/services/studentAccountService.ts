@@ -36,7 +36,7 @@ export interface NewStudentInput {
   email?: string;
   address?: string;
   courseId?: string | mongoose.Types.ObjectId | null;
-  mode?: 'ONLINE' | 'OFFLINE';
+  mode?: 'ONLINE' | 'OFFLINE' | 'HYBRID';
   preferredTiming?: string;
   joiningDate?: string | Date | null;
   remarks?: string;
@@ -103,7 +103,7 @@ export async function createStudentAccount(input: NewStudentInput, actor?: AuthU
     studentId = course ? await generateStudentId(fullName, course) : await getNextStudentId();
   }
 
-  const mode = input.mode === 'ONLINE' ? 'ONLINE' : 'OFFLINE';
+  const mode = input.mode === 'ONLINE' || input.mode === 'HYBRID' ? input.mode : 'OFFLINE';
   const preferredTiming = input.preferredTiming || '';
   const remarks = input.remarks || '';
   const joined = input.joiningDate ? new Date(input.joiningDate) : new Date();
@@ -145,7 +145,7 @@ export async function createStudentAccount(input: NewStudentInput, actor?: AuthU
     student._id,
     'JOINED',
     `Joined ${course?.name || 'ScholarLogic'}`,
-    [`${mode === 'ONLINE' ? 'Online' : 'Offline'} • Preferred timing: ${preferredTiming || 'Not specified'}`, input.joinedDetails].filter(Boolean).join(' • '),
+    [`${mode === 'ONLINE' ? 'Online' : mode === 'HYBRID' ? 'Hybrid' : 'Offline'} • Preferred timing: ${preferredTiming || 'Not specified'}`, input.joinedDetails].filter(Boolean).join(' • '),
     {},
     actor,
     joined
