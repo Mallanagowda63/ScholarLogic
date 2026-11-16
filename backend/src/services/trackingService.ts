@@ -217,14 +217,33 @@ const describeBatch = (batch: any, ctx: JourneyContext) =>
       }
     : null;
 
+// A date written in a class-sheet cell, e.g. "Attending from 27th oct" → 27 Oct. The year is the one that puts the
+// date closest before the day the sheet was recorded (a date more than 2 months after that is taken as last year).
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+export function dateInText(text: string, recorded: Date | null): Date | null {
+  const t = String(text || '').toLowerCase();
+  const m = t.match(/(\d{1,2})\s*(?:st|nd|rd|th)?\s*(?:of\s*)?[-/ ]?\s*(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?(?:\s*,?\s*(\d{4}))?/);
+  const alt = m ? null : t.match(/(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*(\d{1,2})(?:st|nd|rd|th)?\b(?:\s*,?\s*(\d{4}))?/);
+  if (!m && !alt) return null;
+  const day = Number(m ? m[1] : alt![2]);
+  const month = MONTHS.indexOf(m ? m[2] : alt![1]);
+  if (day < 1 || day > 31 || month < 0) return null;
+  const ref = recorded || new Date();
+  const yearText = m ? m[3] : alt![3];
+  let year = yearText ? Number(yearText) : ref.getFullYear();
+  let d = new Date(year, month, day);
+  if (!yearText && d.getTime() - ref.getTime() > 60 * DAY_MS) d = new Date(--year, month, day);
+  return d;
+}
+
 export function buildJourney(student: IStudent | any, ctx: JourneyContext) {
   const allocations = ctx.allocationsByStudent.get(String(student._id)) || [];
   const course = student.enrollment?.courseId ? ctx.coursesById.get(String(student.enrollment.courseId)) : undefined;
   const orderedCourseSubjects = course ? [...course.subjects].sort((a, b) => a.order - b.order) : [];
 
   // Status from the office class sheet, per subject (only used when the subject has no batch seat here)
-  const sheetBySubject = new Map<string, { status: string; raw: string; section?: string; source?: string }>(
-    (student.sheetStatuses || []).map((x: any) => [String(x.subjectId), { status: x.status, raw: x.raw, section: x.section, source: x.source }])
+  const sheetBySubject = new Map<string, { status: string; raw: string; section?: string; source?: string; importedAt?: Date }>(
+    (student.sheetStatuses || []).map((x: any) => [String(x.subjectId), { status: x.status, raw: x.raw, section: x.section, source: x.source, importedAt: x.importedAt }])
   );
 
   // Subjects in the course plus any subject the student was allocated (or has a sheet status) outside it
@@ -244,8 +263,22 @@ export function buildJourney(student: IStudent | any, ctx: JourneyContext) {
     const latestBatch = latest ? ctx.batchesById.get(String(latest.batchId)) : null;
 
     const sheet = latest ? undefined : sheetBySubject.get(subjectId);
+    const durationDays = courseEntry?.expectedDurationDays || subject?.expectedDurationDays || 30;
+    // Attending by the class sheet (or marked by admin): it started on the date written in the sheet, else on the day it
+    // was recorded, and is counted as completed once the subject's planned days have passed
+    let sheetStart: Date | null = null;
+    let sheetEnd: Date | null = null;
+    let doneByTime = false;
+    if (sheet && ['ATTENDING', 'RE_ATTENDING'].includes(sheet.status)) {
+      const recorded = sheet.importedAt ? new Date(sheet.importedAt) : null;
+      sheetStart = dateInText(sheet.raw, recorded) || recorded;
+      if (sheetStart) {
+        sheetEnd = new Date(sheetStart.getTime() + durationDays * DAY_MS);
+        doneByTime = sheetEnd.getTime() <= Date.now();
+      }
+    }
     const covered = new Set<string>();
-    if (subjectAllocations.some((a) => a.status === 'COMPLETED') || sheet?.status === 'COMPLETED') {
+    if (subjectAllocations.some((a) => a.status === 'COMPLETED') || sheet?.status === 'COMPLETED' || doneByTime) {
       (subject?.topics || []).forEach((t) => covered.add(String(t._id)));
     } else {
       subjectAllocations.forEach((a) => topicsCoveredInAllocation(a, ctx.updates).forEach((t) => covered.add(t)));
@@ -259,7 +292,7 @@ export function buildJourney(student: IStudent | any, ctx: JourneyContext) {
 
     let status: SubjectJourneyStatus;
     if (latest) status = journeyStatusFromAllocation(latest, latestBatch);
-    else if (sheet) status = sheet.status as SubjectJourneyStatus;
+    else if (sheet) status = doneByTime ? 'COMPLETED' : (sheet.status as SubjectJourneyStatus);
     else status = hasStartedAnything ? 'UPCOMING' : 'NOT_STARTED';
 
     const history = subjectAllocations
@@ -294,18 +327,18 @@ export function buildJourney(student: IStudent | any, ctx: JourneyContext) {
       code: subject?.code || '',
       order: courseEntry?.order ?? 999,
       inCourse: !!courseEntry,
-      expectedDurationDays: courseEntry?.expectedDurationDays || subject?.expectedDurationDays || 30,
+      expectedDurationDays: durationDays,
       status,
       // Where the status came from when there is no batch seat: the office class sheet, as written there
-      sheetNote: sheet ? { raw: sheet.raw, section: sheet.section || '', manual: sheet.source === 'admin' } : null,
+      sheetNote: sheet ? { raw: sheet.raw, section: sheet.section || '', manual: sheet.source === 'admin', doneByTime, endedOn: doneByTime ? sheetEnd : null } : null,
       progress: { completed: completedCount, total: topics.length, percentage: topics.length ? Math.round((completedCount / topics.length) * 100) : 0 },
       topics,
       currentTopic,
       currentAllocationId: latest && isActiveAllocation(latest) ? latest._id : null,
       latestAllocationId: latest?._id || null,
       batch: describeBatch(latestBatch, ctx),
-      startDate: latest?.startDate || null,
-      expectedEndDate: latestBatch ? estimateBatchCompletion(latestBatch, subject).expectedDate : null,
+      startDate: latest?.startDate || sheetStart || null,
+      expectedEndDate: latestBatch ? estimateBatchCompletion(latestBatch, subject).expectedDate : sheetEnd,
       attendance: {
         ...totalAttendance,
         percentage: totalAttendance.total ? Math.round((totalAttendance.attended / totalAttendance.total) * 100) : null,

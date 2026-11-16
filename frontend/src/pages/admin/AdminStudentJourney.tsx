@@ -322,6 +322,7 @@ export const AdminStudentJourney: React.FC = () => {
                       {s.sheetNote && (
                         <p className="mt-2 rounded-lg bg-amber-50 px-2 py-1 text-[10px] text-amber-800 dark:bg-amber-950/40 dark:text-amber-300" title={s.sheetNote.raw}>
                           {s.sheetNote.manual ? 'Marked by admin' : `Class sheet${s.sheetNote.section ? ` (${s.sheetNote.section})` : ''}:`} {!s.sheetNote.manual && s.sheetNote.raw.replace(/\s*\r?\n\s*/g, ' • ')}
+                          {s.sheetNote.doneByTime && <span className="mt-0.5 block font-bold text-emerald-700 dark:text-emerald-300">✓ Completed by time{s.sheetNote.endedOn ? ` (ended ${fmtDate(s.sheetNote.endedOn)})` : ''}</span>}
                         </p>
                       )}
                       <dl className="mt-3 space-y-0.5 text-[11px] text-slate-500">
@@ -329,7 +330,7 @@ export const AdminStudentJourney: React.FC = () => {
                         <div className="flex justify-between"><dt>Trainer</dt><dd className="truncate pl-2 text-slate-700 dark:text-slate-300">{s.batch?.trainer?.fullName || '—'}</dd></div>
                         <div className="flex justify-between"><dt>Timing</dt><dd className="text-slate-700 dark:text-slate-300">{s.batch?.timing || '—'}</dd></div>
                         <div className="flex justify-between"><dt>Start</dt><dd className="text-slate-700 dark:text-slate-300">{fmtDate(s.startDate)}</dd></div>
-                        <div className="flex justify-between"><dt>Expected end</dt><dd className="text-slate-700 dark:text-slate-300">{s.batch ? fmtDate(s.expectedEndDate) : `~${s.expectedDurationDays} days`}</dd></div>
+                        <div className="flex justify-between"><dt>Expected end</dt><dd className="text-slate-700 dark:text-slate-300">{s.batch || s.expectedEndDate ? fmtDate(s.expectedEndDate) : `~${s.expectedDurationDays} days`}</dd></div>
                       </dl>
                     </div>
                   </React.Fragment>
