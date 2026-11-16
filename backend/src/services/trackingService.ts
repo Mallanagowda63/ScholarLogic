@@ -223,8 +223,8 @@ export function buildJourney(student: IStudent | any, ctx: JourneyContext) {
   const orderedCourseSubjects = course ? [...course.subjects].sort((a, b) => a.order - b.order) : [];
 
   // Status from the office class sheet, per subject (only used when the subject has no batch seat here)
-  const sheetBySubject = new Map<string, { status: string; raw: string; section?: string }>(
-    (student.sheetStatuses || []).map((x: any) => [String(x.subjectId), { status: x.status, raw: x.raw, section: x.section }])
+  const sheetBySubject = new Map<string, { status: string; raw: string; section?: string; source?: string }>(
+    (student.sheetStatuses || []).map((x: any) => [String(x.subjectId), { status: x.status, raw: x.raw, section: x.section, source: x.source }])
   );
 
   // Subjects in the course plus any subject the student was allocated (or has a sheet status) outside it
@@ -297,7 +297,7 @@ export function buildJourney(student: IStudent | any, ctx: JourneyContext) {
       expectedDurationDays: courseEntry?.expectedDurationDays || subject?.expectedDurationDays || 30,
       status,
       // Where the status came from when there is no batch seat: the office class sheet, as written there
-      sheetNote: sheet ? { raw: sheet.raw, section: sheet.section || '' } : null,
+      sheetNote: sheet ? { raw: sheet.raw, section: sheet.section || '', manual: sheet.source === 'admin' } : null,
       progress: { completed: completedCount, total: topics.length, percentage: topics.length ? Math.round((completedCount / topics.length) * 100) : 0 },
       topics,
       currentTopic,

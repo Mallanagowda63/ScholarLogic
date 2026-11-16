@@ -260,6 +260,42 @@ export const updateTrackedStudent = async (req: AuthRequest, res: Response) => {
   res.json({ success: true, message: 'Student updated' });
 };
 
+/**
+ * Admin marks one subject of a student by hand: Assigned / Attending / Completed / Not attending.
+ * With a batch seat the seat's status changes ("Not attending" = Missed); without one it is saved as the subject's status.
+ */
+const MARKS: Record<string, string> = { BATCH_ALLOCATED: 'Assigned', ATTENDING: 'Attending', COMPLETED: 'Completed', NOT_ATTENDING: 'Not attending' };
+export const setSubjectStatus = async (req: AuthRequest, res: Response) => {
+  const { status } = req.body;
+  if (!MARKS[status]) throw new AppError('Choose Assigned, Attending, Completed or Not attending', 400, 'BAD_STATUS');
+  const student = await Student.findById(oid(req.params.id, 'student'));
+  if (!student) throw new AppError('Student not found', 404, 'NOT_FOUND');
+  const subjectId = oid(req.params.subjectId, 'subject');
+  const subject = await Subject.findById(subjectId).select('name').lean();
+  if (!subject) throw new AppError('Subject not found', 404, 'NOT_FOUND');
+  const now = new Date();
+
+  const latest = await StudentBatchAllocation.findOne({ studentId: student._id, subjectId }).sort({ allocationDate: -1 });
+  if (latest) {
+    const next = status === 'NOT_ATTENDING' ? 'MISSED' : status;
+    latest.status = next;
+    if (next === 'COMPLETED' || next === 'MISSED') latest.endDate = now;
+    else latest.endDate = undefined;
+    await latest.save();
+  } else {
+    const list: any[] = (student.sheetStatuses || []) as any[];
+    const entry = list.find((x) => String(x.subjectId) === String(subjectId));
+    const value = { subjectId, status: status === 'NOT_ATTENDING' ? 'NOT_STARTED' : status, raw: `${MARKS[status]} (marked by admin)`, course: entry?.course || '', section: '', source: 'admin', importedAt: now };
+    if (entry) Object.assign(entry, value);
+    else list.push(value);
+    student.sheetStatuses = list as any;
+    student.markModified('sheetStatuses');
+    await student.save();
+  }
+  await addTimeline(student._id, status === 'COMPLETED' ? 'SUBJECT_COMPLETED' : 'ALLOCATION_STATUS', `${subject.name}: ${MARKS[status]}`, 'Marked by admin on the course journey', { subjectId }, req.user);
+  res.json({ success: true, message: `${subject.name} marked ${MARKS[status]}` });
+};
+
 export const allocateStudent = async (req: AuthRequest, res: Response) => {
   const student = await Student.findById(oid(req.params.id, 'student'));
   if (!student) throw new AppError('Student not found', 404, 'NOT_FOUND');

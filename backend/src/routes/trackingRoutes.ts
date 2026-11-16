@@ -8,6 +8,7 @@ import { AuditLog } from '../models/AuditLog';
 import { deleteStudentCompletely } from '../services/studentDeletion';
 import {
   allocateStudent,
+  setSubjectStatus,
   changeMode,
   changeTrainingStatus,
   createBatch,
@@ -126,6 +127,7 @@ router.delete(
   })
 );
 router.post('/students/:id/allocate', admin, asyncHandler(allocateStudent));
+router.put('/students/:id/subjects/:subjectId/status', admin, asyncHandler(setSubjectStatus));
 router.post('/students/:id/status', admin, asyncHandler(changeTrainingStatus));
 router.post('/students/:id/mode', admin, asyncHandler(changeMode));
 

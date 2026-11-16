@@ -64,6 +64,17 @@ const TIMELINE_DOT: Record<string, string> = {
   PROFILE_UPDATED: 'bg-slate-400',
 };
 
+// Status dropdown on each subject card
+const MARK_LABEL: Record<string, string> = { BATCH_ALLOCATED: 'Assigned', ATTENDING: 'Attending', COMPLETED: 'Completed', NOT_ATTENDING: 'Not attending' };
+const MARK_TONE: Record<string, string> = {
+  BATCH_ALLOCATED: 'border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-800 dark:bg-sky-950/40 dark:text-sky-300',
+  ATTENDING: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300',
+  COMPLETED: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300',
+  NOT_ATTENDING: 'border-slate-200 bg-slate-100 text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300',
+};
+const markOf = (status: string) =>
+  status === 'BATCH_ALLOCATED' ? 'BATCH_ALLOCATED' : status === 'ATTENDING' || status === 'RE_ATTENDING' ? 'ATTENDING' : status === 'COMPLETED' ? 'COMPLETED' : 'NOT_ATTENDING';
+
 export const AdminStudentJourney: React.FC = () => {
   const { id } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -87,6 +98,17 @@ export const AdminStudentJourney: React.FC = () => {
 
   const journey = data?.journey;
   const student = data?.student;
+
+  const markSubject = async (s: any, status: string) => {
+    if (status === markOf(s.status)) return;
+    try {
+      const res: any = await api.put(`/tracking/students/${id}/subjects/${s.subjectId}/status`, { status });
+      toast.show(res.message || 'Saved');
+      load();
+    } catch (e: any) {
+      toast.show(e.message);
+    }
+  };
   const studentRef = student ? { _id: student._id, fullName: student.fullName, studentId: student.studentId } : null;
 
   // Deep-link actions from the Students table (?action=edit|allocate|move|reallocate|history)
@@ -265,17 +287,32 @@ export const AdminStudentJourney: React.FC = () => {
                 return (
                   <React.Fragment key={s.subjectId}>
                     {i > 0 && <ArrowRight className="h-5 w-5 shrink-0 self-center text-slate-300 dark:text-slate-600" />}
-                    <button
-                      type="button"
+                    <div
+                      role="button"
+                      tabIndex={0}
                       onClick={() => setSelectedSubject(s.subjectId)}
-                      className={`relative w-60 shrink-0 overflow-hidden rounded-2xl border bg-white dark:bg-slate-900 p-4 text-left shadow-sm transition-all ${
+                      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && setSelectedSubject(s.subjectId)}
+                      className={`relative w-60 shrink-0 cursor-pointer overflow-hidden rounded-2xl border bg-white dark:bg-slate-900 p-4 text-left shadow-sm transition-all ${
                         active ? 'border-brand-500 ring-2 ring-brand-500/20' : 'border-slate-200 dark:border-slate-800 hover:border-slate-300'
                       }`}
                     >
                       <span className={`absolute inset-x-0 top-0 h-1 ${toneFill[tone]}`} />
                       <div className="flex items-start justify-between gap-2">
                         <span className="text-sm font-bold text-slate-900 dark:text-white">{s.name}</span>
-                        <StatusBadge status={s.status} />
+                        <select
+                          aria-label={`Status of ${s.name}`}
+                          value={markOf(s.status)}
+                          onClick={(e) => e.stopPropagation()}
+                          onKeyDown={(e) => e.stopPropagation()}
+                          onChange={(e) => markSubject(s, e.target.value)}
+                          className={`max-w-[120px] cursor-pointer rounded-full border px-2 py-0.5 text-[10px] font-bold ${MARK_TONE[markOf(s.status)]}`}
+                        >
+                          {Object.entries(MARK_LABEL).map(([k, label]) => (
+                            <option key={k} value={k}>
+                              {label}
+                            </option>
+                          ))}
+                        </select>
                       </div>
                       <div className="mt-2 flex items-baseline justify-between text-xs">
                         <span className="text-slate-500">{s.progress.completed}/{s.progress.total} topics</span>
@@ -284,7 +321,7 @@ export const AdminStudentJourney: React.FC = () => {
                       <ProgressBar value={s.progress.percentage} tone={tone} className="mt-1" />
                       {s.sheetNote && (
                         <p className="mt-2 rounded-lg bg-amber-50 px-2 py-1 text-[10px] text-amber-800 dark:bg-amber-950/40 dark:text-amber-300" title={s.sheetNote.raw}>
-                          Class sheet{s.sheetNote.section ? ` (${s.sheetNote.section})` : ''}: {s.sheetNote.raw.replace(/\s*\r?\n\s*/g, ' • ')}
+                          {s.sheetNote.manual ? 'Marked by admin' : `Class sheet${s.sheetNote.section ? ` (${s.sheetNote.section})` : ''}:`} {!s.sheetNote.manual && s.sheetNote.raw.replace(/\s*\r?\n\s*/g, ' • ')}
                         </p>
                       )}
                       <dl className="mt-3 space-y-0.5 text-[11px] text-slate-500">
@@ -294,7 +331,7 @@ export const AdminStudentJourney: React.FC = () => {
                         <div className="flex justify-between"><dt>Start</dt><dd className="text-slate-700 dark:text-slate-300">{fmtDate(s.startDate)}</dd></div>
                         <div className="flex justify-between"><dt>Expected end</dt><dd className="text-slate-700 dark:text-slate-300">{s.batch ? fmtDate(s.expectedEndDate) : `~${s.expectedDurationDays} days`}</dd></div>
                       </dl>
-                    </button>
+                    </div>
                   </React.Fragment>
                 );
               })}

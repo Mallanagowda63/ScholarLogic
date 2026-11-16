@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { CalendarClock, ExternalLink, Link2, LogOut, Play, Video } from 'lucide-react';
+import { CalendarClock, Check, Copy, ExternalLink, Link2, LogOut, Play, Video } from 'lucide-react';
 import { api } from '../../../services/api';
 import { Card, inputClass, primaryBtn, secondaryBtn } from './shared';
 
@@ -93,6 +93,21 @@ export const ClassMeetingCard: React.FC<{ batch: any; canEdit: boolean; onSaved:
   };
 
   const hasLink = !!batch.meetingLink;
+  const [copied, setCopied] = useState(false);
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(batch.meetingLink);
+    } catch {
+      const t = document.createElement('textarea');
+      t.value = batch.meetingLink;
+      document.body.appendChild(t);
+      t.select();
+      document.execCommand('copy');
+      t.remove();
+    }
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
   const upcoming = batch.nextClassAt && new Date(batch.nextClassAt).getTime() > Date.now() - 3 * 3600000;
 
   return (
@@ -122,6 +137,9 @@ export const ClassMeetingCard: React.FC<{ batch: any; canEdit: boolean; onSaved:
             <a href={batch.meetingLink} target="_blank" rel="noopener noreferrer" className={canEdit && batch.meetingStartLink ? secondaryBtn : primaryBtn}>
               <ExternalLink className="h-4 w-4" /> {canEdit ? 'Student join link' : 'Open class link'}
             </a>
+            <button type="button" className={secondaryBtn} onClick={copyLink} title={batch.meetingLink}>
+              {copied ? <Check className="h-4 w-4 text-emerald-600" /> : <Copy className="h-4 w-4" />} {copied ? 'Copied!' : 'Copy meeting link'}
+            </button>
           </div>
         )}
       </div>
