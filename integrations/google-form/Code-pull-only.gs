@@ -100,8 +100,13 @@ function photo_(sheet, photoId) {
   } catch (err) {
     blob = null;
   }
-  if (!blob) blob = DriveApp.getFileById(id).getBlob();
-  return json_({ success: true, mimeType: blob.getContentType(), base64: Utilities.base64Encode(blob.getBytes()) });
+  if (!blob) {
+    var file = DriveApp.getFileById(id);
+    // A photo: the file itself. A PDF or document: Google's preview picture of its first page.
+    blob = /^image\//.test(file.getMimeType()) ? file.getBlob() : file.getThumbnail();
+    if (!blob) return json_({ success: false, message: 'Not a photo and no preview (' + file.getMimeType() + ')' });
+  }
+  return json_({ success: true, mimeType: blob.getContentType() || 'image/png', base64: Utilities.base64Encode(blob.getBytes()) });
 }
 
 /** Run this once from the editor (select "checkSetup" and press Run): asks for permission and shows what it sees */
