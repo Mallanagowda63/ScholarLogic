@@ -9,6 +9,7 @@ import { startMachinePull } from './services/esslPullService';
 import { startIdCardFormSync, startMachineLoginWatcher } from './services/idCardFormService';
 import { startRecordingSync } from './services/batchRecordingsService';
 import { startFormPhotoSync } from './services/formPhotoService';
+import { startBatchAutoStart } from './services/batchAutoStart';
 
 async function startServer() {
   try {
@@ -35,6 +36,8 @@ async function startServer() {
       startIdCardFormSync();
       // Email the login once a newly given ID card is enrolled on the eSSL machine
       startMachineLoginWatcher();
+      // Upcoming batches become Running on their start date
+      startBatchAutoStart();
       startRecordingSync();
       // Copy students' form photos from Google Drive into the database
       startFormPhotoSync();
