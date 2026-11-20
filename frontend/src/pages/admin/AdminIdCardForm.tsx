@@ -10,7 +10,8 @@ import { Card, EmptyRow, Modal, PageHeader, Spinner, inputClass, primaryBtn, sec
 type Status = 'SENT' | 'ASSIGNED' | 'NEEDS_REVIEW' | 'EMAIL_FAILED' | 'DUPLICATE' | 'IGNORED';
 type FormKind = 'STUDENT_INFO' | 'NEW_STUDENT';
 
-const FORM_LABEL: Record<FormKind, string> = { STUDENT_INFO: 'Student info', NEW_STUDENT: 'New student' };
+// The Student info form is no longer used (stopped 20 Nov 2026); its old answers stay here for reference
+const FORM_LABEL: Record<FormKind, string> = { STUDENT_INFO: 'Old student info', NEW_STUDENT: 'ID card' };
 
 interface Answer {
   _id: string;
@@ -61,7 +62,7 @@ export const AdminIdCardForm: React.FC = () => {
   const [answers, setAnswers] = useState<Answer[] | null>(null);
   const [connected, setConnected] = useState<FormKind[] | null>(null);
   const [lastSync, setLastSync] = useState<{ form: FormKind; at: string; ok: boolean; message: string }[]>([]);
-  const [formFilter, setFormFilter] = useState<FormKind | 'BOTH'>('BOTH');
+  const [formFilter, setFormFilter] = useState<FormKind | 'BOTH'>('NEW_STUDENT');
   const [newName, setNewName] = useState('');
   const [nextCode, setNextCode] = useState('');
   const [issued, setIssued] = useState<{ name: string; code: string; password: string; email: string; was?: string } | null>(null);
@@ -245,7 +246,7 @@ export const AdminIdCardForm: React.FC = () => {
     <div className="space-y-5 pb-12">
       <PageHeader
         title="ID Card Form"
-        subtitle="New student form: after you verify it, the student gets the next SCLR ID card number. Their login is emailed by itself once that card is on the eSSL machine. Student info form: existing card holders get their login when the card number and their name or phone agree."
+        subtitle="ID card form answers. After you verify one, the student gets the next SCLR ID card number; their login is emailed by itself once that card is on the eSSL machine."
         action={
           <button type="button" className={primaryBtn} onClick={sync} disabled={syncing || !connected?.length}>
             <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} /> {syncing ? 'Checking…' : 'Check form now'}
@@ -254,7 +255,7 @@ export const AdminIdCardForm: React.FC = () => {
       />
 
       {connected &&
-        (['STUDENT_INFO', 'NEW_STUDENT'] as FormKind[])
+        (['NEW_STUDENT'] as FormKind[])
           .filter((k) => !connected.includes(k))
           .map((k) => (
             <p key={k} className="flex items-start gap-2 rounded-xl bg-amber-50 p-3 text-sm font-semibold text-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
@@ -270,14 +271,14 @@ export const AdminIdCardForm: React.FC = () => {
 
       <Card className="p-4 space-y-3">
         <div className="flex flex-wrap gap-2">
-          {(['BOTH', 'STUDENT_INFO', 'NEW_STUDENT'] as const).map((k) => (
+          {(['NEW_STUDENT', 'STUDENT_INFO', 'BOTH'] as const).map((k) => (
             <button
               key={k}
               type="button"
               onClick={() => setFormFilter(k)}
               className={`rounded-full px-3 py-1 text-[11px] font-bold ${formFilter === k ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}
             >
-              {k === 'BOTH' ? 'Both forms' : `${FORM_LABEL[k]} form`}
+              {k === 'BOTH' ? 'All answers' : k === 'STUDENT_INFO' ? 'Old student info answers' : 'ID card form'}
             </button>
           ))}
         </div>
