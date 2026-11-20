@@ -4,6 +4,7 @@ import { Student } from '../models/Student';
 import { Batch } from '../models/tracking/Batch';
 import { Subject } from '../models/tracking/Subject';
 import { User } from '../models/User';
+import { TrackCourse } from '../models/tracking/TrackCourse';
 
 /**
  * Emails a student when an admin changes something about them: batch allocated / moved / reallocated, subject status,
@@ -52,6 +53,7 @@ export function shouldEmail(type: string, title: string, actorRole?: string) {
 }
 
 export function queueStudentUpdateEmail(studentId: any, type: string, title: string, details: string, refs: { batchId?: any; subjectId?: any }) {
+  if (type === 'PROFILE_UPDATED') return queueCourseOverviewEmail(studentId);
   queue.push(() => send(studentId, type, title, details, refs));
   void drain();
 }
@@ -101,4 +103,39 @@ async function send(studentId: any, type: string, title: string, details: string
     siteUrl: /localhost|127.0.0.1/.test(env.FRONTEND_URL) ? 'https://scholarlogiclms.in' : env.FRONTEND_URL,
   });
   console.log(`📧 Update email (${type}) sent to ${student.studentId}`);
+}
+
+/** Course overview email (sent when registration is complete, or when an admin sets a student's course) */
+export function queueCourseOverviewEmail(studentId: any) {
+  if ((process.env.STUDENT_UPDATE_EMAILS || '').toLowerCase() === 'off') return;
+  queue.push(() => sendOverview(studentId));
+  void drain();
+}
+
+async function sendOverview(studentId: any) {
+  const student: any = await Student.findById(studentId).select('studentId userId enrollment').populate('userId', 'fullName email').lean();
+  const email = String(student?.userId?.email || '').trim();
+  if (!email || email.endsWith('@students.scholarlogic.local') || !/@/.test(email)) return;
+  if (!student.enrollment?.courseId) return;
+  const course: any = await TrackCourse.findById(student.enrollment.courseId).populate('subjects.subjectId', 'name topics').lean();
+  if (!course || !course.subjects?.length) return;
+  const subjects = [...course.subjects]
+    .sort((a: any, b: any) => a.order - b.order)
+    .filter((s: any) => s.subjectId)
+    .map((s: any) => {
+      const topics = [...(s.subjectId.topics || [])].sort((a: any, b: any) => a.order - b.order).map((t: any) => t.title);
+      return { name: s.subjectId.name, days: s.expectedDurationDays || 30, topics: topics.slice(0, 5), topicCount: topics.length };
+    });
+  const mode = student.enrollment.mode === 'ONLINE' ? 'Online' : student.enrollment.mode === 'HYBRID' ? 'Hybrid' : 'Offline';
+  await emailService.sendCourseOverviewEmail({
+    to: email,
+    name: student.userId.fullName || 'Student',
+    studentId: student.studentId,
+    courseName: course.name,
+    months: course.durationMonths || 0,
+    mode,
+    subjects,
+    siteUrl: /localhost|127.0.0.1/.test(env.FRONTEND_URL) ? 'https://scholarlogiclms.in' : env.FRONTEND_URL,
+  });
+  console.log(`📧 Course overview (${course.code}) sent to ${student.studentId}`);
 }

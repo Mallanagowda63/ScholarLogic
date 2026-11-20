@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import { queueCourseOverviewEmail } from '../services/studentUpdateEmail';
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import { AuthRequest } from '../middleware/auth';
@@ -195,6 +196,8 @@ export const createTrackedStudent = async (req: AuthRequest, res: Response) => {
     },
     req.user
   );
+  // Admission done: email the course overview (when the student has a real email and a course)
+  queueCourseOverviewEmail(student._id);
   res.status(201).json({ success: true, data: { student: { _id: student._id, studentId } } });
 };
 

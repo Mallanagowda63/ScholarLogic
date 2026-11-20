@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { queueCourseOverviewEmail } from '../services/studentUpdateEmail';
 import { applyPhotoToStudent, driveIdFrom, storedPhotoUrls } from '../services/formPhotoService';
 import crypto from 'crypto';
 import mongoose from 'mongoose';
@@ -298,6 +299,8 @@ export const verifyRegistration = async (req: AuthRequest, res: Response) => {
   await GoogleFormSubmission.updateMany({ registrationId: reg._id }, { studentId: student._id });
   // The photo from the form becomes the student's profile photo
   await applyPhotoToStudent(student._id, reg.photoUrl, true).catch(() => false);
+  // Registration complete: email the course overview
+  queueCourseOverviewEmail(student._id);
 
   res.status(201).json({ success: true, data: { student: { _id: student._id, studentId } } });
 };

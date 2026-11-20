@@ -241,6 +241,115 @@ export class EmailService {
     return String(info.messageId || '');
   }
 
+  // Welcome + course overview after registration: every subject in order, its length and main topics.
+  async sendCourseOverviewEmail(o: {
+    to: string;
+    name: string;
+    studentId: string;
+    courseName: string;
+    months: number;
+    mode: string;
+    subjects: { name: string; days: number; topics: string[]; topicCount: number }[];
+    siteUrl: string;
+  }): Promise<string> {
+    if (!this.transporter) await this.initTransporter();
+    if (!this.transporter || this.providerType === 'ethereal') throw new Error('Email is not set up on the server (RESEND_API_KEY)');
+    const esc = (v: string) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
+    const portal = `${o.siteUrl.replace(/\/+$/, '')}/login`;
+    const font = "font-family: 'Segoe UI', Arial, Helvetica, sans-serif;";
+    const totalDays = o.subjects.reduce((s, x) => s + x.days, 0);
+    const steps = o.subjects
+      .map(
+        (s, i) => `
+              <tr>
+                <td valign="top" style="padding: 10px 12px 10px 0; width: 34px;">
+                  <div style="${font} width: 30px; height: 30px; line-height: 30px; border-radius: 15px; background: #0c8ee9; color: #ffffff; font-size: 13px; font-weight: bold; text-align: center;">${i + 1}</div>
+                </td>
+                <td valign="top" style="padding: 10px 0; ${i < o.subjects.length - 1 ? 'border-bottom: 1px solid #e2e8f0;' : ''}">
+                  <p style="${font} margin: 0; color: #0f172a; font-size: 15px; font-weight: bold;">${esc(s.name)} <span style="font-weight: normal; color: #64748b; font-size: 12px;">&nbsp;• about ${s.days} days${s.topicCount ? ` • ${s.topicCount} topics` : ''}</span></p>
+                  ${s.topics.length ? `<p style="${font} margin: 4px 0 0; color: #475569; font-size: 13px; line-height: 1.5;">${s.topics.map(esc).join(' &middot; ')}${s.topicCount > s.topics.length ? ' &middot; and more' : ''}</p>` : ''}
+                </td>
+              </tr>`
+      )
+      .join('');
+    const html = `<!doctype html>
+<html><body style="margin: 0; padding: 0; background: #f1f5f9;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background: #f1f5f9; padding: 24px 12px;">
+    <tr><td align="center">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; background: #ffffff; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 8px rgba(15,23,42,0.06);">
+        <tr>
+          <td style="background: #0c8ee9; background-image: linear-gradient(135deg, #0c8ee9, #4f46e5); padding: 26px 32px;">
+            <p style="${font} margin: 0; color: #ffffff; font-size: 22px; font-weight: 800;">ScholarLogic</p>
+            <p style="${font} margin: 6px 0 0; color: #ffffff; font-size: 17px; font-weight: bold;">Welcome to ${esc(o.courseName)} 🎓</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 28px 32px 6px;">
+            <p style="${font} margin: 0 0 14px; color: #0f172a; font-size: 15px;">Dear <strong>${esc(o.name)}</strong>,</p>
+            <p style="${font} margin: 0 0 18px; color: #334155; font-size: 15px; line-height: 1.6;">Your registration at ScholarLogic is complete. Here is what you will learn in <strong>${esc(o.courseName)}</strong>, step by step.</p>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin: 0 0 18px;">
+              <tr>
+                <td style="${font} background: #eff6ff; border-radius: 10px; padding: 12px; text-align: center; width: 33%;"><span style="display: block; color: #1d4ed8; font-size: 20px; font-weight: 800;">${o.subjects.length}</span><span style="color: #475569; font-size: 12px;">subjects</span></td>
+                <td style="width: 8px;"></td>
+                <td style="${font} background: #ecfdf5; border-radius: 10px; padding: 12px; text-align: center; width: 33%;"><span style="display: block; color: #047857; font-size: 20px; font-weight: 800;">${o.months ? `${o.months} months` : `${Math.round(totalDays / 30)} months`}</span><span style="color: #475569; font-size: 12px;">course length</span></td>
+                <td style="width: 8px;"></td>
+                <td style="${font} background: #f5f3ff; border-radius: 10px; padding: 12px; text-align: center; width: 33%;"><span style="display: block; color: #6d28d9; font-size: 20px; font-weight: 800;">${esc(o.mode)}</span><span style="color: #475569; font-size: 12px;">class mode</span></td>
+              </tr>
+            </table>
+            <p style="${font} margin: 0 0 6px; color: #0f172a; font-size: 16px; font-weight: 800;">Your course, subject by subject</p>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${steps}
+            </table>
+            <p style="${font} margin: 18px 0 6px; color: #0f172a; font-size: 15px; font-weight: bold;">What happens next</p>
+            <ol style="${font} margin: 0 0 6px; padding-left: 20px; color: #475569; font-size: 14px; line-height: 1.7;">
+              <li>We put you in a batch for your first subject. You get an email with the batch, trainer and timing.</li>
+              <li>Log in to the portal to see your course journey, attendance, classes and tests.</li>
+              <li>Your Student ID is <strong style="color: #0f172a;">${esc(o.studentId)}</strong>.</li>
+            </ol>
+            <table role="presentation" cellpadding="0" cellspacing="0" style="margin: 20px 0 8px;">
+              <tr><td style="border-radius: 10px; background: #0c8ee9;"><a href="${esc(portal)}" style="${font} display: inline-block; padding: 12px 26px; color: #ffffff; font-size: 14px; font-weight: bold; text-decoration: none;">Open my portal &rarr;</a></td></tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 18px 32px; background: #f8fafc; border-top: 1px solid #e2e8f0;">
+            <p style="${font} margin: 0 0 4px; color: #475569; font-size: 13px;">Questions? Reply to this email or call <a href="tel:+919008625716" style="color: #0c8ee9; text-decoration: none;">+91 90086 25716</a>.</p>
+            <p style="${font} margin: 0; color: #94a3b8; font-size: 12px;">Regards, ScholarLogic Team</p>
+          </td>
+        </tr>
+      </table>
+      <p style="${font} margin: 14px 0 0; color: #94a3b8; font-size: 11px;">You received this because you registered at ScholarLogic.</p>
+    </td></tr>
+  </table>
+</body></html>`;
+    const text = [
+      `Dear ${o.name},`,
+      '',
+      `Your registration at ScholarLogic is complete. Welcome to ${o.courseName}!`,
+      `${o.subjects.length} subjects • ${o.months || Math.round(totalDays / 30)} months • ${o.mode}`,
+      '',
+      'Your course, subject by subject:',
+      ...o.subjects.map((s, i) => `${i + 1}. ${s.name} (about ${s.days} days)${s.topics.length ? `: ${s.topics.join(', ')}` : ''}`),
+      '',
+      'What happens next: we put you in a batch for your first subject and email you the details.',
+      `Your Student ID: ${o.studentId}`,
+      `Portal: ${portal}`,
+      '',
+      'Questions? Reply to this email or call +91 90086 25716.',
+      '',
+      'Regards,',
+      'ScholarLogic Team',
+    ].join('\n');
+    const info = await this.transporter.sendMail({
+      from: process.env.EMAIL_FROM || 'ScholarLogic <noreply@scholarlogiclms.in>',
+      replyTo: process.env.EMAIL_REPLY_TO || 'tech@scholarlogic.net',
+      to: o.to,
+      subject: `Welcome to ${o.courseName}, ${o.name.split(' ')[0] || 'Student'}: your course overview`,
+      html,
+      text,
+    });
+    return String(info.messageId || '');
+  }
+
   async sendApplicationStatusEmail(
     studentEmail: string,
     studentName: string,

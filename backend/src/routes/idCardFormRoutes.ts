@@ -5,6 +5,7 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import { IdCardSubmission } from '../models/IdCardSubmission';
 import { connectedForms, createStudentFrom, getLastIdCardSync, nextSclrCode, sendLoginFor, syncIdCardForm } from '../services/idCardFormService';
+import { queueCourseOverviewEmail } from '../services/studentUpdateEmail';
 import { applyPhotoToStudent, driveIdFrom, lastPhotoSync, storedPhotoUrls, syncFormPhotos } from '../services/formPhotoService';
 
 /** Admin → ID Card Form: answers to the "Student info" form, which ones got their login, and the ones to check */
@@ -106,6 +107,7 @@ router.post(
     // createStudentFrom updates the status on the same document
     if ((sub.status as string) !== 'SENT') throw new AppError(sub.note || 'The student could not be created', 400, 'CREATE_FAILED');
     await applyPhotoToStudent(sub.studentId, sub.idCardPicUrl, true).catch(() => false);
+    if (sub.studentId) queueCourseOverviewEmail(sub.studentId);
     res.json({ success: true, message: sub.note, data: { submission: { status: sub.status, note: sub.note, loginId: sub.loginId }, idCardNumber: made?.code || sub.loginId, password: made?.password || '', emailedTo: sub.emailedTo } });
   })
 );
