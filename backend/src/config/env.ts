@@ -30,6 +30,7 @@ export const env = {
   GOOGLE_FORM_WEBHOOK_SECRET: process.env.GOOGLE_FORM_WEBHOOK_SECRET || '',
   // Apps Script web-app URL (…/exec) that ScholarLogic pulls responses from, and how often (minutes, 0 = manual only)
   GOOGLE_FORM_SYNC_URL: (process.env.GOOGLE_FORM_SYNC_URL || '').trim(),
+  GOOGLE_FORM_SINCE: (process.env.GOOGLE_FORM_SINCE || '').trim(),
   GOOGLE_FORM_SYNC_INTERVAL_MINUTES: process.env.GOOGLE_FORM_SYNC_INTERVAL_MINUTES || '5',
   // "Student info" ID-card form: its own Apps Script web app and secret; students get their login emailed
   // Zoho Meeting (trainers connect their own Zoho account). India data centre by default.

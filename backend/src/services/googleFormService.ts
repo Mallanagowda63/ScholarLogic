@@ -414,7 +414,8 @@ async function doSync(trigger: 'manual' | 'auto'): Promise<SyncResult> {
         const res = await fetch(env.GOOGLE_FORM_SYNC_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ secret: env.GOOGLE_FORM_WEBHOOK_SECRET }),
+          // GOOGLE_FORM_SINCE (e.g. 2026-10-14): the sheet only sends answers from that date on
+          body: JSON.stringify({ secret: env.GOOGLE_FORM_WEBHOOK_SECRET, since: env.GOOGLE_FORM_SINCE || undefined }),
           redirect: 'follow',
           signal: AbortSignal.timeout(45000),
         });

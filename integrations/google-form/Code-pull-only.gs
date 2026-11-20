@@ -24,8 +24,10 @@ function doPost(e) {
   if (String(body.secret).trim() !== SECRET) return json_({ success: false, message: 'Invalid secret' });
   var sheet = responseSheet_();
   if (body.photoId) return photo_(sheet, body.photoId);
-  var rows = [];
-  for (var row = 2; row <= sheet.getLastRow(); row++) rows.push(rowPayload_(sheet, row));
+  // Optional "since" (ISO date): only answers submitted from then on (keeps old answers out)
+  var since = body.since ? new Date(body.since) : null;
+  if (since && isNaN(since.getTime())) since = null;
+  var rows = allRows_(sheet, since);
   return json_({ success: true, formTitle: sheet.getParent().getName(), count: rows.length, responses: rows });
 }
 
@@ -34,38 +36,49 @@ function doGet() {
   return json_({ success: true, message: 'ScholarLogic registration form link is running.' });
 }
 
-/** Every question/answer of one response row, in column order */
-function rowPayload_(sheet, row) {
+/** Every response row as question/answer pairs, read in one go (fast even with thousands of rows) */
+function allRows_(sheet, since) {
+  var lastRow = sheet.getLastRow();
   var lastCol = sheet.getLastColumn();
-  var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
-  var values = sheet.getRange(row, 1, 1, lastCol).getValues()[0];
-  var shown = sheet.getRange(row, 1, 1, lastCol).getDisplayValues()[0];
-  var tz = sheet.getParent().getSpreadsheetTimeZone();
-  var answers = [];
-  var submittedAt = null;
-  for (var c = 0; c < headers.length; c++) {
-    var question = String(headers[c] || '').trim();
-    if (!question) continue;
-    var value = values[c];
-    if (/^timestamp$/i.test(question)) {
-      submittedAt = value instanceof Date ? value : new Date(value);
-      continue;
-    }
-    // Dates (DOB, joining date) as yyyy-MM-dd; time answers are sent as shown in the sheet
-    var isTimeOnly = value instanceof Date && value.getFullYear() < 1901;
-    var answer = value instanceof Date && !isTimeOnly && !/tim/i.test(question) ? Utilities.formatDate(value, tz, 'yyyy-MM-dd') : shown[c];
-    answers.push({ question: question, answer: String(answer == null ? '' : answer) });
-  }
-  if (!submittedAt || isNaN(submittedAt.getTime())) submittedAt = new Date();
+  if (lastRow < 2) return [];
+  var range = sheet.getRange(1, 1, lastRow, lastCol);
+  var values = range.getValues();
+  var shown = range.getDisplayValues();
+  var headers = values[0];
   var ss = sheet.getParent();
-  return {
-    // Same id for the same response every time, so ScholarLogic never adds it twice
-    submissionId: ss.getId() + ':' + sheet.getSheetId() + ':' + row + ':' + submittedAt.getTime(),
-    submittedAt: submittedAt.toISOString(),
-    source: 'GOOGLE_FORM',
-    formTitle: ss.getName(),
-    answers: answers,
-  };
+  var tz = ss.getSpreadsheetTimeZone();
+  var out = [];
+  for (var r = 1; r < values.length; r++) {
+    var answers = [];
+    var submittedAt = null;
+    var empty = true;
+    for (var c = 0; c < headers.length; c++) {
+      var question = String(headers[c] || '').trim();
+      if (!question) continue;
+      var value = values[r][c];
+      if (/^timestamp$/i.test(question)) {
+        submittedAt = value instanceof Date ? value : new Date(value);
+        continue;
+      }
+      if (String(shown[r][c]).trim()) empty = false;
+      // Dates (DOB, joining date) as yyyy-MM-dd; time answers are sent as shown in the sheet
+      var isTimeOnly = value instanceof Date && value.getFullYear() < 1901;
+      var answer = value instanceof Date && !isTimeOnly && !/tim/i.test(question) ? Utilities.formatDate(value, tz, 'yyyy-MM-dd') : shown[r][c];
+      answers.push({ question: question, answer: String(answer == null ? '' : answer) });
+    }
+    if (empty) continue;
+    if (!submittedAt || isNaN(submittedAt.getTime())) submittedAt = new Date();
+    if (since && submittedAt < since) continue;
+    out.push({
+      // Same id for the same response every time, so ScholarLogic never adds it twice
+      submissionId: ss.getId() + ':' + sheet.getSheetId() + ':' + (r + 1) + ':' + submittedAt.getTime(),
+      submittedAt: submittedAt.toISOString(),
+      source: 'GOOGLE_FORM',
+      formTitle: ss.getName(),
+      answers: answers,
+    });
+  }
+  return out;
 }
 
 /**
