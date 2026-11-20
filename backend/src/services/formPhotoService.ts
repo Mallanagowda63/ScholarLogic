@@ -38,6 +38,7 @@ export async function storedPhotoUrls(urls: (string | undefined | null)[]): Prom
 }
 
 type FetchResult = 'ok' | 'fail' | 'wait';
+export const fetchFormPhoto = (source: Source, driveId: string) => fetchOne(source, driveId);
 async function fetchOne(source: Source, driveId: string): Promise<FetchResult> {
   const cfg = SOURCES[source];
   if (!cfg.url() || !cfg.secret()) return 'wait';
