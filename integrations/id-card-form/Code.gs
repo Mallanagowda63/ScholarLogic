@@ -1,16 +1,18 @@
 /**
- * ScholarLogic <- "Student info - ScholarLogic" Google Form (students type the ID on their card)
+ * ScholarLogic <- ID card Google Form (the "Student info" form, or the new-student ID card form)
  *
  * Paste into the form's RESPONSE SPREADSHEET: Extensions -> Apps Script.
  * Deploy -> New deployment -> Web app, Execute as "Me", Who has access "Anyone" -> copy the /exec link.
- * ScholarLogic reads the answers from that link every 5 minutes (IDCARD_FORM_SYNC_URL + IDCARD_FORM_SECRET
- * in backend .env) and emails each matched student their login. This script only reads; it changes nothing.
- * It also hands over the photos students attached, so ScholarLogic can show them (photo_ below).
+ * (Updating: Deploy -> Manage deployments -> pencil -> Version: New version -> Deploy; the link stays.)
+ *
+ * ScholarLogic reads the answers from that link every 5 minutes (IDCARD_FORM_SYNC_URL / NEWID_FORM_SYNC_URL
+ * + the secret below, in backend .env). It also asks for the photo a student attached, so the admin can
+ * see it and it becomes the student's profile photo. This script only reads; it changes nothing.
  */
 
 var SECRET = 'PASTE_THE_IDCARD_FORM_SECRET_HERE';
 
-/** ScholarLogic POSTs {"secret": "..."} and receives every answer as JSON */
+/** ScholarLogic POSTs {"secret": "..."} for the answers, or {"secret": "...", "photoId": "..."} for one photo */
 function doPost(e) {
   var body = {};
   try {
@@ -18,63 +20,61 @@ function doPost(e) {
   } catch (err) {
     body = {};
   }
-  if (body.photoId) {
-    if (String(body.secret || '').trim() !== SECRET) return json_({ success: false, message: 'Invalid secret' });
-    return photo_(responseSheet_(), body.photoId);
-  }
-  return answer_(body.secret);
-}
-
-/** Opening the link in a browser just says it is running */
-function doGet(e) {
-  return answer_(e && e.parameter ? e.parameter.secret : '');
-}
-
-function answer_(given) {
-  if (!given) return json_({ success: true, message: 'ScholarLogic ID card form link is running. Answers are only given to ScholarLogic.' });
-  if (String(given).trim() !== SECRET) return json_({ success: false, message: 'Invalid secret' });
+  if (!body.secret) return json_({ success: false, message: 'Secret missing' });
+  if (String(body.secret).trim() !== SECRET) return json_({ success: false, message: 'Invalid secret' });
   var sheet = responseSheet_();
-  var rows = [];
-  for (var row = 2; row <= sheet.getLastRow(); row++) rows.push(rowPayload_(sheet, row));
+  if (body.photoId) return photo_(sheet, body.photoId);
+  var rows = allRows_(sheet);
   return json_({ success: true, formTitle: sheet.getParent().getName(), count: rows.length, responses: rows });
 }
 
-function rowPayload_(sheet, row) {
-  var lastCol = sheet.getLastColumn();
-  var headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0];
-  var values = sheet.getRange(row, 1, 1, lastCol).getValues()[0];
-  var shown = sheet.getRange(row, 1, 1, lastCol).getDisplayValues()[0];
-  var answers = [];
-  var submittedAt = null;
-  for (var c = 0; c < headers.length; c++) {
-    var question = String(headers[c] || '').trim();
-    if (!question) continue;
-    if (/^timestamp$/i.test(question)) {
-      submittedAt = values[c] instanceof Date ? values[c] : new Date(values[c]);
-      continue;
-    }
-    answers.push({ question: question, answer: String(shown[c] == null ? '' : shown[c]) });
-  }
-  if (!submittedAt || isNaN(submittedAt.getTime())) submittedAt = new Date();
-  var ss = sheet.getParent();
-  return {
-    submissionId: ss.getId() + ':' + sheet.getSheetId() + ':' + row + ':' + submittedAt.getTime(),
-    submittedAt: submittedAt.toISOString(),
-    formTitle: ss.getName(),
-    answers: answers,
-  };
+/** Opening the link in a browser just says it is running (answers are only given to ScholarLogic) */
+function doGet() {
+  return json_({ success: true, message: 'ScholarLogic ID card form link is running. Answers are only given to ScholarLogic.' });
 }
 
-/** The tab the form writes into (first one linked to a form, otherwise the first tab) */
-function responseSheet_() {
-  var sheets = SpreadsheetApp.getActive().getSheets();
-  for (var i = 0; i < sheets.length; i++) if (sheets[i].getFormUrl()) return sheets[i];
-  return sheets[0];
+/** Every response row as question/answer pairs, read in one go */
+function allRows_(sheet) {
+  var lastRow = sheet.getLastRow();
+  var lastCol = sheet.getLastColumn();
+  if (lastRow < 2) return [];
+  var range = sheet.getRange(1, 1, lastRow, lastCol);
+  var values = range.getValues();
+  var shown = range.getDisplayValues();
+  var headers = values[0];
+  var ss = sheet.getParent();
+  var out = [];
+  for (var r = 1; r < values.length; r++) {
+    var answers = [];
+    var submittedAt = null;
+    var empty = true;
+    for (var c = 0; c < headers.length; c++) {
+      var question = String(headers[c] || '').trim();
+      if (!question) continue;
+      if (/^timestamp$/i.test(question)) {
+        var v = values[r][c];
+        submittedAt = v instanceof Date ? v : v ? new Date(v) : null;
+        continue;
+      }
+      if (String(shown[r][c]).trim()) empty = false;
+      answers.push({ question: question, answer: String(shown[r][c] == null ? '' : shown[r][c]) });
+    }
+    if (empty) continue;
+    var hasTime = submittedAt && !isNaN(submittedAt.getTime());
+    out.push({
+      // Same id for the same answer every time (a row typed in by hand, with no Timestamp, uses 0)
+      submissionId: ss.getId() + ':' + sheet.getSheetId() + ':' + (r + 1) + ':' + (hasTime ? submittedAt.getTime() : 0),
+      submittedAt: (hasTime ? submittedAt : new Date()).toISOString(),
+      formTitle: ss.getName(),
+      answers: answers,
+    });
+  }
+  return out;
 }
 
 /**
- * ScholarLogic asks for one photo a student attached to this form (it is private in your Drive).
- * Only a file whose link is in the form's answers is given, so nothing else in your Drive can be read.
+ * One photo a student attached (it is private in your Drive). Only a file whose link is in
+ * this form's answers is given, so nothing else in your Drive can be read.
  */
 function photo_(sheet, photoId) {
   var id = String(photoId || '').trim();
@@ -93,6 +93,22 @@ function photo_(sheet, photoId) {
   }
   if (!blob) blob = DriveApp.getFileById(id).getBlob();
   return json_({ success: true, mimeType: blob.getContentType(), base64: Utilities.base64Encode(blob.getBytes()) });
+}
+
+/** Run this once from the editor (choose "checkSetup", press Run): asks for permission and shows what it sees */
+function checkSetup() {
+  var sheet = responseSheet_();
+  console.log('Spreadsheet: "' + sheet.getParent().getName() + '", tab "' + sheet.getName() + '" with ' + Math.max(0, sheet.getLastRow() - 1) + ' answer(s)');
+  console.log('Columns: ' + sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].join(' | '));
+  DriveApp.getRootFolder(); // makes Google ask for Drive permission now (needed for the photos)
+  console.log('OK. Now Deploy -> Manage deployments -> pencil -> Version: New version -> Deploy.');
+}
+
+/** The tab the form writes into (first one linked to a form, otherwise the first tab) */
+function responseSheet_() {
+  var sheets = SpreadsheetApp.getActive().getSheets();
+  for (var i = 0; i < sheets.length; i++) if (sheets[i].getFormUrl()) return sheets[i];
+  return sheets[0];
 }
 
 function json_(obj) {
