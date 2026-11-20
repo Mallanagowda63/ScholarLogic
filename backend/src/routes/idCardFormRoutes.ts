@@ -5,12 +5,13 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import { IdCardSubmission } from '../models/IdCardSubmission';
 import { connectedForms, createStudentFrom, getLastIdCardSync, nextSclrCode, sendLoginFor, syncIdCardForm } from '../services/idCardFormService';
+import { applyPhotoToStudent, driveIdFrom, lastPhotoSync, storedPhotoUrls, syncFormPhotos } from '../services/formPhotoService';
 
 /** Admin → ID Card Form: answers to the "Student info" form, which ones got their login, and the ones to check */
 const router = Router();
 router.use(authenticateUser, authorizeRoles('ADMIN', 'SUPER_ADMIN'));
 
-const view = (s: any) => ({
+const view = (s: any, photos: Map<string, string> = new Map()) => ({
   _id: s._id,
   form: s.form || 'STUDENT_INFO',
   submittedAt: s.submittedAt,
@@ -22,6 +23,8 @@ const view = (s: any) => ({
   idCardRaw: s.idCardRaw,
   idCardCode: s.idCardCode,
   idCardPicUrl: s.idCardPicUrl,
+  // The photo saved on the server (empty until fetched from Google Drive)
+  photo: photos.get(driveIdFrom(s.idCardPicUrl)) || '',
   status: s.status,
   note: s.note,
   loginId: s.loginId,
@@ -40,7 +43,8 @@ router.get(
       .limit(1000)
       .populate({ path: 'studentId', select: 'studentId phone userId', populate: { path: 'userId', select: 'fullName' } })
       .lean();
-    res.json({ success: true, data: { submissions: subs.map(view), connected: connectedForms(), lastSync: getLastIdCardSync() } });
+    const photos = await storedPhotoUrls(subs.map((s: any) => s.idCardPicUrl));
+    res.json({ success: true, data: { submissions: subs.map((s) => view(s, photos)), connected: connectedForms(), lastSync: getLastIdCardSync(), photoSync: lastPhotoSync } });
   })
 );
 
@@ -57,6 +61,8 @@ router.post(
   asyncHandler(async (_req: AuthRequest, res: Response) => {
     const results = await syncIdCardForm('manual');
     if (!results.length) throw new AppError('No form is connected yet', 400, 'NOT_CONNECTED');
+    // Fetch new photos too (in the background: the answers are already saved)
+    void syncFormPhotos().catch(() => undefined);
     if (results.every((r) => !r.ok)) throw new AppError(results.map((r) => r.message).join(' • '), 502, 'SYNC_FAILED');
     res.json({ success: true, message: results.map((r) => r.message).join(' • '), data: { results } });
   })
@@ -78,6 +84,7 @@ router.post(
     } catch (err: any) {
       throw new AppError(String(err?.message || err), 400, 'SEND_FAILED');
     }
+    await applyPhotoToStudent(sub.studentId, sub.idCardPicUrl, true).catch(() => false);
     res.json({ success: true, message: `Login emailed to ${sub.emailedTo}`, data: { submission: { status: sub.status, note: sub.note, emailedTo: sub.emailedTo, emailedAt: sub.emailedAt, loginId: sub.loginId } } });
   })
 );
@@ -98,6 +105,7 @@ router.post(
     const made = await createStudentFrom(sub, req.user?.userId);
     // createStudentFrom updates the status on the same document
     if ((sub.status as string) !== 'SENT') throw new AppError(sub.note || 'The student could not be created', 400, 'CREATE_FAILED');
+    await applyPhotoToStudent(sub.studentId, sub.idCardPicUrl, true).catch(() => false);
     res.json({ success: true, message: sub.note, data: { submission: { status: sub.status, note: sub.note, loginId: sub.loginId }, idCardNumber: made?.code || sub.loginId, password: made?.password || '', emailedTo: sub.emailedTo } });
   })
 );

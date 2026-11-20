@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { applyPhotoToStudent, driveIdFrom, storedPhotoUrls } from '../services/formPhotoService';
 import crypto from 'crypto';
 import mongoose from 'mongoose';
 import { AuthRequest } from '../middleware/auth';
@@ -103,6 +104,7 @@ export const getGoogleFormSyncStatus = async (_req: AuthRequest, res: Response) 
 // ---------------------------------------------------------------------------
 
 const withAllocationState = async (regs: any[]) => {
+  const photos = await storedPhotoUrls(regs.map((r) => r.photoUrl));
   const studentIds = regs.map((r) => r.studentId?._id || r.studentId).filter(Boolean);
   const allocated = new Set(
     (await StudentBatchAllocation.distinct('studentId', { studentId: { $in: studentIds } })).map(String)
@@ -112,6 +114,8 @@ const withAllocationState = async (regs: any[]) => {
     const isAllocated = !!sid && allocated.has(sid);
     return {
       ...r,
+      // The photo saved on the server (empty until fetched from Google Drive)
+      photo: photos.get(driveIdFrom(r.photoUrl)) || '',
       status: r.verificationStatus === 'VERIFIED' && isAllocated ? 'ALLOCATED' : r.verificationStatus,
       allocationStatus: isAllocated ? 'ALLOCATED' : 'WAITING_FOR_ALLOCATION',
     };
@@ -292,6 +296,8 @@ export const verifyRegistration = async (req: AuthRequest, res: Response) => {
   reg.rejectionReason = '';
   await reg.save();
   await GoogleFormSubmission.updateMany({ registrationId: reg._id }, { studentId: student._id });
+  // The photo from the form becomes the student's profile photo
+  await applyPhotoToStudent(student._id, reg.photoUrl, true).catch(() => false);
 
   res.status(201).json({ success: true, data: { student: { _id: student._id, studentId } } });
 };

@@ -106,7 +106,7 @@ function readFields(payload: any) {
     education: answerFor(answers, /education|background|degree|qualification/i),
     idCardRaw,
     idCardCode: '',
-    idCardPicUrl: answerFor(answers, /card\s*pic|card\s*photo|photo\s*of.*card|id\s*card\s*image/i),
+    idCardPicUrl: answerFor(answers, /card\s*pic|card\s*photo|photo\s*of.*card|id\s*card\s*image/i, /photo|picture|\bpic\b/i),
     tenthPercentage: answerFor(answers, /10th|tenth|sslc/i),
     twelfthPercentage: answerFor(answers, /12th|twelfth|puc|inter/i),
   };

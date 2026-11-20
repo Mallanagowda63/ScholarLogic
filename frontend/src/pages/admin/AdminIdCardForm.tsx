@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { FormPhoto } from '../../components/FormPhoto';
 import { AlertTriangle, BadgeCheck, CheckCircle2, Copy, ExternalLink, IdCard, Mail, RefreshCw, Search, ShieldCheck, Trash2, XCircle } from 'lucide-react';
 import { api } from '../../services/api';
 import { Card, EmptyRow, Modal, PageHeader, Spinner, inputClass, primaryBtn, secondaryBtn, useToast } from './tracking/shared';
@@ -23,6 +24,7 @@ interface Answer {
   idCardRaw: string;
   idCardCode: string;
   idCardPicUrl: string;
+  photo?: string;
   status: Status;
   note: string;
   loginId: string;
@@ -307,12 +309,17 @@ export const AdminIdCardForm: React.FC = () => {
                         </span>
                       </td>
                       <td className="px-3 py-2.5">
-                        <p className="font-bold text-slate-900 dark:text-white">{a.name || '—'}</p>
-                        <p className="text-slate-500">{a.email || 'no email'}</p>
-                        <p className="text-slate-500">
-                          {a.phone}
-                          {a.course && ` • ${a.course}`}
-                        </p>
+                        <div className="flex items-start gap-2.5">
+                          <FormPhoto src={a.photo} driveUrl={a.idCardPicUrl} name={a.name} />
+                          <div className="min-w-0">
+                            <p className="font-bold text-slate-900 dark:text-white">{a.name || '—'}</p>
+                            <p className="text-slate-500">{a.email || 'no email'}</p>
+                            <p className="text-slate-500">
+                              {a.phone}
+                              {a.course && ` • ${a.course}`}
+                            </p>
+                          </div>
+                        </div>
                       </td>
                       <td className="px-3 py-2.5">
                         <p className="font-mono font-bold">{a.form === 'NEW_STUDENT' ? <span className="font-sans font-normal text-slate-400">new code</span> : a.idCardCode || <span className="text-amber-600">none</span>}</p>
@@ -381,6 +388,7 @@ export const AdminIdCardForm: React.FC = () => {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="space-y-1.5 rounded-xl border border-slate-200 p-4 text-xs dark:border-slate-800">
               <p className="text-[10px] font-bold uppercase text-slate-500">What they filled in</p>
+              {review.idCardPicUrl && <FormPhoto src={review.photo} driveUrl={review.idCardPicUrl} name={review.name} size="lg" className="mb-1" />}
               <p className="text-sm font-bold text-slate-900 dark:text-white">{review.name || '—'}</p>
               <p>Phone: {review.phone || '—'}</p>
               <p>Email: {review.email || '—'}</p>
@@ -476,6 +484,7 @@ export const AdminIdCardForm: React.FC = () => {
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="space-y-1 rounded-xl border border-slate-200 p-3 text-xs dark:border-slate-800">
               <p className="text-[10px] font-bold uppercase text-slate-500">On the form</p>
+              {review.idCardPicUrl && <FormPhoto src={review.photo} driveUrl={review.idCardPicUrl} name={review.name} size="lg" className="mb-1" />}
               <p className="text-sm font-bold text-slate-900 dark:text-white">{review.name || '—'}</p>
               <p>Phone: {review.phone || '—'}</p>
               <p>ID card: <b className="font-mono">{review.idCardRaw || '—'}</b></p>

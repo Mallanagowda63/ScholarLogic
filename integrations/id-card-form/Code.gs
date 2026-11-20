@@ -5,6 +5,7 @@
  * Deploy -> New deployment -> Web app, Execute as "Me", Who has access "Anyone" -> copy the /exec link.
  * ScholarLogic reads the answers from that link every 5 minutes (IDCARD_FORM_SYNC_URL + IDCARD_FORM_SECRET
  * in backend .env) and emails each matched student their login. This script only reads; it changes nothing.
+ * It also hands over the photos students attached, so ScholarLogic can show them (photo_ below).
  */
 
 var SECRET = 'PASTE_THE_IDCARD_FORM_SECRET_HERE';
@@ -16,6 +17,10 @@ function doPost(e) {
     body = JSON.parse((e && e.postData && e.postData.contents) || '{}');
   } catch (err) {
     body = {};
+  }
+  if (body.photoId) {
+    if (String(body.secret || '').trim() !== SECRET) return json_({ success: false, message: 'Invalid secret' });
+    return photo_(responseSheet_(), body.photoId);
   }
   return answer_(body.secret);
 }
@@ -65,6 +70,29 @@ function responseSheet_() {
   var sheets = SpreadsheetApp.getActive().getSheets();
   for (var i = 0; i < sheets.length; i++) if (sheets[i].getFormUrl()) return sheets[i];
   return sheets[0];
+}
+
+/**
+ * ScholarLogic asks for one photo a student attached to this form (it is private in your Drive).
+ * Only a file whose link is in the form's answers is given, so nothing else in your Drive can be read.
+ */
+function photo_(sheet, photoId) {
+  var id = String(photoId || '').trim();
+  if (!/^[\w-]{20,}$/.test(id)) return json_({ success: false, message: 'Bad photo id' });
+  if (!sheet.createTextFinder(id).findNext()) return json_({ success: false, message: 'This photo is not in the form answers' });
+  var blob = null;
+  try {
+    // A smaller copy (800 px wide) keeps the database light
+    var r = UrlFetchApp.fetch('https://drive.google.com/thumbnail?id=' + id + '&sz=w800', {
+      headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+      muteHttpExceptions: true,
+    });
+    if (r.getResponseCode() === 200 && /^image\//.test(r.getBlob().getContentType())) blob = r.getBlob();
+  } catch (err) {
+    blob = null;
+  }
+  if (!blob) blob = DriveApp.getFileById(id).getBlob();
+  return json_({ success: true, mimeType: blob.getContentType(), base64: Utilities.base64Encode(blob.getBytes()) });
 }
 
 function json_(obj) {

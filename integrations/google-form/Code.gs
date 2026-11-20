@@ -124,6 +124,11 @@ function doPost(e) {
   } catch (err) {
     body = {};
   }
+  if (body.photoId) {
+    var expected = String(PropertiesService.getScriptProperties().getProperty('SCHOLARLOGIC_FORM_SECRET') || '').trim().replace(/^["']|["']$/g, '');
+    if (!expected || String(body.secret || '').trim() !== expected) return json_({ success: false, message: 'Invalid secret' });
+    return photo_(getResponseSheet_(), body.photoId);
+  }
   return respondWithResponses_(body.secret);
 }
 
@@ -141,6 +146,29 @@ function respondWithResponses_(givenSecret) {
   var responses = [];
   for (var row = 2; row <= sheet.getLastRow(); row++) responses.push(buildPayload_(sheet, row));
   return json_({ success: true, formTitle: sheet.getParent().getName(), count: responses.length, responses: responses });
+}
+
+/**
+ * ScholarLogic asks for one photo a student attached to this form (it is private in your Drive).
+ * Only a file whose link is in the form's answers is given, so nothing else in your Drive can be read.
+ */
+function photo_(sheet, photoId) {
+  var id = String(photoId || '').trim();
+  if (!/^[\w-]{20,}$/.test(id)) return json_({ success: false, message: 'Bad photo id' });
+  if (!sheet.createTextFinder(id).findNext()) return json_({ success: false, message: 'This photo is not in the form answers' });
+  var blob = null;
+  try {
+    // A smaller copy (800 px wide) keeps the database light
+    var r = UrlFetchApp.fetch('https://drive.google.com/thumbnail?id=' + id + '&sz=w800', {
+      headers: { Authorization: 'Bearer ' + ScriptApp.getOAuthToken() },
+      muteHttpExceptions: true,
+    });
+    if (r.getResponseCode() === 200 && /^image\//.test(r.getBlob().getContentType())) blob = r.getBlob();
+  } catch (err) {
+    blob = null;
+  }
+  if (!blob) blob = DriveApp.getFileById(id).getBlob();
+  return json_({ success: true, mimeType: blob.getContentType(), base64: Utilities.base64Encode(blob.getBytes()) });
 }
 
 function json_(obj) {

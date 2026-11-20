@@ -8,6 +8,7 @@ import { errorHandler } from './middleware/errorHandler';
 import { tenantMiddleware } from './middleware/tenantMiddleware';
 
 // Import Routes
+import formPhotoRoutes from './routes/formPhotoRoutes';
 import authRoutes from './routes/authRoutes';
 import studentRoutes from './routes/studentRoutes';
 import courseRoutes from './routes/courseRoutes';
@@ -146,6 +147,7 @@ app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 app.use('/uploads', express.static(path.resolve(env.STORAGE_PATH)));
 
 // API Routes
+app.use('/api/form-photos', formPhotoRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/students', studentRoutes);
 app.use('/api/courses', courseRoutes);

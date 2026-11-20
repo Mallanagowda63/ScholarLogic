@@ -8,6 +8,7 @@ import { startAutoSync } from './services/googleFormService';
 import { startMachinePull } from './services/esslPullService';
 import { startIdCardFormSync } from './services/idCardFormService';
 import { startRecordingSync } from './services/batchRecordingsService';
+import { startFormPhotoSync } from './services/formPhotoService';
 
 async function startServer() {
   try {
@@ -33,6 +34,8 @@ async function startServer() {
       startMachinePull();
       startIdCardFormSync();
       startRecordingSync();
+      // Copy students' form photos from Google Drive into the database
+      startFormPhotoSync();
     });
 
     const gracefulShutdown = () => {

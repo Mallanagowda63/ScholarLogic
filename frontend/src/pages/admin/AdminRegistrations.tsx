@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { FormPhoto } from '../../components/FormPhoto';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
 import { Search, Eye, Pencil, CheckCircle2, XCircle, CalendarPlus, RotateCcw, AlertTriangle, FileSpreadsheet, Copy, RefreshCw } from 'lucide-react';
@@ -145,6 +146,14 @@ const RegistrationForm: React.FC<{
       onClose={onClose}
     >
       <ErrorNote text={error} />
+      {(reg.photo || reg.photoUrl) && (
+        <div className="mb-3 flex items-center gap-3 rounded-xl border border-slate-200 p-3 dark:border-slate-800">
+          <FormPhoto src={reg.photo} driveUrl={reg.photoUrl} name={reg.fullName} size="lg" />
+          <p className="text-xs text-slate-500">
+            {reg.photo ? 'Photo from the form. It becomes the student’s profile photo when you verify.' : 'The photo is still being copied from Google Drive. It is added to the profile by itself once saved.'}
+          </p>
+        </div>
+      )}
       {reg.mappingWarnings?.length > 0 && (
         <div className="mb-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 p-3 text-xs text-amber-800 dark:text-amber-300">
           {reg.mappingWarnings.map((w: string) => (
@@ -289,9 +298,12 @@ const ViewModal: React.FC<{ id: string; onClose: () => void }> = ({ id, onClose 
               [
                 'Photo',
                 reg.photoUrl ? (
-                  <a href={reg.photoUrl} target="_blank" rel="noreferrer" className="font-semibold text-brand-600 dark:text-brand-400 hover:underline">
-                    Open photo in Google Drive ↗
-                  </a>
+                  <span className="flex items-center gap-3">
+                    <FormPhoto src={reg.photo} driveUrl={reg.photoUrl} name={reg.fullName} size="lg" />
+                    <a href={reg.photoUrl} target="_blank" rel="noreferrer" className="font-semibold text-brand-600 dark:text-brand-400 hover:underline">
+                      Google Drive ↗
+                    </a>
+                  </span>
                 ) : (
                   '—'
                 ),
@@ -618,11 +630,16 @@ export const AdminRegistrations: React.FC = () => {
                       visible.map((r) => (
                         <tr key={r._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
                           <td className="px-3 py-3 whitespace-nowrap">
+                            <span className="flex items-center gap-2.5">
+                            <FormPhoto src={r.photo} driveUrl={r.photoUrl} name={r.fullName} />
+                            <span>
                             <span className="font-bold text-slate-900 dark:text-white">{r.fullName}</span>
                             {r.verificationStatus === 'PENDING' && Date.now() - new Date(r.lastSubmittedAt).getTime() < 3 * 86400000 && (
                               <span className="ml-1.5 rounded bg-brand-600 px-1.5 py-0.5 text-[9px] font-bold uppercase text-white">New</span>
                             )}
                             {r.submissionCount > 1 && <span className="block text-[10px] text-slate-400">Submitted {r.submissionCount}×</span>}
+                            </span>
+                            </span>
                           </td>
                           <td className="px-3 py-3 max-w-[200px] truncate" title={r.submittedByEmail || 'The form did not collect the Google account'}>
                             {r.submittedByEmail || <span className="text-slate-400">—</span>}
