@@ -196,8 +196,8 @@ export const createTrackedStudent = async (req: AuthRequest, res: Response) => {
     },
     req.user
   );
-  // Admission done: email the course overview (when the student has a real email and a course)
-  queueCourseOverviewEmail(student._id);
+  // Admission done: email the ID card form (mandatory) with the course overview (when the student has a real email and a course)
+  queueCourseOverviewEmail(student._id, { askIdCard: true });
   res.status(201).json({ success: true, data: { student: { _id: student._id, studentId } } });
 };
 

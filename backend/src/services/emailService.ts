@@ -251,6 +251,7 @@ export class EmailService {
     mode: string;
     subjects: { name: string; days: number; topics: string[]; topicCount: number }[];
     siteUrl: string;
+    idCardFormUrl?: string; // registration verified: ask for the (mandatory) ID card form first
   }): Promise<string> {
     if (!this.transporter) await this.initTransporter();
     if (!this.transporter || this.providerType === 'ethereal') throw new Error('Email is not set up on the server (RESEND_API_KEY)');
@@ -286,7 +287,19 @@ export class EmailService {
         <tr>
           <td style="padding: 28px 32px 6px;">
             <p style="${font} margin: 0 0 14px; color: #0f172a; font-size: 15px;">Dear <strong>${esc(o.name)}</strong>,</p>
-            <p style="${font} margin: 0 0 18px; color: #334155; font-size: 15px; line-height: 1.6;">Your registration at ScholarLogic is complete. Here is what you will learn in <strong>${esc(o.courseName)}</strong>, step by step.</p>
+            <p style="${font} margin: 0 0 18px; color: #334155; font-size: 15px; line-height: 1.6;">Your registration at ScholarLogic is verified. Here is what you will learn in <strong>${esc(o.courseName)}</strong>, step by step.</p>
+            ${
+              o.idCardFormUrl
+                ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background: #fef2f2; border: 2px solid #ef4444; border-radius: 12px; margin: 0 0 20px;">
+              <tr><td style="${font} padding: 16px 18px;">
+                <p style="margin: 0 0 6px; color: #b91c1c; font-size: 16px; font-weight: 800;">&#9888; Next step (mandatory): fill the ID card form</p>
+                <p style="margin: 0 0 10px; color: #7f1d1d; font-size: 14px; line-height: 1.6;">Your <strong>ScholarLogic ID card is mandatory</strong>. Without it you <strong>cannot log in to the LMS</strong> and your <strong>attendance is not recorded</strong> on the biometric machine. Fill the ID card form today with your photo.</p>
+                <table role="presentation" cellpadding="0" cellspacing="0"><tr><td style="border-radius: 10px; background: #dc2626;"><a href="${esc(o.idCardFormUrl)}" style="${font} display: inline-block; padding: 12px 24px; color: #ffffff; font-size: 14px; font-weight: bold; text-decoration: none;">Fill the ID card form &rarr;</a></td></tr></table>
+                <p style="margin: 10px 0 0; color: #7f1d1d; font-size: 13px; line-height: 1.5;">After we verify it, you get your ID card number (SCLR…). Once the card is added to the biometric machine, we email your <strong>Login ID and password</strong>.</p>
+              </td></tr>
+            </table>`
+                : ''
+            }
             <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin: 0 0 18px;">
               <tr>
                 <td style="${font} background: #eff6ff; border-radius: 10px; padding: 12px; text-align: center; width: 33%;"><span style="display: block; color: #1d4ed8; font-size: 20px; font-weight: 800;">${o.subjects.length}</span><span style="color: #475569; font-size: 12px;">subjects</span></td>
@@ -301,12 +314,13 @@ export class EmailService {
             </table>
             <p style="${font} margin: 18px 0 6px; color: #0f172a; font-size: 15px; font-weight: bold;">What happens next</p>
             <ol style="${font} margin: 0 0 6px; padding-left: 20px; color: #475569; font-size: 14px; line-height: 1.7;">
+              ${o.idCardFormUrl ? '<li><strong style="color: #b91c1c;">Fill the ID card form (mandatory).</strong> You then get your ID card number, and your login after the card is on the biometric machine.</li>' : ''}
               <li>We put you in a batch for your first subject. You get an email with the batch, trainer and timing.</li>
               <li>Log in to the portal to see your course journey, attendance, classes and tests.</li>
-              <li>Your Student ID is <strong style="color: #0f172a;">${esc(o.studentId)}</strong>.</li>
+              ${o.idCardFormUrl ? '' : `<li>Your Student ID is <strong style="color: #0f172a;">${esc(o.studentId)}</strong>.</li>`}
             </ol>
             <table role="presentation" cellpadding="0" cellspacing="0" style="margin: 20px 0 8px;">
-              <tr><td style="border-radius: 10px; background: #0c8ee9;"><a href="${esc(portal)}" style="${font} display: inline-block; padding: 12px 26px; color: #ffffff; font-size: 14px; font-weight: bold; text-decoration: none;">Open my portal &rarr;</a></td></tr>
+              <tr><td style="border-radius: 10px; background: ${o.idCardFormUrl ? '#dc2626' : '#0c8ee9'};"><a href="${esc(o.idCardFormUrl || portal)}" style="${font} display: inline-block; padding: 12px 26px; color: #ffffff; font-size: 14px; font-weight: bold; text-decoration: none;">${o.idCardFormUrl ? 'Fill the ID card form &rarr;' : 'Open my portal &rarr;'}</a></td></tr>
             </table>
           </td>
         </tr>
@@ -324,7 +338,16 @@ export class EmailService {
     const text = [
       `Dear ${o.name},`,
       '',
-      `Your registration at ScholarLogic is complete. Welcome to ${o.courseName}!`,
+      `Your registration at ScholarLogic is verified. Welcome to ${o.courseName}!`,
+      ...(o.idCardFormUrl
+        ? [
+            '',
+            'NEXT STEP (MANDATORY): fill the ID card form',
+            `${o.idCardFormUrl}`,
+            'Your ScholarLogic ID card is mandatory. Without it you cannot log in to the LMS and your attendance is not recorded.',
+            'After we verify it you get your ID card number; once the card is on the biometric machine we email your Login ID and password.',
+          ]
+        : []),
       `${o.subjects.length} subjects • ${o.months || Math.round(totalDays / 30)} months • ${o.mode}`,
       '',
       'Your course, subject by subject:',
@@ -343,7 +366,9 @@ export class EmailService {
       from: process.env.EMAIL_FROM || 'ScholarLogic <noreply@scholarlogiclms.in>',
       replyTo: process.env.EMAIL_REPLY_TO || 'tech@scholarlogic.net',
       to: o.to,
-      subject: `Welcome to ${o.courseName}, ${o.name.split(' ')[0] || 'Student'}: your course overview`,
+      subject: o.idCardFormUrl
+        ? `${o.name.split(' ')[0] || 'Student'}, registration verified: fill your ID card form (mandatory)`
+        : `Welcome to ${o.courseName}, ${o.name.split(' ')[0] || 'Student'}: your course overview`,
       html,
       text,
     });

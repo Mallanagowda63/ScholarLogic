@@ -6,6 +6,9 @@ import { Subject } from '../models/tracking/Subject';
 import { User } from '../models/User';
 import { TrackCourse } from '../models/tracking/TrackCourse';
 
+// The new-student ID card form (students fill it after their registration is verified)
+const ID_CARD_FORM_URL = (process.env.ID_CARD_FORM_PUBLIC_URL || 'https://forms.gle/JqiUimoG555xrjJj7').trim();
+
 /**
  * Emails a student when an admin changes something about them: batch allocated / moved / reallocated, subject status,
  * course, training status, mode. Called from addTimeline, so every admin action that writes the student's history
@@ -106,14 +109,14 @@ async function send(studentId: any, type: string, title: string, details: string
 }
 
 /** Course overview email (sent when registration is complete, or when an admin sets a student's course) */
-export function queueCourseOverviewEmail(studentId: any) {
+export function queueCourseOverviewEmail(studentId: any, opts: { askIdCard?: boolean } = {}) {
   if ((process.env.STUDENT_UPDATE_EMAILS || '').toLowerCase() === 'off') return;
-  queue.push(() => sendOverview(studentId));
+  queue.push(() => sendOverview(studentId, opts));
   void drain();
 }
 
-async function sendOverview(studentId: any) {
-  const student: any = await Student.findById(studentId).select('studentId userId enrollment').populate('userId', 'fullName email').lean();
+async function sendOverview(studentId: any, opts: { askIdCard?: boolean } = {}) {
+  const student: any = await Student.findById(studentId).select('studentId biometricId userId enrollment').populate('userId', 'fullName email').lean();
   const email = String(student?.userId?.email || '').trim();
   if (!email || email.endsWith('@students.scholarlogic.local') || !/@/.test(email)) return;
   if (!student.enrollment?.courseId) return;
@@ -136,6 +139,8 @@ async function sendOverview(studentId: any) {
     mode,
     subjects,
     siteUrl: /localhost|127.0.0.1/.test(env.FRONTEND_URL) ? 'https://scholarlogiclms.in' : env.FRONTEND_URL,
+    // Registration verified and no SCLR ID card yet: the ID card form comes first (mandatory)
+    idCardFormUrl: opts.askIdCard && ![student.studentId, student.biometricId].some((c: any) => /^SCLR\d+$/i.test(String(c || ''))) ? ID_CARD_FORM_URL : undefined,
   });
   console.log(`📧 Course overview (${course.code}) sent to ${student.studentId}`);
 }

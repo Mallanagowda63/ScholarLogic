@@ -167,7 +167,7 @@ export async function sendLoginFor(sub: IIdCardSubmission, studentMongoId: strin
   sub.emailedAt = at;
   sub.note = byUserId ? `Sent after admin review to ${sub.email}` : `Sent automatically to ${sub.email}`;
   await sub.save();
-  await Student.updateOne({ _id: student._id }, { $set: { loginSharedAt: at } });
+  await Student.updateOne({ _id: student._id }, { $set: { loginSharedAt: at }, $unset: { idCardPending: 1 } });
   await AuditLog.create({
     userId: byUserId,
     userRole: byUserId ? 'ADMIN' : 'SYSTEM',
@@ -266,6 +266,8 @@ export async function createStudentFrom(sub: IIdCardSubmission, byUserId?: strin
   const samePhone: any = phone.length === 10 ? await Student.findOne({ phone: new RegExp(`${phone.split('').join('\\D*')}$`) }).select('studentId').lean() : null;
   if (sameEmail || samePhone) {
     const who: any = sameEmail ? await Student.findOne({ userId: sameEmail._id }).select('studentId').lean() : samePhone;
+    // A registered student (verified from the registration form) without an ID card yet: give them the next SCLR code
+    if (who && !(await hasIdCard(who._id))) return assignCodeToStudent(sub, who._id, byUserId);
     const earlierCreated = who
       ? await IdCardSubmission.findOne({ _id: { $ne: sub._id }, form: 'NEW_STUDENT', studentId: who._id, status: 'SENT' }).select('_id')
       : null;
@@ -276,7 +278,7 @@ export async function createStudentFrom(sub: IIdCardSubmission, byUserId?: strin
     sub.status = earlierCreated ? 'DUPLICATE' : 'NEEDS_REVIEW';
     sub.note = earlierCreated
       ? `Filled the form again; ${who?.studentId} was already created and emailed`
-      : `Already in ScholarLogic${who ? ` as ${who.studentId}` : ''} with this ${sameEmail ? 'email' : 'phone'}: no new student created`;
+      : `Already in ScholarLogic${who ? ` as ${who.studentId}, who already has an ID card` : ''} with this ${sameEmail ? 'email' : 'phone'}: no new student created`;
     await sub.save();
     return;
   }
@@ -318,14 +320,98 @@ export async function createStudentFrom(sub: IIdCardSubmission, byUserId?: strin
     resource: 'STUDENT',
     metadata: { via: 'ID_CARD_FORM', studentId: code, name: sub.name, course: course?.name || sub.course },
   }).catch(() => undefined);
-  try {
-    await sendLoginFor(sub, String(created.student._id), byUserId);
-    sub.note = `Verified; new student ${code} created${course ? ` (${course.name})` : ''}; login emailed to ${sub.email}`;
-    await sub.save();
-  } catch {
-    /* EMAIL_FAILED with the reason is saved; the student exists and the admin can send again */
-  }
+  await markWaitingForMachine(sub, created.student._id, code, `Verified; new student ${code} created${course ? ` (${course.name})` : ''}`);
   return { code, password };
+}
+
+/** The student already holds an SCLR ID card code (as Student ID or machine code) */
+export async function hasIdCard(studentMongoId: any): Promise<boolean> {
+  const s: any = await Student.findById(studentMongoId).select('studentId biometricId').lean();
+  return !!s && [s.studentId, s.biometricId].some((c: any) => /^SCLR\d+$/i.test(String(c || '')));
+}
+
+/** ID card given: the login waits until the card (this code) is enrolled on the eSSL machine */
+async function markWaitingForMachine(sub: IIdCardSubmission, studentMongoId: any, code: string, what: string) {
+  sub.studentId = studentMongoId;
+  sub.loginId = code;
+  sub.status = 'ASSIGNED';
+  sub.note = `${what}. The login is emailed to ${sub.email} by itself once ${code} is on the eSSL machine.`;
+  await sub.save();
+  await Student.updateOne({ _id: studentMongoId }, { $set: { idCardPending: { code, assignedAt: new Date(), submissionId: sub._id } } });
+}
+
+/** A registered student gets the next SCLR code: it becomes their Student ID, Login ID and machine code */
+async function assignCodeToStudent(sub: IIdCardSubmission, studentMongoId: any, byUserId?: string): Promise<{ code: string; password: string } | void> {
+  const student: any = await Student.findById(studentMongoId).select('studentId biometricId userId phone +loginPassword').populate('userId', 'fullName email isActive');
+  if (!student?.userId) {
+    sub.note = 'The matched student has no login account';
+    await sub.save();
+    return;
+  }
+  const before = student.studentId;
+  let code = '';
+  for (let attempt = 0; attempt < 5 && !code; attempt++) {
+    const candidate = await nextSclrCode();
+    try {
+      const r = await Student.updateOne({ _id: student._id, studentId: before }, { $set: { studentId: candidate, biometricId: candidate } });
+      if (r.modifiedCount) code = candidate;
+    } catch (err: any) {
+      if (err?.code !== 11000) throw err; // taken a moment ago: try the next one
+    }
+  }
+  if (!code) {
+    sub.note = 'Could not find a free SCLR code';
+    await sub.save();
+    return;
+  }
+  await saveContactDetails(student, sub.email, sub.phone);
+  const password = await passwordFor(student);
+  await AuditLog.create({
+    userId: byUserId,
+    userRole: byUserId ? 'ADMIN' : 'SYSTEM',
+    action: 'ID_CARD_ASSIGNED',
+    resource: 'STUDENT',
+    metadata: { via: 'ID_CARD_FORM', from: before, to: code, name: student.userId.fullName },
+  }).catch(() => undefined);
+  await markWaitingForMachine(sub, student._id, code, `Verified; ID card ${code} given to ${student.userId.fullName} (was ${before})`);
+  return { code, password };
+}
+
+/**
+ * Students waiting for their ID card on the eSSL machine: as soon as the machine lists their code,
+ * their login (ID card number + password) is emailed. Runs every few minutes.
+ */
+export async function sendLoginsForCardsOnMachine(): Promise<number> {
+  const waiting: any[] = await Student.find({ 'idCardPending.code': { $exists: true } }).select('idCardPending').lean();
+  let sent = 0;
+  for (const s of waiting) {
+    const code = String(s.idCardPending.code || '');
+    const onMachine = await BiometricDeviceUser.exists({ pin: { $in: [code, code.toUpperCase(), code.toLowerCase()] } });
+    if (!onMachine) continue;
+    const sub = s.idCardPending.submissionId ? await IdCardSubmission.findById(s.idCardPending.submissionId) : null;
+    if (!sub) {
+      await Student.updateOne({ _id: s._id }, { $unset: { idCardPending: 1 }, $set: { idCardOnMachineAt: new Date() } });
+      continue;
+    }
+    await Student.updateOne({ _id: s._id }, { $set: { idCardOnMachineAt: new Date() } });
+    try {
+      await sendLoginFor(sub, String(s._id));
+      sub.note = `ID card ${code} is on the eSSL machine; login emailed to ${sub.emailedTo}`;
+      await sub.save();
+      sent++;
+    } catch {
+      /* EMAIL_FAILED with the reason is saved on the answer; it is tried again next round */
+      await Student.updateOne({ _id: s._id }, { $set: { idCardPending: s.idCardPending } });
+    }
+  }
+  if (sent) console.log(`🪪 ${sent} ID card login(s) emailed (card now on the eSSL machine)`);
+  return sent;
+}
+
+export function startMachineLoginWatcher() {
+  const run = () => sendLoginsForCardsOnMachine().catch((e) => console.warn('🪪 ID card login check failed:', e?.message || e));
+  setTimeout(run, 90000);
+  return setInterval(run, 5 * 60000);
 }
 
 /**
@@ -350,7 +436,11 @@ async function precheckNewStudent(sub: IIdCardSubmission) {
       sub.note = `Filled the form again; ${who.studentId} was already verified and emailed`;
       return sub.save();
     }
-    problems.push(`already a student (${who.studentId}) with this ${emailStudent ? 'email' : 'phone'}`);
+    if (await hasIdCard(who._id)) problems.push(`already a student with an ID card (${who.studentId})`);
+    else {
+      sub.note = `Registered student ${who.studentId} (matched by ${emailStudent ? 'email' : 'phone'}). Verify to give the ID card number.`;
+      return sub.save();
+    }
   } else if (sameEmail && sameEmail.role !== 'STUDENT') {
     problems.push('this email belongs to a staff account');
   }

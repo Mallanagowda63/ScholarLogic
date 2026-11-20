@@ -7,7 +7,7 @@ import { Card, EmptyRow, Modal, PageHeader, Spinner, inputClass, primaryBtn, sec
 // Admin → ID Card Form: answers to the "Student info - ScholarLogic" Google Form. When the ID on the card and
 // the student's name or phone agree, the login is emailed automatically; the rest wait here for a quick check.
 
-type Status = 'SENT' | 'NEEDS_REVIEW' | 'EMAIL_FAILED' | 'DUPLICATE' | 'IGNORED';
+type Status = 'SENT' | 'ASSIGNED' | 'NEEDS_REVIEW' | 'EMAIL_FAILED' | 'DUPLICATE' | 'IGNORED';
 type FormKind = 'STUDENT_INFO' | 'NEW_STUDENT';
 
 const FORM_LABEL: Record<FormKind, string> = { STUDENT_INFO: 'Student info', NEW_STUDENT: 'New student' };
@@ -30,7 +30,7 @@ interface Answer {
   loginId: string;
   emailedTo: string;
   emailedAt: string | null;
-  student: { _id: string; studentId: string; fullName: string; phone: string } | null;
+  student: { _id: string; studentId: string; fullName: string; phone: string; hasIdCard?: boolean } | null;
 }
 
 interface StudentOption {
@@ -44,11 +44,15 @@ interface StudentOption {
 
 const STATUS: Record<Status, { label: string; cls: string }> = {
   SENT: { label: 'Login emailed', cls: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300' },
+  ASSIGNED: { label: 'Waiting for eSSL machine', cls: 'bg-sky-50 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300' },
   NEEDS_REVIEW: { label: 'Needs review', cls: 'bg-amber-50 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300' },
   EMAIL_FAILED: { label: 'Email failed', cls: 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300' },
   DUPLICATE: { label: 'Already sent', cls: 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300' },
   IGNORED: { label: 'Dismissed', cls: 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400' },
 };
+
+// New-student answer that still needs its ID card number (a new person, or a registered student without an SCLR card)
+const needsIdCard = (a: Answer) => a.form === 'NEW_STUDENT' && !['SENT', 'ASSIGNED', 'DUPLICATE', 'IGNORED'].includes(a.status) && (!a.student || a.student.hasIdCard === false);
 
 const when = (d?: string | null) => (d ? new Date(d).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '');
 
@@ -60,7 +64,7 @@ export const AdminIdCardForm: React.FC = () => {
   const [formFilter, setFormFilter] = useState<FormKind | 'BOTH'>('BOTH');
   const [newName, setNewName] = useState('');
   const [nextCode, setNextCode] = useState('');
-  const [issued, setIssued] = useState<{ name: string; code: string; password: string; email: string; emailed: boolean } | null>(null);
+  const [issued, setIssued] = useState<{ name: string; code: string; password: string; email: string; was?: string } | null>(null);
   const [tab, setTab] = useState<Status | 'TODO' | 'ALL'>('ALL');
   const [q, setQ] = useState('');
   const [syncing, setSyncing] = useState(false);
@@ -104,7 +108,7 @@ export const AdminIdCardForm: React.FC = () => {
     setPickQ(a.idCardCode || a.name);
     setEmail(a.email);
     setNewName(a.name);
-    if (a.form === 'NEW_STUDENT' && !a.student && a.status !== 'SENT') {
+    if (needsIdCard(a)) {
       setNextCode('');
       api
         .get('/admin/id-card-form/next-code')
@@ -144,10 +148,24 @@ export const AdminIdCardForm: React.FC = () => {
         name: newName.trim(),
         code: res.data.idCardNumber,
         password: res.data.password,
-        email: res.data.emailedTo || email.trim(),
-        emailed: res.data.submission?.status === 'SENT',
+        email: email.trim(),
+        was: review.student?.studentId,
       });
       setReview(null);
+      await load();
+    } catch (e: any) {
+      toast.show(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // ID card given but not on the eSSL machine yet: email the login now anyway
+  const sendLoginNow = async (a: Answer) => {
+    setBusy(true);
+    try {
+      const res: any = await api.post(`/admin/id-card-form/${a._id}/send-login-now`, {});
+      toast.show(res.message);
       await load();
     } catch (e: any) {
       toast.show(e.message);
@@ -185,7 +203,7 @@ export const AdminIdCardForm: React.FC = () => {
   };
 
   const counts = useMemo(() => {
-    const c: Record<string, number> = { ALL: 0, TODO: 0, SENT: 0, NEEDS_REVIEW: 0, EMAIL_FAILED: 0, DUPLICATE: 0, IGNORED: 0 };
+    const c: Record<string, number> = { ALL: 0, TODO: 0, SENT: 0, ASSIGNED: 0, NEEDS_REVIEW: 0, EMAIL_FAILED: 0, DUPLICATE: 0, IGNORED: 0 };
     (answers || []).forEach((a) => {
       if (formFilter !== 'BOTH' && a.form !== formFilter) return;
       c.ALL += 1;
@@ -217,6 +235,7 @@ export const AdminIdCardForm: React.FC = () => {
   const tabs: { k: typeof tab; label: string }[] = [
     { k: 'ALL', label: 'All' },
     { k: 'TODO', label: 'To check' },
+    { k: 'ASSIGNED', label: 'Waiting for eSSL machine' },
     { k: 'SENT', label: 'Login emailed' },
     { k: 'DUPLICATE', label: 'Already sent' },
     { k: 'IGNORED', label: 'Dismissed' },
@@ -226,7 +245,7 @@ export const AdminIdCardForm: React.FC = () => {
     <div className="space-y-5 pb-12">
       <PageHeader
         title="ID Card Form"
-        subtitle="Two Google Forms. Student info: when the ID card number and the student's name or phone agree, their login is emailed. New student: waits for an admin to verify; then the student gets the next SCLR ID card number and a password by email."
+        subtitle="New student form: after you verify it, the student gets the next SCLR ID card number. Their login is emailed by itself once that card is on the eSSL machine. Student info form: existing card holders get their login when the card number and their name or phone agree."
         action={
           <button type="button" className={primaryBtn} onClick={sync} disabled={syncing || !connected?.length}>
             <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} /> {syncing ? 'Checking…' : 'Check form now'}
@@ -344,6 +363,7 @@ export const AdminIdCardForm: React.FC = () => {
                         <span className={`inline-block rounded-full px-2 py-0.5 font-semibold ${STATUS[a.status].cls}`}>{STATUS[a.status].label}</span>
                         <p className="mt-1 text-[11px] text-slate-500">
                           {a.status === 'SENT' ? `To ${a.emailedTo}, ${when(a.emailedAt)}` : a.note}
+                          {a.status === 'ASSIGNED' && <span className="mt-0.5 block font-mono font-bold text-sky-700 dark:text-sky-300">ID card {a.loginId}</span>}
                         </p>
                       </td>
                       <td className="px-3 py-2.5 whitespace-nowrap text-right">
@@ -356,15 +376,19 @@ export const AdminIdCardForm: React.FC = () => {
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
-                        {a.status === 'SENT' || a.status === 'DUPLICATE' ? (
+                        {a.status === 'ASSIGNED' ? (
+                          <button type="button" className={`${secondaryBtn} !px-2.5 !py-1 text-xs`} disabled={busy} onClick={() => sendLoginNow(a)} title="Don't wait for the eSSL machine: email the login now">
+                            <Mail className="h-3.5 w-3.5" /> Send login now
+                          </button>
+                        ) : a.status === 'SENT' || a.status === 'DUPLICATE' ? (
                           <button type="button" className={`${secondaryBtn} !px-2.5 !py-1 text-xs`} onClick={() => openReview(a)}>
                             <Mail className="h-3.5 w-3.5" /> Send again
                           </button>
                         ) : (
                           <button type="button" className={`${primaryBtn} !px-2.5 !py-1 text-xs`} onClick={() => openReview(a)}>
-                            {a.form === 'NEW_STUDENT' && !a.student ? (
+                            {needsIdCard(a) ? (
                               <>
-                                <ShieldCheck className="h-3.5 w-3.5" /> Verify & create
+                                <ShieldCheck className="h-3.5 w-3.5" /> Verify & give ID card
                               </>
                             ) : (
                               <>
@@ -383,8 +407,8 @@ export const AdminIdCardForm: React.FC = () => {
         )}
       </Card>
 
-      {review && review.form === 'NEW_STUDENT' && !review.student && review.status !== 'SENT' && (
-        <Modal title="Verify the new student" subtitle={`Form answer from ${review.name || 'unknown'} • ${when(review.submittedAt)}`} onClose={() => !busy && setReview(null)} wide>
+      {review && needsIdCard(review) && (
+        <Modal title={review.student ? 'Verify and give the ID card' : 'Verify the new student'} subtitle={`Form answer from ${review.name || 'unknown'} • ${when(review.submittedAt)}`} onClose={() => !busy && setReview(null)} wide>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="space-y-1.5 rounded-xl border border-slate-200 p-4 text-xs dark:border-slate-800">
               <p className="text-[10px] font-bold uppercase text-slate-500">What they filled in</p>
@@ -400,6 +424,11 @@ export const AdminIdCardForm: React.FC = () => {
                 </a>
               )}
               {review.note && <p className="pt-1 text-amber-700 dark:text-amber-300">{review.note}</p>}
+              {review.student && (
+                <p className="mt-2 rounded-lg bg-emerald-50 p-2 font-semibold text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300">
+                  Registered student: {review.student.fullName} ({review.student.studentId}). The ID card number replaces this Student ID.
+                </p>
+              )}
             </div>
             <div className="space-y-3">
               <div className="rounded-xl bg-gradient-to-br from-brand-600 to-indigo-600 p-4 text-white shadow-lg shadow-brand-500/20">
@@ -407,7 +436,7 @@ export const AdminIdCardForm: React.FC = () => {
                   <IdCard className="h-3.5 w-3.5" /> ID card number they will get
                 </p>
                 <p className="mt-1 font-mono text-2xl font-black">{nextCode || '…'}</p>
-                <p className="text-[11px] text-brand-100">Also their Student ID and Login ID. A password is created when you verify.</p>
+                <p className="text-[11px] text-brand-100">Also their Student ID, Login ID and eSSL machine code.</p>
               </div>
               <div>
                 <label className="block text-[10px] font-bold uppercase text-slate-500" htmlFor="idform-newname">
@@ -423,7 +452,9 @@ export const AdminIdCardForm: React.FC = () => {
               </div>
             </div>
           </div>
-          <p className="pt-3 text-xs text-slate-500">Nothing is created or sent until you press Verify. After that you see the ID card number and password, and the student gets them by email.</p>
+          <p className="pt-3 text-xs text-slate-500">
+            Nothing is sent when you verify. Add this number to the eSSL machine; once the machine has it, the student gets their Login ID and password by email automatically.
+          </p>
           <div className="flex flex-wrap justify-end gap-2 pt-4">
             <button type="button" className={`${secondaryBtn} mr-auto`} disabled={busy} onClick={() => dismiss(review)}>
               <XCircle className="h-4 w-4" /> Reject
@@ -432,19 +463,19 @@ export const AdminIdCardForm: React.FC = () => {
               Cancel
             </button>
             <button type="button" className={primaryBtn} disabled={busy || !newName.trim() || !/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(email.trim())} onClick={createStudent}>
-              <ShieldCheck className="h-4 w-4" /> {busy ? 'Creating…' : 'Verify, create & email login'}
+              <ShieldCheck className="h-4 w-4" /> {busy ? 'Saving…' : `Verify & give ${nextCode || 'ID card'}`}
             </button>
           </div>
         </Modal>
       )}
 
       {issued && (
-        <Modal title="Student verified" subtitle={issued.name} onClose={() => setIssued(null)}>
+        <Modal title="ID card number given" subtitle={issued.was ? `${issued.name} (was ${issued.was})` : issued.name} onClose={() => setIssued(null)}>
           <div className="text-center">
             <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 text-white shadow-lg shadow-emerald-500/30">
               <BadgeCheck className="h-8 w-8" />
             </span>
-            <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">Write these on the ID card and give them to the student.</p>
+            <p className="mt-3 text-sm text-slate-600 dark:text-slate-300">Print this number on the ID card and add it to the eSSL machine.</p>
           </div>
           <div className="mt-4 grid grid-cols-2 gap-3">
             <div className="rounded-2xl bg-brand-50 p-4 text-center dark:bg-brand-950/40">
@@ -456,8 +487,8 @@ export const AdminIdCardForm: React.FC = () => {
               <p className="mt-1 font-mono text-xl font-black text-indigo-700 dark:text-indigo-300">{issued.password || '—'}</p>
             </div>
           </div>
-          <p className={`mt-3 text-center text-xs font-semibold ${issued.emailed ? 'text-emerald-600' : 'text-rose-600'}`}>
-            {issued.emailed ? `Also emailed to ${issued.email}` : `The email to ${issued.email} could not be sent. Give these to the student by hand or press “Send again” in the list.`}
+          <p className="mt-3 rounded-xl bg-sky-50 p-3 text-center text-xs font-semibold text-sky-800 dark:bg-sky-950/40 dark:text-sky-300">
+            Not emailed yet. When {issued.code} shows up on the eSSL machine, the login goes to {issued.email} by itself. To send it earlier, press “Send login now” in the list.
           </p>
           <div className="flex justify-end gap-2 pt-4">
             <button
@@ -479,7 +510,7 @@ export const AdminIdCardForm: React.FC = () => {
         </Modal>
       )}
 
-      {review && !(review.form === 'NEW_STUDENT' && !review.student && review.status !== 'SENT') && (
+      {review && !needsIdCard(review) && (
         <Modal title="Check and send the login" subtitle={`Form answer from ${review.name || 'unknown'} • ${when(review.submittedAt)}`} onClose={() => !busy && setReview(null)} wide>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="space-y-1 rounded-xl border border-slate-200 p-3 text-xs dark:border-slate-800">

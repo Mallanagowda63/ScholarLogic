@@ -299,8 +299,9 @@ export const verifyRegistration = async (req: AuthRequest, res: Response) => {
   await GoogleFormSubmission.updateMany({ registrationId: reg._id }, { studentId: student._id });
   // The photo from the form becomes the student's profile photo
   await applyPhotoToStudent(student._id, reg.photoUrl, true).catch(() => false);
-  // Registration complete: email the course overview
-  queueCourseOverviewEmail(student._id);
+  // Registration verified: email the ID card form (mandatory) with the course overview. No login yet:
+  // that is emailed once the ID card is on the eSSL machine.
+  queueCourseOverviewEmail(student._id, { askIdCard: true });
 
   res.status(201).json({ success: true, data: { student: { _id: student._id, studentId } } });
 };

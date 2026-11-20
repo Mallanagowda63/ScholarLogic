@@ -4,6 +4,7 @@ import mongoose, { Schema, Document } from 'mongoose';
 // A matched student gets their login emailed automatically; anything doubtful waits for an admin.
 export type IdCardStatus =
   | 'SENT' // login emailed
+  | 'ASSIGNED' // ID card number given; the login is emailed once the card is on the eSSL machine
   | 'NEEDS_REVIEW' // no / unknown ID, or the name and phone don't match that student
   | 'EMAIL_FAILED' // matched, but the email could not be sent (retry from the admin page)
   | 'DUPLICATE' // the same student already got their login from an earlier answer
@@ -55,7 +56,7 @@ const IdCardSubmissionSchema = new Schema<IIdCardSubmission>(
     tenthPercentage: { type: String, default: '', trim: true },
     twelfthPercentage: { type: String, default: '', trim: true },
     answers: [{ _id: false, question: String, answer: String }],
-    status: { type: String, enum: ['SENT', 'NEEDS_REVIEW', 'EMAIL_FAILED', 'DUPLICATE', 'IGNORED', 'DELETED'], default: 'NEEDS_REVIEW', index: true },
+    status: { type: String, enum: ['SENT', 'ASSIGNED', 'NEEDS_REVIEW', 'EMAIL_FAILED', 'DUPLICATE', 'IGNORED', 'DELETED'], default: 'NEEDS_REVIEW', index: true },
     note: { type: String, default: '' },
     studentId: { type: Schema.Types.ObjectId, ref: 'Student', index: true },
     loginId: { type: String, default: '' },

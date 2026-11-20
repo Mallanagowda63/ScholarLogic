@@ -6,7 +6,7 @@ import { seedTracking } from './scripts/seedTracking';
 import { seedTestData, assertSafeToSeed } from './scripts/seedTestData';
 import { startAutoSync } from './services/googleFormService';
 import { startMachinePull } from './services/esslPullService';
-import { startIdCardFormSync } from './services/idCardFormService';
+import { startIdCardFormSync, startMachineLoginWatcher } from './services/idCardFormService';
 import { startRecordingSync } from './services/batchRecordingsService';
 import { startFormPhotoSync } from './services/formPhotoService';
 
@@ -33,6 +33,8 @@ async function startServer() {
       // Read users and punches from the eSSL machine (needs ESSL_DEVICE_HOST)
       startMachinePull();
       startIdCardFormSync();
+      // Email the login once a newly given ID card is enrolled on the eSSL machine
+      startMachineLoginWatcher();
       startRecordingSync();
       // Copy students' form photos from Google Drive into the database
       startFormPhotoSync();
