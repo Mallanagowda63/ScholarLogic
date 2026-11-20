@@ -15,7 +15,7 @@ import { User } from '../models/User';
 
 type Source = 'REGISTRATION' | 'STUDENT_INFO' | 'NEW_STUDENT';
 const SOURCES: Record<Source, { url: () => string; secret: () => string }> = {
-  REGISTRATION: { url: () => env.GOOGLE_FORM_SYNC_URL, secret: () => env.GOOGLE_FORM_WEBHOOK_SECRET },
+  REGISTRATION: { url: () => env.GOOGLE_FORM_SYNC_URL, secret: () => env.GOOGLE_FORM_WEBHOOK_SECRET }, // may list several sheets
   STUDENT_INFO: { url: () => env.IDCARD_FORM_SYNC_URL, secret: () => env.IDCARD_FORM_SECRET },
   NEW_STUDENT: { url: () => env.NEWID_FORM_SYNC_URL, secret: () => env.NEWID_FORM_SECRET },
 };
@@ -45,26 +45,42 @@ async function fetchOne(source: Source, driveId: string): Promise<FetchResult> {
   const doc = (await FormPhoto.findOne({ driveId })) || new FormPhoto({ driveId, source });
   if (doc.fetchedAt || doc.tries >= MAX_TRIES) return doc.fetchedAt ? 'ok' : 'fail';
   try {
-    const res = await fetch(cfg.url(), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ secret: cfg.secret(), photoId: driveId }),
-      redirect: 'follow',
-      signal: AbortSignal.timeout(60000),
-    });
-    const text = await res.text();
-    let body: any;
-    try {
-      body = JSON.parse(text);
-    } catch {
-      throw new Error('Google returned a web page, not the photo');
+    // A registration photo is in one of the form sheets (GOOGLE_FORM_SYNC_URL can list several): ask each in turn
+    const urls = cfg.url().split(/[\s,]+/).map((u) => u.trim()).filter(Boolean);
+    let body: any = null;
+    let oldScript = false;
+    let lastMessage = '';
+    for (const url of urls) {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ secret: cfg.secret(), photoId: driveId }),
+        redirect: 'follow',
+        signal: AbortSignal.timeout(90000),
+      });
+      const text = await res.text();
+      let b: any;
+      try {
+        b = JSON.parse(text);
+      } catch {
+        lastMessage = /DriveApp|permission/i.test(text) ? 'The form script has no Google Drive permission yet' : 'Google returned a web page, not the photo';
+        continue;
+      }
+      if (b.success && b.base64) {
+        body = b;
+        break;
+      }
+      if (b.success) oldScript = true; // old script without the photo step
+      else lastMessage = b.message || 'refused';
     }
-    if (!body.success) throw new Error(body.message || 'refused');
-    if (!body.base64) {
-      // Old script without the photo step: wait (no try counted) until it is updated
-      doc.error = 'Waiting: the form script is the old version (no photo step yet)';
-      await doc.save();
-      return 'wait';
+    if (!body) {
+      if (oldScript || /web page|permission/i.test(lastMessage)) {
+        // Old script / no Drive permission yet: wait (no try counted) until it is updated
+        doc.error = `Waiting: ${oldScript ? 'the form script is the old version (no photo step yet)' : lastMessage}`;
+        await doc.save();
+        return 'wait';
+      }
+      throw new Error(lastMessage || 'refused');
     }
     const data = Buffer.from(body.base64, 'base64');
     if (!data.length) throw new Error('empty file');

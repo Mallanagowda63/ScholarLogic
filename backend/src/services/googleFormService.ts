@@ -409,6 +409,8 @@ let syncRunning: Promise<SyncResult> | null = null;
 
 export const getLastSync = () => lastSync;
 export const isSyncConfigured = () => !!(env.GOOGLE_FORM_SYNC_URL && env.GOOGLE_FORM_WEBHOOK_SECRET);
+/** Every registration form sheet link (GOOGLE_FORM_SYNC_URL, comma separated when there are several forms) */
+export const registrationFormUrls = () => env.GOOGLE_FORM_SYNC_URL.split(/[\s,]+/).map((u) => u.trim()).filter(Boolean);
 
 async function doSync(trigger: 'manual' | 'auto'): Promise<SyncResult> {
   const result: SyncResult = { at: new Date(), ok: false, trigger, message: '', total: 0, created: 0, updated: 0, alreadyImported: 0, failed: 0, existingStudents: [] };
@@ -416,52 +418,66 @@ async function doSync(trigger: 'manual' | 'auto'): Promise<SyncResult> {
     result.message = 'Google Form sync is not set up (GOOGLE_FORM_SYNC_URL / GOOGLE_FORM_WEBHOOK_SECRET missing in backend .env)';
     return result;
   }
-  try {
-    // Apps Script answers POST with a redirect to the result; fetch follows it automatically.
-    // Google intermittently serves a "Page not found" page for that redirect, so retry a few times.
-    let body: any;
-    let lastError = '';
-    for (let attempt = 1; attempt <= 4 && !body; attempt++) {
-      try {
-        const res = await fetch(env.GOOGLE_FORM_SYNC_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          // GOOGLE_FORM_SINCE (e.g. 2026-10-14): the sheet only sends answers from that date on
-          body: JSON.stringify({ secret: env.GOOGLE_FORM_WEBHOOK_SECRET, since: env.GOOGLE_FORM_SINCE || undefined }),
-          redirect: 'follow',
-          signal: AbortSignal.timeout(45000),
-        });
-        const text = await res.text();
-        body = JSON.parse(text);
-      } catch (err: any) {
-        body = undefined;
-        lastError =
-          err?.name === 'TimeoutError'
-            ? 'Google did not respond in time'
-            : err instanceof SyntaxError
-              ? 'Google returned a web page instead of data — check the web app is deployed with access "Anyone" and the URL ends in /exec'
-              : String(err?.message || err);
-        if (attempt < 4) await new Promise((r) => setTimeout(r, attempt * 2000));
+  // GOOGLE_FORM_SYNC_URL may list several form sheets (comma separated): each is read in turn
+  const urls = registrationFormUrls();
+  const notes: string[] = [];
+  let anyOk = false;
+  for (const [i, url] of urls.entries()) {
+    const label = urls.length > 1 ? `Form ${i + 1}: ` : '';
+    try {
+      // Apps Script answers POST with a redirect to the result; fetch follows it automatically.
+      // Google intermittently serves a "Page not found" page for that redirect, so retry a few times.
+      let body: any;
+      let lastError = '';
+      for (let attempt = 1; attempt <= 4 && !body; attempt++) {
+        try {
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            // GOOGLE_FORM_SINCE (e.g. 2026-10-14): the sheet only sends answers from that date on
+            body: JSON.stringify({ secret: env.GOOGLE_FORM_WEBHOOK_SECRET, since: env.GOOGLE_FORM_SINCE || undefined }),
+            redirect: 'follow',
+            // A big sheet can take Google a minute or more
+            signal: AbortSignal.timeout(150000),
+          });
+          const text = await res.text();
+          body = JSON.parse(text);
+        } catch (err: any) {
+          body = undefined;
+          lastError =
+            err?.name === 'TimeoutError'
+              ? 'Google did not respond in time'
+              : err instanceof SyntaxError
+                ? 'Google returned a web page instead of data — check the web app is deployed with access "Anyone" and the URL ends in /exec'
+                : String(err?.message || err);
+          if (attempt < 4) await new Promise((r) => setTimeout(r, attempt * 2000));
+        }
       }
+      if (!body) throw new Error(lastError);
+      if (!body.success) throw new Error(body.message || 'Google Apps Script refused the request');
+      const responses: any[] = Array.isArray(body.responses) ? body.responses : [];
+      result.total += responses.length;
+      for (const payload of responses) {
+        const r = await ingestPayload(payload);
+        const existing = /^Matches existing student (\S+)/.exec(r.note || '')?.[1];
+        if (existing && !result.existingStudents.includes(existing)) result.existingStudents.push(existing);
+        if (r.alreadyReceived) result.alreadyImported += 1;
+        else if (r.status === 'PROCESSED') result.created += 1;
+        else if (r.status === 'DUPLICATE') result.updated += 1;
+        else result.failed += 1;
+      }
+      anyOk = true;
+    } catch (err: any) {
+      notes.push(`${label}${String(err?.message || err)}`);
     }
-    if (!body) throw new Error(lastError);
-    if (!body.success) throw new Error(body.message || 'Google Apps Script refused the request');
-    const responses: any[] = Array.isArray(body.responses) ? body.responses : [];
-    result.total = responses.length;
-    for (const payload of responses) {
-      const r = await ingestPayload(payload);
-      const existing = /^Matches existing student (\S+)/.exec(r.note || '')?.[1];
-      if (existing && !result.existingStudents.includes(existing)) result.existingStudents.push(existing);
-      if (r.alreadyReceived) result.alreadyImported += 1;
-      else if (r.status === 'PROCESSED') result.created += 1;
-      else if (r.status === 'DUPLICATE') result.updated += 1;
-      else result.failed += 1;
-    }
-    result.ok = true;
-    result.message = `${result.created} new, ${result.updated} matched existing, ${result.alreadyImported} already imported${result.failed ? `, ${result.failed} need review` : ''}`;
-  } catch (err: any) {
-    result.message = err?.name === 'TimeoutError' ? 'Google did not respond within 60 seconds' : String(err?.message || err);
   }
+  result.ok = anyOk;
+  result.message = [
+    anyOk ? `${result.created} new, ${result.updated} matched existing, ${result.alreadyImported} already imported${result.failed ? `, ${result.failed} need review` : ''}` : '',
+    ...notes,
+  ]
+    .filter(Boolean)
+    .join(' • ');
   return result;
 }
 
