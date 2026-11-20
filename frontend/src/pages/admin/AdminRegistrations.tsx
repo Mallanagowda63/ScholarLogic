@@ -146,14 +146,19 @@ const RegistrationForm: React.FC<{
       onClose={onClose}
     >
       <ErrorNote text={error} />
-      {(reg.photo || reg.photoUrl) && (
-        <div className="mb-3 flex items-center gap-3 rounded-xl border border-slate-200 p-3 dark:border-slate-800">
-          <FormPhoto src={reg.photo} driveUrl={reg.photoUrl} name={reg.fullName} size="lg" />
-          <p className="text-xs text-slate-500">
-            {reg.photo ? 'Photo from the form. It becomes the student’s profile photo when you verify.' : 'The photo is still being copied from Google Drive. It is added to the profile by itself once saved.'}
+      <div className={`mb-3 flex items-center gap-3 rounded-xl border p-3 ${reg.photo ? 'border-emerald-200 bg-emerald-50/50 dark:border-emerald-900 dark:bg-emerald-950/20' : 'border-amber-200 bg-amber-50/50 dark:border-amber-900 dark:bg-amber-950/20'}`}>
+        <FormPhoto src={reg.photo} driveUrl={reg.photoUrl} name={reg.fullName} size="lg" />
+        <div className="text-xs">
+          <p className="font-bold text-slate-900 dark:text-white">{reg.fullName}</p>
+          <p className="mt-1 text-slate-600 dark:text-slate-300">
+            {reg.photo
+              ? 'Photo from the registration form. Check it is the same person; it becomes their profile photo when you verify.'
+              : reg.photoUrl
+                ? 'The photo could not be copied from Google Drive yet. Use the “Drive” link to see it.'
+                : 'No photo attached on the form. The student adds one on the ID card form.'}
           </p>
         </div>
-      )}
+      </div>
       {reg.mappingWarnings?.length > 0 && (
         <div className="mb-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 p-3 text-xs text-amber-800 dark:text-amber-300">
           {reg.mappingWarnings.map((w: string) => (

@@ -357,6 +357,18 @@ export async function ingestPayload(payload: any) {
     String(payload.submissionId || '').trim() ||
     `auto-${crypto.createHash('sha256').update(JSON.stringify(payload)).digest('hex').slice(0, 24)}`;
 
+  // A sheet row with no Timestamp gets a new time on every read ("sheet:tab:row:<now>"): the same row with the
+  // same answers was already received, so it is not a new submission
+  const rowKey = /^([^:]+:\d+:\d+):\d+$/.exec(externalSubmissionId)?.[1];
+  if (rowKey && !(await GoogleFormSubmission.exists({ externalSubmissionId }))) {
+    const sameRow = await GoogleFormSubmission.find({ externalSubmissionId: new RegExp(`^${rowKey.replace(/[^\w:-]/g, '')}:`) })
+      .select('rawPayload processingStatus resultNote')
+      .lean();
+    const answers = JSON.stringify(payload.answers || []);
+    const same = sameRow.find((x: any) => JSON.stringify(x.rawPayload?.answers || []) === answers);
+    if (same) return { status: same.processingStatus, note: same.resultNote, error: undefined as string | undefined, alreadyReceived: true };
+  }
+
   const earlier = await GoogleFormSubmission.findOne({ externalSubmissionId });
   if (earlier && earlier.processingStatus !== 'FAILED') {
     return { status: earlier.processingStatus, note: earlier.resultNote, error: undefined as string | undefined, alreadyReceived: true };
