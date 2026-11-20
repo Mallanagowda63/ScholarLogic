@@ -67,11 +67,12 @@ function allRows_(sheet, since) {
       answers.push({ question: question, answer: String(answer == null ? '' : answer) });
     }
     if (empty) continue;
-    if (!submittedAt || isNaN(submittedAt.getTime())) submittedAt = new Date();
+    var hasTime = submittedAt && !isNaN(submittedAt.getTime());
+    if (!hasTime) submittedAt = new Date();
     if (since && submittedAt < since) continue;
     out.push({
-      // Same id for the same response every time, so ScholarLogic never adds it twice
-      submissionId: ss.getId() + ':' + sheet.getSheetId() + ':' + (r + 1) + ':' + submittedAt.getTime(),
+      // Same id for the same response every time, so ScholarLogic never adds it twice (no Timestamp: 0)
+      submissionId: ss.getId() + ':' + sheet.getSheetId() + ':' + (r + 1) + ':' + (hasTime ? submittedAt.getTime() : 0),
       submittedAt: submittedAt.toISOString(),
       source: 'GOOGLE_FORM',
       formTitle: ss.getName(),
