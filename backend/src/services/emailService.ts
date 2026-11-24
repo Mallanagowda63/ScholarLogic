@@ -393,129 +393,52 @@ export class EmailService {
     const esc = (v: string) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
     const portal = `${o.siteUrl.replace(/\/+$/, '')}/login`;
     const font = "font-family: 'Segoe UI', Arial, Helvetica, sans-serif;";
-    // Coloured initials for each student (same name, same colour)
-    const COLORS = ['#0ea5e9', '#6366f1', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#14b8a6', '#ef4444'];
-    const colorFor = (n: string) => COLORS[[...n].reduce((a, c) => a + c.charCodeAt(0), 0) % COLORS.length];
-    const initials = (n: string) =>
-      n
-        .split(/\s+/)
-        .filter(Boolean)
-        .slice(0, 2)
-        .map((w) => w[0].toUpperCase())
-        .join('') || '?';
-    const studentCell = (n: string, i: number) => `
-                  <td width="50%" style="padding: 5px; vertical-align: top;">
-                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;">
-                      <tr>
-                        <td width="44" style="padding: 8px 0 8px 10px;">
-                          <div style="${font} width: 32px; height: 32px; line-height: 32px; border-radius: 16px; background: ${colorFor(n)}; color: #ffffff; font-size: 12px; font-weight: bold; text-align: center;">${esc(initials(n))}</div>
-                        </td>
-                        <td style="${font} padding: 8px 10px 8px 4px; color: #0f172a; font-size: 14px; font-weight: 600;">
-                          <span style="color: #94a3b8; font-size: 11px; font-weight: normal;">${i + 1}.</span> ${esc(n)}
-                        </td>
-                      </tr>
-                    </table>
-                  </td>`;
-    const rows: string[] = [];
-    for (let i = 0; i < o.students.length; i += 2) {
-      rows.push(`<tr>${studentCell(o.students[i], i)}${o.students[i + 1] ? studentCell(o.students[i + 1], i + 1) : '<td width="50%"></td>'}</tr>`);
-    }
+    const row = (label: string, value: string, last = false) => `
+              <tr>
+                <td style="${font} padding: 9px 0; ${last ? '' : 'border-bottom: 1px solid #e2e8f0;'} color: #64748b; font-size: 13px; width: 120px;">${esc(label)}</td>
+                <td style="${font} padding: 9px 0; ${last ? '' : 'border-bottom: 1px solid #e2e8f0;'} color: #0f172a; font-size: 15px; font-weight: bold;">${esc(value)}</td>
+              </tr>`;
     const names = o.students.length
-      ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0">${rows.join('')}</table>`
-      : `<p style="${font} margin: 0; padding: 14px; background: #f8fafc; border-radius: 10px; color: #64748b; font-size: 14px;">No students added yet. They will appear on your batch page as the admin adds them.</p>`;
-    const tile = (bg: string, color: string, value: string, label: string) => `
-                <td width="33%" style="padding: 0 4px;">
-                  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background: ${bg}; border-radius: 12px;">
-                    <tr><td style="${font} padding: 14px 8px; text-align: center;">
-                      <div style="color: ${color}; font-size: 20px; font-weight: 800; line-height: 1.2;">${esc(value)}</div>
-                      <div style="color: #475569; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px;">${esc(label)}</div>
-                    </td></tr>
-                  </table>
-                </td>`;
-    const detail = (label: string, value: string) => `
-                <tr>
-                  <td style="${font} padding: 8px 0; color: #64748b; font-size: 13px; width: 120px; border-bottom: 1px dashed #e2e8f0;">${esc(label)}</td>
-                  <td style="${font} padding: 8px 0; color: #0f172a; font-size: 14px; font-weight: bold; border-bottom: 1px dashed #e2e8f0;">${esc(value)}</td>
-                </tr>`;
-    const step = (n: number, title: string, text: string) => `
-                <tr>
-                  <td width="36" valign="top" style="padding: 6px 0;">
-                    <div style="${font} width: 26px; height: 26px; line-height: 26px; border-radius: 13px; background: #e0f2fe; color: #0369a1; font-size: 13px; font-weight: bold; text-align: center;">${n}</div>
-                  </td>
-                  <td style="${font} padding: 6px 0; color: #334155; font-size: 14px; line-height: 1.5;"><strong style="color: #0f172a;">${esc(title)}</strong> ${esc(text)}</td>
-                </tr>`;
+      ? `<ol style="${font} margin: 0; padding-left: 22px; color: #0f172a; font-size: 14px; line-height: 1.8;">${o.students.map((n) => `<li>${esc(n)}</li>`).join('')}</ol>`
+      : `<p style="${font} margin: 0; color: #64748b; font-size: 14px;">No students added yet. They will appear on your batch page as the admin adds them.</p>`;
     const html = `<!doctype html>
-<html><body style="margin: 0; padding: 0; background: #eef2f7;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background: #eef2f7; padding: 24px 12px;">
+<html><body style="margin: 0; padding: 0; background: #f1f5f9;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background: #f1f5f9; padding: 24px 12px;">
     <tr><td align="center">
-      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 600px; background: #ffffff; border-radius: 18px; overflow: hidden; box-shadow: 0 6px 24px rgba(15,23,42,0.08);">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 560px; background: #ffffff; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 8px rgba(15,23,42,0.06);">
         <tr>
-          <td style="background: #4f46e5; background-image: linear-gradient(135deg, #0ea5e9 0%, #4f46e5 55%, #7c3aed 100%); padding: 30px 32px 34px;">
-            <p style="${font} margin: 0; color: #e0e7ff; font-size: 13px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;">ScholarLogic &nbsp;•&nbsp; Trainer</p>
-            <p style="${font} margin: 14px 0 0; color: #ffffff; font-size: 26px; font-weight: 800; line-height: 1.25;">&#127881; You have a new batch!</p>
-            <table role="presentation" cellpadding="0" cellspacing="0" style="margin-top: 16px;">
-              <tr>
-                <td style="${font} background: rgba(255,255,255,0.18); border: 1px solid rgba(255,255,255,0.35); border-radius: 999px; padding: 7px 16px; color: #ffffff; font-size: 16px; font-weight: 800; letter-spacing: 0.5px;">${esc(o.batchCode)}</td>
-                <td style="width: 10px;"></td>
-                <td style="${font} color: #e0e7ff; font-size: 16px; font-weight: 600;">${esc(o.subject)}</td>
-              </tr>
-            </table>
+          <td style="background: #0c8ee9; background-image: linear-gradient(135deg, #0c8ee9, #4f46e5); padding: 24px 32px;">
+            <p style="${font} margin: 0; color: #ffffff; font-size: 22px; font-weight: 800;">ScholarLogic</p>
+            <p style="${font} margin: 6px 0 0; color: #ffffff; font-size: 17px; font-weight: bold;">New batch assigned: ${esc(o.batchCode)}</p>
           </td>
         </tr>
         <tr>
-          <td style="padding: 28px 28px 4px;">
-            <p style="${font} margin: 0 0 6px; color: #0f172a; font-size: 16px;">Hi <strong>${esc(o.name)}</strong> &#128075;,</p>
-            <p style="${font} margin: 0 0 20px; color: #475569; font-size: 15px; line-height: 1.6;">You are the trainer for <strong style="color: #0f172a;">${esc(o.batchCode)}</strong>. Here is everything you need before the first class.</p>
-            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin: 0 0 20px;">
-              <tr>
-                ${tile('#ecfdf5', '#047857', String(o.students.length), o.students.length === 1 ? 'Student' : 'Students')}
-                ${tile('#eff6ff', '#1d4ed8', o.timing || '—', 'Timing')}
-                ${tile('#f5f3ff', '#6d28d9', o.startDate.replace(/^\w+,\s*/, '') || '—', 'Starts on')}
-              </tr>
+          <td style="padding: 28px 32px 6px;">
+            <p style="${font} margin: 0 0 14px; color: #0f172a; font-size: 15px;">Dear <strong>${esc(o.name)}</strong>,</p>
+            <p style="${font} margin: 0 0 18px; color: #334155; font-size: 15px; line-height: 1.6;">You have been assigned the batch below. Please check the timing and the student list.</p>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 4px 20px;">
+              ${row('Batch', o.batchCode)}
+              ${row('Subject', o.subject)}
+              ${row('Timing', o.timing)}
+              ${row('Mode', o.mode)}
+              ${row('Starts on', o.startDate)}
+              ${row('Expected end', o.endDate)}
+              ${row('Students', String(o.students.length), true)}
             </table>
-            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin: 0 0 8px;">
-              ${detail('Subject', o.subject)}
-              ${detail('Mode', o.mode)}
-              ${detail('Starts on', o.startDate)}
-              ${detail('Expected end', o.endDate)}
-            </table>
-          </td>
-        </tr>
-        <tr>
-          <td style="padding: 18px 23px 4px;">
-            <p style="${font} margin: 0 5px 10px; color: #0f172a; font-size: 17px; font-weight: 800;">&#128101; Your students <span style="display: inline-block; margin-left: 6px; background: #0ea5e9; color: #ffffff; border-radius: 999px; padding: 1px 10px; font-size: 13px;">${o.students.length}</span></p>
+            <p style="${font} margin: 22px 0 8px; color: #0f172a; font-size: 16px; font-weight: 800;">Students (${o.students.length})</p>
             ${names}
-          </td>
-        </tr>
-        <tr>
-          <td style="padding: 18px 28px 8px;">
-            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 14px;">
-              <tr><td style="padding: 16px 18px;">
-                <p style="${font} margin: 0 0 6px; color: #0c4a6e; font-size: 15px; font-weight: 800;">Before your first class</p>
-                <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-                  ${step(1, 'Open the batch', 'in the portal and check the syllabus topics.')}
-                  ${step(2, 'Set the class link', '(Zoho meeting) if the batch is online or hybrid.')}
-                  ${step(3, 'After each class,', 'tick the topics taught and mark attendance.')}
-                </table>
-              </td></tr>
+            <table role="presentation" cellpadding="0" cellspacing="0" style="margin: 24px 0 8px;">
+              <tr><td style="border-radius: 10px; background: #0c8ee9;"><a href="${esc(portal)}" style="${font} display: inline-block; padding: 12px 24px; color: #ffffff; font-size: 14px; font-weight: bold; text-decoration: none;">Open my batches &rarr;</a></td></tr>
             </table>
           </td>
         </tr>
         <tr>
-          <td align="center" style="padding: 18px 28px 30px;">
-            <table role="presentation" cellpadding="0" cellspacing="0">
-              <tr><td style="border-radius: 12px; background: #4f46e5; background-image: linear-gradient(135deg, #0ea5e9, #4f46e5);"><a href="${esc(portal)}" style="${font} display: inline-block; padding: 14px 34px; color: #ffffff; font-size: 15px; font-weight: bold; text-decoration: none;">Open my batch &rarr;</a></td></tr>
-            </table>
-          </td>
-        </tr>
-        <tr>
-          <td style="padding: 18px 28px; background: #f8fafc; border-top: 1px solid #e2e8f0;">
+          <td style="padding: 18px 32px; background: #f8fafc; border-top: 1px solid #e2e8f0;">
             <p style="${font} margin: 0 0 4px; color: #475569; font-size: 13px;">Questions? Reply to this email or call <a href="tel:+919008625716" style="color: #0c8ee9; text-decoration: none;">+91 90086 25716</a>.</p>
             <p style="${font} margin: 0; color: #94a3b8; font-size: 12px;">Regards, ScholarLogic Team</p>
           </td>
         </tr>
       </table>
-      <p style="${font} margin: 14px 0 0; color: #94a3b8; font-size: 11px;">You received this because you are a ScholarLogic trainer.</p>
     </td></tr>
   </table>
 </body></html>`;
@@ -542,7 +465,7 @@ export class EmailService {
       from: process.env.EMAIL_FROM || 'ScholarLogic <noreply@scholarlogiclms.in>',
       replyTo: process.env.EMAIL_REPLY_TO || 'tech@scholarlogic.net',
       to: o.to,
-      subject: `🎉 New batch for you: ${o.batchCode} (${o.subject}, ${o.timing}) • ${o.students.length} student${o.students.length === 1 ? '' : 's'}`,
+      subject: `New batch assigned: ${o.batchCode} (${o.subject}, ${o.timing}) • ${o.students.length} student${o.students.length === 1 ? '' : 's'}`,
       html,
       text,
     });
