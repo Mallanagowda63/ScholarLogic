@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { CodingSummaryCard } from '../../components/CodingSummaryCard';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
@@ -504,6 +505,7 @@ export const StudentProfile: React.FC = () => {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Left summary column */}
         <aside className="space-y-6">
+          <CodingSummaryCard />
           <Card className="p-5">
             <div className="flex items-start gap-3">
               <span className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${isActive ? 'bg-emerald-50 dark:bg-emerald-950/50' : 'bg-amber-50 dark:bg-amber-950/50'}`}>

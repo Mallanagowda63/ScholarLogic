@@ -124,6 +124,9 @@ const TrainerMessages = lazyPage(() => import('./pages/trainer/TrainerMessages')
 const TrainerAnalytics = lazyPage(() => import('./pages/trainer/TrainerAnalytics'), 'TrainerAnalytics');
 const StaffProfile = lazyPage(() => import('./pages/shared/StaffProfile'), 'StaffProfile');
 const OfflineMarks = lazyPage(() => import('./pages/shared/OfflineMarks'), 'OfflineMarks');
+const CodingBank = lazyPage(() => import('./pages/shared/CodingBank'), 'CodingBank');
+const StudentCoding = lazyPage(() => import('./pages/student/StudentCoding'), 'StudentCoding');
+const StudentCodingFolder = lazyPage(() => import('./pages/student/StudentCoding'), 'StudentCodingFolder');
 const TrainerGradingPanel = lazyPage(() => import('./pages/trainer/TrainerGradingPanel'), 'TrainerGradingPanel');
 const QuestionBankImporter = lazyPage(() => import('./pages/trainer/QuestionBankImporter'), 'QuestionBankImporter');
 
@@ -173,6 +176,8 @@ export const App: React.FC = () => {
                 <Route path="/student/results/:id" element={<ExamResult />} />
                 <Route path="/student/results" element={<ExamResults />} />
                 <Route path="/student/resume" element={<ResumeBuilder />} />
+                <Route path="/student/coding" element={<StudentCoding />} />
+                <Route path="/student/coding/:folderId" element={<StudentCodingFolder />} />
                 <Route path="/student/jobs" element={<StudentJobs />} />
                 <Route path="/student/applications" element={<StudentApplications />} />
                 <Route path="/student/mock-interview" element={<VoiceMockInterview />} />
@@ -199,6 +204,7 @@ export const App: React.FC = () => {
                 <Route path="/trainer/exams/:examId/results" element={<TrainerExamResults />} />
                 <Route path="/trainer/attendance" element={<TrainerAttendance />} />
                 <Route path="/trainer/offline-marks" element={<OfflineMarks />} />
+                <Route path="/trainer/coding" element={<CodingBank />} />
                 <Route path="/trainer/calendar" element={<TrainerCalendar />} />
                 <Route path="/trainer/announcements" element={<TrainerAnnouncements />} />
                 <Route path="/trainer/messages" element={<TrainerMessages />} />
@@ -247,6 +253,7 @@ export const App: React.FC = () => {
                 <Route path="/admin/lms" element={<StudentCourses />} />
                 <Route path="/admin/exams" element={<StudentExams />} />
                 <Route path="/admin/offline-marks" element={<OfflineMarks />} />
+                <Route path="/admin/coding" element={<CodingBank />} />
                 <Route path="/admin/audit-logs" element={<AdminDashboard />} />
               </Route>
             </Route>

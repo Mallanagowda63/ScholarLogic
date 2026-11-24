@@ -14,6 +14,7 @@ import {
   GraduationCap,
   ChevronDown,
   ChevronRight,
+  Code2,
 } from 'lucide-react';
 
 export const StudentSidebar: React.FC = () => {
@@ -81,6 +82,7 @@ export const StudentSidebar: React.FC = () => {
 
           <NavLink to="/student/exams" className={({ isActive }) => `flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold ${isActive ? 'bg-brand-600 text-white' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100'}`}><FileCheck className="h-4 w-4 text-blue-500" /> Exams & Quizzes</NavLink>
           <NavLink to="/student/results" className={({ isActive }) => `flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold ${isActive ? 'bg-brand-600 text-white' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100'}`}><Award className="h-4 w-4 text-amber-500" /> Exam Results</NavLink>
+          <NavLink to="/student/coding" className={({ isActive }) => `flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold ${isActive ? 'bg-brand-600 text-white' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100'}`}><Code2 className="h-4 w-4 text-emerald-500" /> Technical Practice</NavLink>
           <NavLink to="/student/resume" className={({ isActive }) => `flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold ${isActive ? 'bg-brand-600 text-white' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100'}`}><Sparkles className="h-4 w-4 text-purple-500" /> Resume AI Builder</NavLink>
           <NavLink to="/student/jobs" className={({ isActive }) => `flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold ${isActive ? 'bg-brand-600 text-white' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100'}`}><Briefcase className="h-4 w-4 text-emerald-500" /> Placement Portal</NavLink>
           <NavLink to="/student/applications" className={({ isActive }) => `flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold ${isActive ? 'bg-brand-600 text-white' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100'}`}><Send className="h-4 w-4 text-indigo-500" /> My Applications</NavLink>
