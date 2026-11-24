@@ -25,8 +25,7 @@ import {
   Fingerprint,
   IdCard,
   ScanLine,
-  FileSpreadsheet,
-} from 'lucide-react';
+  FileSpreadsheet, ClipboardList } from 'lucide-react';
 
 export const AdminSidebar: React.FC = () => {
   const { user } = useAuth();
@@ -72,6 +71,7 @@ export const AdminSidebar: React.FC = () => {
   const platformLinks = [
     { name: 'LMS Content', path: '/admin/lms', icon: PlaySquare },
     { name: 'Exams', path: '/admin/exams', icon: FileCheck },
+    { name: 'Offline Test Marks', path: '/admin/offline-marks', icon: ClipboardList },
     { name: 'Audit Logs', path: '/admin/audit-logs', icon: ShieldAlert },
   ];
 

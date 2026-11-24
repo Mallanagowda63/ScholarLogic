@@ -1,4 +1,5 @@
 import { Response } from 'express';
+import { OfflineTest } from '../models/OfflineTest';
 import { AuthRequest } from '../middleware/auth';
 import { Student } from '../models/Student';
 import { User } from '../models/User';
@@ -121,6 +122,24 @@ export const getStudentDashboard = async (req: AuthRequest, res: Response): Prom
     { $project: { student: 0, user: 0 } },
     { $sort: { points: -1, _id: 1 } },
   ]);
+  // Offline (written) tests whose marks trainers uploaded from Excel count too: marks add to the points
+  const offline: { _id: any; points: number; tests: number; name: string }[] = await OfflineTest.aggregate([
+    { $unwind: '$entries' },
+    { $group: { _id: '$entries.studentId', points: { $sum: '$entries.marks' }, tests: { $sum: 1 } } },
+    { $lookup: { from: Student.collection.name, localField: '_id', foreignField: '_id', as: 'student' } },
+    { $unwind: '$student' },
+    { $lookup: { from: User.collection.name, localField: 'student.userId', foreignField: '_id', as: 'user' } },
+    { $unwind: '$user' },
+    { $project: { points: 1, tests: 1, name: '$user.fullName' } },
+  ]);
+  for (const o of offline) {
+    const s: any = standings.find((x) => String(x._id) === String(o._id));
+    if (s) {
+      s.points += o.points;
+      s.examsTaken += o.tests;
+    } else standings.push({ _id: o._id, points: o.points, examsTaken: o.tests, name: o.name } as any);
+  }
+  standings.sort((a, b) => b.points - a.points || String(a._id).localeCompare(String(b._id)));
 
   const topStandings = standings.slice(0, 10);
   const nameByStudentId = new Map(topStandings.map((s: any) => [String(s._id), s.name || 'Student']));

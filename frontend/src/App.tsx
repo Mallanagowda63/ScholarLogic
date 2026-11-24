@@ -123,6 +123,7 @@ const TrainerAnnouncements = lazyPage(() => import('./pages/trainer/TrainerAnnou
 const TrainerMessages = lazyPage(() => import('./pages/trainer/TrainerMessages'), 'TrainerMessages');
 const TrainerAnalytics = lazyPage(() => import('./pages/trainer/TrainerAnalytics'), 'TrainerAnalytics');
 const StaffProfile = lazyPage(() => import('./pages/shared/StaffProfile'), 'StaffProfile');
+const OfflineMarks = lazyPage(() => import('./pages/shared/OfflineMarks'), 'OfflineMarks');
 const TrainerGradingPanel = lazyPage(() => import('./pages/trainer/TrainerGradingPanel'), 'TrainerGradingPanel');
 const QuestionBankImporter = lazyPage(() => import('./pages/trainer/QuestionBankImporter'), 'QuestionBankImporter');
 
@@ -197,6 +198,7 @@ export const App: React.FC = () => {
                 <Route path="/trainer/question-bank/import" element={<QuestionBankImporter />} />
                 <Route path="/trainer/exams/:examId/results" element={<TrainerExamResults />} />
                 <Route path="/trainer/attendance" element={<TrainerAttendance />} />
+                <Route path="/trainer/offline-marks" element={<OfflineMarks />} />
                 <Route path="/trainer/calendar" element={<TrainerCalendar />} />
                 <Route path="/trainer/announcements" element={<TrainerAnnouncements />} />
                 <Route path="/trainer/messages" element={<TrainerMessages />} />
@@ -244,6 +246,7 @@ export const App: React.FC = () => {
                 <Route path="/admin/history" element={<AdminHistory />} />
                 <Route path="/admin/lms" element={<StudentCourses />} />
                 <Route path="/admin/exams" element={<StudentExams />} />
+                <Route path="/admin/offline-marks" element={<OfflineMarks />} />
                 <Route path="/admin/audit-logs" element={<AdminDashboard />} />
               </Route>
             </Route>

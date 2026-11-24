@@ -8,6 +8,7 @@ import { errorHandler } from './middleware/errorHandler';
 import { tenantMiddleware } from './middleware/tenantMiddleware';
 
 // Import Routes
+import offlineTestRoutes from './routes/offlineTestRoutes';
 import formPhotoRoutes from './routes/formPhotoRoutes';
 import authRoutes from './routes/authRoutes';
 import studentRoutes from './routes/studentRoutes';
@@ -148,6 +149,7 @@ app.use('/uploads', express.static(path.resolve(env.STORAGE_PATH)));
 
 // API Routes
 app.use('/api/form-photos', formPhotoRoutes);
+app.use('/api/offline-tests', offlineTestRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/students', studentRoutes);
 app.use('/api/courses', courseRoutes);
