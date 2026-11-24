@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Download, FileSpreadsheet, Link2, Upload } from 'lucide-react';
 import { api } from '../../services/api';
 import { ErrorNote, Field, Modal, inputClass, primaryBtn, secondaryBtn } from '../admin/tracking/shared';
@@ -152,39 +152,160 @@ export const ExcelMcqTestModal: React.FC<{ onClose: () => void; onDone: (message
 };
 
 export const LinkTestModal: React.FC<{ onClose: () => void; onDone: (message: string) => void }> = ({ onClose, onDone }) => {
+  const [mode, setMode] = useState<'coding' | 'outside'>('coding');
   const [form, setForm] = useState({ title: '', testLink: '', durationMinutes: 60, description: '' });
+  const [folders, setFolders] = useState<any[] | null>(null);
+  const [folderId, setFolderId] = useState('');
+  const [questions, setQuestions] = useState<any[]>([]);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [randomCount, setRandomCount] = useState(0);
+  const [published, setPublished] = useState<{ title: string; link: string } | null>(null);
+  const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    api
+      .get('/coding/folders')
+      .then((r: any) => setFolders(r.data.folders.filter((f: any) => f.questionCount > 0)))
+      .catch(() => setFolders([]));
+  }, []);
+  useEffect(() => {
+    setQuestions([]);
+    setPicked([]);
+    if (!folderId) return;
+    api.get(`/coding/folders/${folderId}/questions`).then((r: any) => setQuestions(r.data.questions)).catch((e: any) => setError(e.message));
+  }, [folderId]);
+
   const publish = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
     setError('');
     try {
-      const res: any = await api.post('/exams/link', form);
-      onDone(res.message);
+      if (mode === 'outside') {
+        const res: any = await api.post('/exams/link', form);
+        onDone(res.message);
+        return;
+      }
+      const res: any = await api.post('/coding/tests', { title: form.title, description: form.description, durationMinutes: form.durationMinutes, folderId, questionIds: picked, randomCount: picked.length ? 0 : randomCount });
+      setPublished({ title: res.data.test.title, link: res.data.link });
     } catch (err: any) {
       setError(err.message);
     } finally {
       setBusy(false);
     }
   };
+
+  const copy = () => {
+    if (!published) return;
+    navigator.clipboard?.writeText(published.link).then(
+      () => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      },
+      () => undefined
+    );
+  };
+
+  if (published)
+    return (
+      <Modal title="Coding test published" subtitle={published.title} onClose={() => onDone('Coding test published')}>
+        <p className="text-sm text-slate-600 dark:text-slate-300">Share this link with the students. They log in, press Start, and solve the questions in the IDE. It is also on their Exams page.</p>
+        <div className="mt-3 flex items-center gap-2 rounded-xl border border-brand-200 bg-brand-50 p-3 dark:border-brand-900 dark:bg-brand-950/30">
+          <Link2 className="h-4 w-4 shrink-0 text-brand-600" />
+          <span className="min-w-0 flex-1 truncate font-mono text-sm font-bold text-brand-700 dark:text-brand-300">{published.link}</span>
+        </div>
+        <div className="mt-4 flex flex-wrap justify-end gap-2">
+          <a
+            className={secondaryBtn}
+            href={`https://wa.me/?text=${encodeURIComponent(`${published.title}: coding test on ScholarLogic\n${published.link}`)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            Share on WhatsApp
+          </a>
+          <button type="button" className={primaryBtn} onClick={copy}>
+            {copied ? <CheckCircle2 className="h-4 w-4" /> : <Link2 className="h-4 w-4" />} {copied ? 'Copied!' : 'Copy link'}
+          </button>
+        </div>
+      </Modal>
+    );
+
+  const allPicked = questions.length > 0 && picked.length === questions.length;
+  const ready = mode === 'outside' ? !!form.title.trim() && !!form.testLink.trim() : !!form.title.trim() && !!folderId && (picked.length > 0 || randomCount > 0);
+
   return (
-    <Modal title="Technical test (link)" subtitle="For coding tests on HackerRank, HackerEarth, Google Forms, etc. Students get an Open test button." onClose={onClose}>
+    <Modal wide={mode === 'coding'} title="Technical test (link)" subtitle="Make a coding test with a shareable link, or publish a test from another site." onClose={onClose}>
       <ErrorNote text={error} />
+      <div className="mb-3 grid grid-cols-2 gap-2">
+        {(
+          [
+            ['coding', 'ScholarLogic coding test', 'Questions from Technical Practice, solved in our IDE'],
+            ['outside', 'Outside link', 'HackerRank, HackerEarth, Google Forms…'],
+          ] as const
+        ).map(([k, t, d]) => (
+          <button key={k} type="button" onClick={() => setMode(k)} className={`rounded-xl border p-3 text-left ${mode === k ? 'border-brand-500 bg-brand-50 ring-2 ring-brand-500/20 dark:bg-brand-950/40' : 'border-slate-200 dark:border-slate-700'}`}>
+            <span className="block text-sm font-bold text-slate-900 dark:text-white">{t}</span>
+            <span className="block text-[11px] text-slate-500">{d}</span>
+          </button>
+        ))}
+      </div>
       <form onSubmit={publish} className="space-y-3">
         <Field label="Test name" required>
           <input id="link-title" className={inputClass} value={form.title} onChange={(e) => setForm((x) => ({ ...x, title: e.target.value }))} placeholder="Python coding round" required />
         </Field>
-        <Field label="Test link" required>
-          <input id="link-url" className={inputClass} value={form.testLink} onChange={(e) => setForm((x) => ({ ...x, testLink: e.target.value }))} placeholder="https://" required />
-        </Field>
+        {mode === 'outside' ? (
+          <Field label="Test link" required>
+            <input id="link-url" className={inputClass} value={form.testLink} onChange={(e) => setForm((x) => ({ ...x, testLink: e.target.value }))} placeholder="https://" required />
+          </Field>
+        ) : (
+          <>
+            <Field label="Questions from folder" required>
+              <select className={inputClass} value={folderId} onChange={(e) => setFolderId(e.target.value)}>
+                <option value="">{folders === null ? 'Loading…' : folders.length ? 'Choose a Technical Practice folder' : 'No folder with questions yet: add them in Technical Practice'}</option>
+                {(folders || []).map((f) => (
+                  <option key={f._id} value={f._id}>
+                    {f.name} ({f.language}, {f.questionCount} questions)
+                  </option>
+                ))}
+              </select>
+            </Field>
+            {questions.length > 0 && (
+              <div className="rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+                <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <label className="flex items-center gap-2 font-semibold">
+                    <input type="checkbox" checked={allPicked} onChange={() => setPicked(allPicked ? [] : questions.map((q) => String(q._id)))} /> Pick questions ({picked.length} chosen)
+                  </label>
+                  <label className="flex items-center gap-2 text-slate-500">
+                    or random
+                    <input type="number" min={0} max={questions.length} className={`${inputClass} !w-20 !py-1 text-xs`} value={randomCount} disabled={picked.length > 0} onChange={(e) => setRandomCount(Number(e.target.value))} />
+                    of {questions.length}
+                  </label>
+                </div>
+                <ul className="max-h-48 space-y-1 overflow-y-auto">
+                  {questions.map((q, i) => (
+                    <li key={q._id}>
+                      <label className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1 text-xs hover:bg-slate-50 dark:hover:bg-slate-800">
+                        <input type="checkbox" checked={picked.includes(String(q._id))} onChange={(e) => setPicked((p) => (e.target.checked ? [...p, String(q._id)] : p.filter((x) => x !== String(q._id))))} />
+                        <span className="font-semibold text-slate-800 dark:text-slate-200">
+                          {i + 1}. {q.title}
+                        </span>
+                        <span className="text-slate-400">• {q.difficulty.toLowerCase()} • {q.tests.length} tests</span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </>
+        )}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <Field label="Time (minutes)">
             <input type="number" min={1} className={inputClass} value={form.durationMinutes} onChange={(e) => setForm((x) => ({ ...x, durationMinutes: Number(e.target.value) }))} />
           </Field>
           <div className="sm:col-span-2">
             <Field label="Instructions" hint="Optional">
-              <input className={inputClass} value={form.description} onChange={(e) => setForm((x) => ({ ...x, description: e.target.value }))} placeholder="Use your Student ID as the name" />
+              <input className={inputClass} value={form.description} onChange={(e) => setForm((x) => ({ ...x, description: e.target.value }))} placeholder={mode === 'coding' ? 'Solve all questions; Submit each answer, then Finish test' : 'Use your Student ID as the name'} />
             </Field>
           </div>
         </div>
@@ -192,8 +313,8 @@ export const LinkTestModal: React.FC<{ onClose: () => void; onDone: (message: st
           <button type="button" className={secondaryBtn} onClick={onClose}>
             Cancel
           </button>
-          <button type="submit" className={primaryBtn} disabled={busy}>
-            <Link2 className="h-4 w-4" /> {busy ? 'Publishing…' : 'Publish test link'}
+          <button type="submit" className={primaryBtn} disabled={busy || !ready}>
+            <Link2 className="h-4 w-4" /> {busy ? 'Publishing…' : mode === 'coding' ? 'Publish & get link' : 'Publish test link'}
           </button>
         </div>
       </form>

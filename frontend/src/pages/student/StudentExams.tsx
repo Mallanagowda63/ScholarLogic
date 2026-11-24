@@ -53,8 +53,8 @@ export const StudentExams: React.FC = () => {
 
                 {exam.kind === 'LINK' ? (
                   <a
-                    href={exam.testLink}
-                    target="_blank"
+                    href={/\/coding-test\//.test(exam.testLink || '') ? new URL(exam.testLink || '/', window.location.origin).pathname : exam.testLink}
+                    target={/\/coding-test\//.test(exam.testLink || '') ? undefined : '_blank'}
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white text-xs font-bold shadow-md hover:opacity-95"
                   >

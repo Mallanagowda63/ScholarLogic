@@ -27,6 +27,9 @@ export const Login: React.FC = () => {
       if (res.success && res.data) {
         login(res.data.tokens.accessToken, res.data.user);
         const role = res.data.user.role;
+        // Came from a shared link (e.g. a coding test): go back there
+        const back = searchParams.get('redirect') || '';
+        if (/^\/(student|trainer|admin|placement|coding-test)\//.test(back) && !back.startsWith('//')) return navigate(back, { replace: true });
         if (role === 'ADMIN' || role === 'SUPER_ADMIN') navigate('/admin/dashboard');
         else if (role === 'TRAINER') navigate('/trainer/dashboard');
         else if (role === 'PLACEMENT_MANAGER') navigate('/placement/dashboard');

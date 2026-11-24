@@ -5,7 +5,10 @@ import * as XLSX from 'xlsx';
 import { authenticateUser, authorizeRoles, AuthRequest } from '../middleware/auth';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
-import { CodingFolder, CodingQuestion, CodingSubmission } from '../models/Coding';
+import crypto from 'crypto';
+import { env } from '../config/env';
+import { Exam } from '../models/Exam';
+import { CodingFolder, CodingQuestion, CodingSubmission, CodingTest, CodingTestAttempt } from '../models/Coding';
 import { Student } from '../models/Student';
 import { User } from '../models/User';
 import { Notification } from '../models/Notification';
@@ -458,6 +461,222 @@ router.get(
         recent: recent.map((r) => ({ ...r, title: qs.get(String(r.questionId)) || 'Question' })),
       },
     });
+  })
+);
+
+// ============================================================================ Coding tests (shareable link)
+const siteUrl = () => (/localhost|127\.0\.0\.1/.test(env.FRONTEND_URL) ? 'https://scholarlogiclms.in' : env.FRONTEND_URL).replace(/\/+$/, '');
+const testLink = (token: string) => `${siteUrl()}/coding-test/${token}`;
+const GRACE_MS = 60000; // answers are accepted up to 1 minute after the time is up (slow networks)
+
+const scoreOf = (answers: any[], questionCount: number) =>
+  questionCount ? Math.round((answers.reduce((s, a) => s + (a.total ? a.passed / a.total : 0), 0) / questionCount) * 1000) / 10 : 0;
+
+router.post(
+  '/tests',
+  staff,
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { title, description = '', folderId, questionIds = [], randomCount = 0, durationMinutes = 60 } = req.body || {};
+    if (!String(title || '').trim()) throw new AppError('Give the test a name', 400, 'MISSING_FIELDS');
+    const folder: any = await CodingFolder.findById(oid(folderId, 'folder')).lean();
+    if (!folder) throw new AppError('Folder not found', 404, 'NOT_FOUND');
+    const all: any[] = await CodingQuestion.find({ folderId: folder._id }).select('_id').sort({ order: 1, createdAt: 1 }).lean();
+    let chosen = (Array.isArray(questionIds) ? questionIds : []).map(String).filter((id: string) => all.some((q) => String(q._id) === id));
+    const n = Math.max(0, Math.min(Number(randomCount) || 0, all.length));
+    if (!chosen.length && n) chosen = [...all].sort(() => Math.random() - 0.5).slice(0, n).map((q) => String(q._id));
+    if (!chosen.length) throw new AppError('Choose at least one question', 400, 'MISSING_FIELDS');
+    const token = crypto.randomBytes(6).toString('base64url');
+    const minutes = Math.min(600, Math.max(5, Number(durationMinutes) || 60));
+    const test = await CodingTest.create({
+      title: String(title).trim().slice(0, 120),
+      description: String(description).slice(0, 1000),
+      token,
+      folderId: folder._id,
+      questionIds: chosen,
+      durationMinutes: minutes,
+      createdById: req.user!.userId,
+    });
+    // Also listed on the students' Exams page with an "Open test" button
+    const exam = await Exam.create({
+      title: test.title,
+      description: test.description || `Coding test: ${chosen.length} ${folder.language} question${chosen.length === 1 ? '' : 's'} in the ScholarLogic IDE`,
+      kind: 'LINK',
+      testLink: testLink(token),
+      durationMinutes: minutes,
+      totalMarks: 100,
+      passingMarks: 40,
+      status: 'ACTIVE',
+      isPublished: true,
+      questionIds: [],
+      createdById: req.user!.userId,
+    });
+    test.examId = exam._id;
+    await test.save();
+    res.status(201).json({ success: true, message: 'Coding test published', data: { test, link: testLink(token) } });
+  })
+);
+
+router.get(
+  '/tests',
+  staff,
+  asyncHandler(async (_req: AuthRequest, res: Response) => {
+    const tests: any[] = await CodingTest.find({}).sort({ createdAt: -1 }).limit(200).lean();
+    const [folders, counts] = await Promise.all([
+      CodingFolder.find({ _id: { $in: tests.map((t) => t.folderId) } }).select('name language').lean(),
+      CodingTestAttempt.aggregate([{ $match: { testId: { $in: tests.map((t) => t._id) } } }, { $group: { _id: '$testId', started: { $sum: 1 }, submitted: { $sum: { $cond: [{ $eq: ['$status', 'SUBMITTED'] }, 1, 0] } }, avg: { $avg: '$score' } } }]),
+    ]);
+    const fMap = new Map(folders.map((f: any) => [String(f._id), f]));
+    const cMap = new Map(counts.map((c: any) => [String(c._id), c]));
+    res.json({
+      success: true,
+      data: {
+        tests: tests.map((t) => ({
+          ...t,
+          link: testLink(t.token),
+          folder: fMap.get(String(t.folderId)) || null,
+          questionCount: t.questionIds.length,
+          started: (cMap.get(String(t._id)) as any)?.started || 0,
+          submitted: (cMap.get(String(t._id)) as any)?.submitted || 0,
+          average: Math.round((cMap.get(String(t._id)) as any)?.avg || 0),
+        })),
+      },
+    });
+  })
+);
+
+router.get(
+  '/tests/:id/results',
+  staff,
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const test: any = await CodingTest.findById(oid(req.params.id, 'test')).lean();
+    if (!test) throw new AppError('Test not found', 404, 'NOT_FOUND');
+    const [attempts, questions] = await Promise.all([
+      CodingTestAttempt.find({ testId: test._id }).sort({ score: -1, submittedAt: 1 }).lean(),
+      CodingQuestion.find({ _id: { $in: test.questionIds } }).select('title').lean(),
+    ]);
+    const students: any[] = await Student.find({ _id: { $in: attempts.map((a: any) => a.studentId) } }).select('studentId userId').populate('userId', 'fullName').lean();
+    const sMap = new Map(students.map((s) => [String(s._id), { studentId: s.studentId, fullName: s.userId?.fullName || 'Student' }]));
+    const qMap = new Map(questions.map((q: any) => [String(q._id), q.title]));
+    res.json({
+      success: true,
+      data: {
+        test: { ...test, link: testLink(test.token) },
+        questions: test.questionIds.map((id: any) => ({ _id: id, title: qMap.get(String(id)) || 'Question' })),
+        attempts: attempts.map((a: any) => ({ ...a, student: sMap.get(String(a.studentId)) || null })),
+      },
+    });
+  })
+);
+
+router.delete(
+  '/tests/:id',
+  staff,
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const test = await CodingTest.findById(oid(req.params.id, 'test'));
+    if (!test) throw new AppError('Test not found', 404, 'NOT_FOUND');
+    if (!isAdmin(req) && String(test.createdById) !== String(req.user?.userId)) throw new AppError('Only the trainer who made this test can remove it', 403, 'FORBIDDEN');
+    await Promise.all([CodingTestAttempt.deleteMany({ testId: test._id }), test.examId ? Exam.deleteOne({ _id: test.examId }) : null]);
+    await test.deleteOne();
+    res.json({ success: true, message: `"${test.title}" removed` });
+  })
+);
+
+// ---- student side of a coding test
+async function testByToken(token: string) {
+  const test: any = await CodingTest.findOne({ token: String(token || '') }).lean();
+  if (!test || !test.active) throw new AppError('This test link is not valid any more', 404, 'NOT_FOUND');
+  return test;
+}
+
+router.get(
+  '/student/tests/:token',
+  studentOnly,
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { student } = await meAsStudent(req);
+    const test = await testByToken(String(req.params.token));
+    const folder: any = await CodingFolder.findById(test.folderId).select('name language').lean();
+    const attempt: any = await CodingTestAttempt.findOne({ testId: test._id, studentId: student._id }).lean();
+    const qs: any[] = await CodingQuestion.find({ _id: { $in: test.questionIds } }).lean();
+    const ordered = test.questionIds.map((id: any) => qs.find((q) => String(q._id) === String(id))).filter(Boolean);
+    const endsAt = attempt ? new Date(new Date(attempt.startedAt).getTime() + test.durationMinutes * 60000) : null;
+    res.json({
+      success: true,
+      data: {
+        test: { title: test.title, description: test.description, durationMinutes: test.durationMinutes, questionCount: ordered.length, language: folder?.language || 'python', folderName: folder?.name || '' },
+        attempt: attempt ? { status: attempt.status, startedAt: attempt.startedAt, endsAt, submittedAt: attempt.submittedAt, score: attempt.score, answers: attempt.answers } : null,
+        // Questions only once the student has started (the solution never leaves the server)
+        questions: attempt
+          ? ordered.map((q: any) => ({ _id: q._id, title: q.title, description: q.description, difficulty: q.difficulty, starterCode: q.starterCode, sqlSetup: q.sqlSetup, tests: q.tests.map((t: any) => ({ input: t.input, expected: t.expected, hidden: t.hidden })) }))
+          : [],
+        serverNow: new Date(),
+      },
+    });
+  })
+);
+
+router.post(
+  '/student/tests/:token/start',
+  studentOnly,
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { student } = await meAsStudent(req);
+    const test = await testByToken(String(req.params.token));
+    try {
+      await CodingTestAttempt.create({ testId: test._id, studentId: student._id, startedAt: new Date(), answers: [] });
+    } catch (err: any) {
+      if (err?.code !== 11000) throw err; // already started: carry on
+    }
+    res.json({ success: true, message: 'Test started' });
+  })
+);
+
+router.post(
+  '/student/tests/:token/answer',
+  studentOnly,
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { student } = await meAsStudent(req);
+    const test = await testByToken(String(req.params.token));
+    const attempt = await CodingTestAttempt.findOne({ testId: test._id, studentId: student._id });
+    if (!attempt) throw new AppError('Start the test first', 400, 'NOT_STARTED');
+    if (attempt.status === 'SUBMITTED') throw new AppError('You already finished this test', 409, 'FINISHED');
+    if (Date.now() > attempt.startedAt.getTime() + test.durationMinutes * 60000 + GRACE_MS) throw new AppError('Time is up', 409, 'TIME_UP');
+    const questionId = String(req.body?.questionId || '');
+    if (!test.questionIds.map(String).includes(questionId)) throw new AppError('Question not in this test', 400, 'BAD_QUESTION');
+    const q: any = await CodingQuestion.findById(questionId).select('tests').lean();
+    const total = q?.tests?.length || 0;
+    const passed = Math.min(total, Math.max(0, Number(req.body?.passed) || 0));
+    const entry = { questionId: new mongoose.Types.ObjectId(questionId), code: String(req.body?.code || '').slice(0, 20000), passed, total, savedAt: new Date() };
+    const i = attempt.answers.findIndex((a) => String(a.questionId) === questionId);
+    if (i >= 0) attempt.answers[i] = entry as any;
+    else attempt.answers.push(entry as any);
+    attempt.score = scoreOf(attempt.answers, test.questionIds.length);
+    await attempt.save();
+    res.json({ success: true, message: `Saved: ${passed}/${total} tests passed`, data: { passed, total, score: attempt.score } });
+  })
+);
+
+router.post(
+  '/student/tests/:token/finish',
+  studentOnly,
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    const { student } = await meAsStudent(req);
+    const test = await testByToken(String(req.params.token));
+    const attempt = await CodingTestAttempt.findOne({ testId: test._id, studentId: student._id });
+    if (!attempt) throw new AppError('Start the test first', 400, 'NOT_STARTED');
+    if (attempt.status !== 'SUBMITTED') {
+      attempt.status = 'SUBMITTED';
+      attempt.submittedAt = new Date();
+      attempt.score = scoreOf(attempt.answers, test.questionIds.length);
+      await attempt.save();
+      const user: any = await User.findById(req.user?.userId).select('fullName').lean();
+      await Notification.create({
+        userId: test.createdById,
+        title: `📝 ${user?.fullName || 'A student'} finished "${test.title}"`,
+        message: `Score ${attempt.score}% (${student.studentId}).`,
+        type: 'EXAM',
+        linkUrl: `/trainer/coding?tests=1&test=${test._id}`,
+      }).catch(() => undefined);
+    }
+    res.json({ success: true, message: `Test submitted. Your score: ${attempt.score}%`, data: { score: attempt.score } });
   })
 );
 

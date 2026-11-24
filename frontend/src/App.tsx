@@ -127,6 +127,7 @@ const OfflineMarks = lazyPage(() => import('./pages/shared/OfflineMarks'), 'Offl
 const CodingBank = lazyPage(() => import('./pages/shared/CodingBank'), 'CodingBank');
 const StudentCoding = lazyPage(() => import('./pages/student/StudentCoding'), 'StudentCoding');
 const StudentCodingFolder = lazyPage(() => import('./pages/student/StudentCoding'), 'StudentCodingFolder');
+const CodingTestPage = lazyPage(() => import('./pages/student/CodingTestPage'), 'CodingTestPage');
 const TrainerGradingPanel = lazyPage(() => import('./pages/trainer/TrainerGradingPanel'), 'TrainerGradingPanel');
 const QuestionBankImporter = lazyPage(() => import('./pages/trainer/QuestionBankImporter'), 'QuestionBankImporter');
 
@@ -178,6 +179,7 @@ export const App: React.FC = () => {
                 <Route path="/student/resume" element={<ResumeBuilder />} />
                 <Route path="/student/coding" element={<StudentCoding />} />
                 <Route path="/student/coding/:folderId" element={<StudentCodingFolder />} />
+                <Route path="/coding-test/:token" element={<CodingTestPage />} />
                 <Route path="/student/jobs" element={<StudentJobs />} />
                 <Route path="/student/applications" element={<StudentApplications />} />
                 <Route path="/student/mock-interview" element={<VoiceMockInterview />} />

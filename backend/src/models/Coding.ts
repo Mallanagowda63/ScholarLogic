@@ -98,3 +98,60 @@ const CodingSubmissionSchema = new Schema<ICodingSubmission>(
   { timestamps: true }
 );
 export const CodingSubmission = mongoose.model<ICodingSubmission>('CodingSubmission', CodingSubmissionSchema);
+
+// A timed coding test made from Technical Practice questions, opened by a shareable link (/coding-test/<token>)
+export interface ICodingTest extends Document {
+  _id: mongoose.Types.ObjectId;
+  title: string;
+  description: string;
+  token: string;
+  folderId: mongoose.Types.ObjectId;
+  questionIds: mongoose.Types.ObjectId[];
+  durationMinutes: number;
+  examId?: mongoose.Types.ObjectId; // the LINK exam that lists it on the students' Exams page
+  active: boolean;
+  createdById: mongoose.Types.ObjectId;
+  createdAt: Date;
+}
+
+const CodingTestSchema = new Schema<ICodingTest>(
+  {
+    title: { type: String, required: true, trim: true },
+    description: { type: String, default: '' },
+    token: { type: String, required: true, unique: true },
+    folderId: { type: Schema.Types.ObjectId, ref: 'CodingFolder', required: true },
+    questionIds: [{ type: Schema.Types.ObjectId, ref: 'CodingQuestion' }],
+    durationMinutes: { type: Number, default: 60 },
+    examId: { type: Schema.Types.ObjectId, ref: 'Exam' },
+    active: { type: Boolean, default: true },
+    createdById: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  },
+  { timestamps: true }
+);
+export const CodingTest = mongoose.model<ICodingTest>('CodingTest', CodingTestSchema);
+
+export interface ICodingTestAttempt extends Document {
+  _id: mongoose.Types.ObjectId;
+  testId: mongoose.Types.ObjectId;
+  studentId: mongoose.Types.ObjectId;
+  startedAt: Date;
+  submittedAt?: Date;
+  answers: { questionId: mongoose.Types.ObjectId; code: string; passed: number; total: number; savedAt: Date }[];
+  score: number; // 0-100
+  status: 'IN_PROGRESS' | 'SUBMITTED';
+}
+
+const CodingTestAttemptSchema = new Schema<ICodingTestAttempt>(
+  {
+    testId: { type: Schema.Types.ObjectId, ref: 'CodingTest', required: true, index: true },
+    studentId: { type: Schema.Types.ObjectId, ref: 'Student', required: true },
+    startedAt: { type: Date, required: true },
+    submittedAt: { type: Date },
+    answers: [{ questionId: Schema.Types.ObjectId, code: String, passed: Number, total: Number, savedAt: Date }],
+    score: { type: Number, default: 0 },
+    status: { type: String, enum: ['IN_PROGRESS', 'SUBMITTED'], default: 'IN_PROGRESS' },
+  },
+  { timestamps: true }
+);
+CodingTestAttemptSchema.index({ testId: 1, studentId: 1 }, { unique: true });
+export const CodingTestAttempt = mongoose.model<ICodingTestAttempt>('CodingTestAttempt', CodingTestAttemptSchema);

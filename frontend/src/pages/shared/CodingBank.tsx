@@ -5,6 +5,7 @@ import { api } from '../../services/api';
 import { CodeEditor } from '../../components/CodeEditor';
 import { Lang, LANG_LABEL, runCode, runTests, warmUp } from '../../services/codeRunner';
 import { Card, Modal, PageHeader, Spinner, inputClass, primaryBtn, secondaryBtn, useToast } from '../admin/tracking/shared';
+import { CodingTestsPanel } from './CodingTestsPanel';
 
 // Trainer / admin → Technical Practice: folders (e.g. "If-else") of coding questions with test cases.
 // Students solve them in the browser IDE; each submission is listed here and the folder's trainer is notified.
@@ -236,6 +237,10 @@ export const CodingBank: React.FC = () => {
   useEffect(() => {
     if (folderId) loadFolder(folderId);
   }, [folderId]);
+  // Opened from a "finished the test" notification
+  useEffect(() => {
+    if (params.get('tests')) setDialog({ kind: 'tests', testId: params.get('test') || '' });
+  }, []);
 
   const open = (id: string, t = 'questions') => setParams(id ? { folder: id, tab: t } : {});
   const done = (m: string) => {
@@ -283,9 +288,14 @@ export const CodingBank: React.FC = () => {
         title="Technical Practice"
         subtitle="Make a folder per topic (e.g. If-else), add coding questions with test cases, and students solve them in the IDE. You get a notification for every submission."
         action={
-          <button type="button" className={primaryBtn} onClick={() => setDialog({ kind: 'folder' })}>
-            <FolderPlus className="h-4 w-4" /> New folder
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className={secondaryBtn} onClick={() => setDialog({ kind: 'tests' })}>
+              <Eye className="h-4 w-4" /> Coding tests & results
+            </button>
+            <button type="button" className={primaryBtn} onClick={() => setDialog({ kind: 'folder' })}>
+              <FolderPlus className="h-4 w-4" /> New folder
+            </button>
+          </div>
         }
       />
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
@@ -440,6 +450,16 @@ export const CodingBank: React.FC = () => {
         </div>
       </div>
 
+      {dialog?.kind === 'tests' && (
+        <CodingTestsPanel
+          initialTestId={dialog.testId}
+          onClose={() => {
+            setDialog(null);
+            if (params.get('tests')) setParams(folderId ? { folder: folderId } : {});
+          }}
+          onMessage={(m) => toast.show(m)}
+        />
+      )}
       {dialog?.kind === 'folder' && <FolderModal folder={dialog.item} batches={batches} onClose={() => setDialog(null)} onDone={done} />}
       {dialog?.kind === 'question' && current && <QuestionModal folder={current.folder} question={dialog.item} onClose={() => setDialog(null)} onDone={done} />}
       {dialog?.kind === 'code' && (
