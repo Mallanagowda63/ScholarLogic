@@ -13,10 +13,11 @@
  */
 const net = require('net');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 
 const DIR = __dirname;
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 const LOG_FILE = path.join(DIR, 'agent.log');
 
 function loadConfig() {
@@ -28,6 +29,8 @@ function loadConfig() {
     serverUrl: String(c.serverUrl).replace(/\/+$/, ''),
     secret: String(c.secret),
     deviceHost: String(c.deviceHost),
+    // The machine's serial number: when its address changes (router DHCP), the helper finds it again by this
+    deviceSerial: String(c.deviceSerial || ''),
     devicePort: Number(c.devicePort || 4370),
     commKey: Number(c.commKey || 0),
     intervalMinutes: Math.max(1, Number(c.intervalMinutes || 5)),
@@ -234,15 +237,106 @@ async function api(cfg, method, route, body) {
 
 let lastUsersSent = '';
 
+// ---------------------------------------------------------------------------
+// The router may give the machine a new address. Look for it on this computer's network(s):
+// every address with the machine port open is read, and the one with our serial number is kept.
+// ---------------------------------------------------------------------------
+function portOpen(host, port, timeoutMs = 1500) {
+  return new Promise((resolve) => {
+    const sock = net.createConnection({ host, port });
+    const done = (ok) => {
+      sock.destroy();
+      resolve(ok);
+    };
+    sock.setTimeout(timeoutMs, () => done(false));
+    sock.once('connect', () => done(true));
+    sock.once('error', () => done(false));
+  });
+}
+
+async function findMachine(cfg) {
+  const prefixes = new Set();
+  for (const list of Object.values(os.networkInterfaces())) {
+    for (const a of list || []) {
+      if (a.family === 'IPv4' && !a.internal && /^(10|172|192)\./.test(a.address)) prefixes.add(a.address.split('.').slice(0, 3).join('.'));
+    }
+  }
+  for (const prefix of prefixes) {
+    log(`Looking for the machine on ${prefix}.1-254 (port ${cfg.devicePort})…`);
+    const hosts = Array.from({ length: 254 }, (_, i) => `${prefix}.${i + 1}`);
+    const open = [];
+    for (let i = 0; i < hosts.length; i += 64) {
+      const batch = hosts.slice(i, i + 64);
+      const res = await Promise.all(batch.map((h) => portOpen(h, cfg.devicePort)));
+      batch.forEach((h, j) => res[j] && open.push(h));
+    }
+    for (const host of open) {
+      try {
+        const snap = await readDevice({ host, port: cfg.devicePort, commKey: cfg.commKey });
+        if (!cfg.deviceSerial || snap.serialNumber === cfg.deviceSerial) return { host, snap };
+        log(`${host} is another machine (${snap.serialNumber}), not ${cfg.deviceSerial}`);
+      } catch {
+        /* not a machine we can read */
+      }
+    }
+  }
+  return null;
+}
+
+function saveHost(cfg, host) {
+  const file = path.join(DIR, 'agent.config.json');
+  try {
+    const c = JSON.parse(fs.readFileSync(file, 'utf8'));
+    c.deviceHost = host;
+    if (!c.deviceSerial && cfg.deviceSerial) c.deviceSerial = cfg.deviceSerial;
+    fs.writeFileSync(file, JSON.stringify(c, null, 2));
+  } catch (err) {
+    log(`Could not save the new address in agent.config.json: ${err.message}`);
+  }
+}
+
 async function runOnce(cfg) {
   let snap;
+  // Nothing answers at the saved address (machine moved, or switched off): look for it straight away
+  if (!(await portOpen(cfg.deviceHost, cfg.devicePort, 3000))) {
+    log(`No answer from ${cfg.deviceHost}:${cfg.devicePort}`);
+    const found = await findMachine(cfg).catch(() => null);
+    if (!found) {
+      log('Machine not found on this network (switched off, or on another network). Will try again next round.');
+      await api(cfg, 'POST', '/error', { message: `Machine not found (last address ${cfg.deviceHost})` }).catch(() => undefined);
+      return false;
+    }
+    log(`Found the machine at its new address ${found.host} (was ${cfg.deviceHost}); saved`);
+    cfg.deviceHost = found.host;
+    saveHost(cfg, found.host);
+    snap = found.snap;
+  }
   for (let attempt = 1; !snap; attempt += 1) {
     try {
       snap = await readDevice({ host: cfg.deviceHost, port: cfg.devicePort, commKey: cfg.commKey });
+      if (cfg.deviceSerial && snap.serialNumber !== cfg.deviceSerial) {
+        // Another device took the address: look for ours
+        log(`${cfg.deviceHost} is now ${snap.serialNumber}, not ${cfg.deviceSerial}`);
+        snap = undefined;
+        attempt = 3;
+        throw new Error('address taken by another device');
+      }
+      if (!cfg.deviceSerial) {
+        cfg.deviceSerial = snap.serialNumber;
+        saveHost(cfg, cfg.deviceHost);
+      }
     } catch (err) {
       if (attempt >= 3) {
-        log(`Could not read the machine: ${err.message}`);
-        await api(cfg, 'POST', '/error', { message: err.message }).catch(() => undefined);
+        log(`Could not read the machine at ${cfg.deviceHost}: ${err.message}`);
+        const found = await findMachine(cfg).catch(() => null);
+        if (found) {
+          log(`Found the machine at its new address ${found.host} (was ${cfg.deviceHost}); saved`);
+          cfg.deviceHost = found.host;
+          saveHost(cfg, found.host);
+          snap = found.snap;
+          break;
+        }
+        await api(cfg, 'POST', '/error', { message: `Machine not found (last address ${cfg.deviceHost}): ${err.message}` }).catch(() => undefined);
         return false;
       }
       await new Promise((r) => setTimeout(r, attempt * 5000));

@@ -1,8 +1,9 @@
 {
   "serverUrl": "https://scholarlogiclms.in",
   "secret": "PASTE THE ESSL_AGENT_SECRET FROM THE SERVER HERE",
-  "deviceHost": "192.168.1.35",
+  "deviceHost": "192.168.1.71",
   "devicePort": 4370,
   "commKey": 0,
-  "intervalMinutes": 5
+  "intervalMinutes": 5,
+  "deviceSerial": "CUB7254300566"
 }
