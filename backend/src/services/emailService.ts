@@ -375,6 +375,103 @@ export class EmailService {
     return String(info.messageId || '');
   }
 
+  // A trainer was given a batch: which batch, when, and the students in it (names only).
+  async sendTrainerBatchEmail(o: {
+    to: string;
+    name: string;
+    batchCode: string;
+    subject: string;
+    timing: string;
+    mode: string;
+    startDate: string;
+    endDate: string;
+    students: string[];
+    siteUrl: string;
+  }): Promise<string> {
+    if (!this.transporter) await this.initTransporter();
+    if (!this.transporter || this.providerType === 'ethereal') throw new Error('Email is not set up on the server (RESEND_API_KEY)');
+    const esc = (v: string) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] as string);
+    const portal = `${o.siteUrl.replace(/\/+$/, '')}/login`;
+    const font = "font-family: 'Segoe UI', Arial, Helvetica, sans-serif;";
+    const row = (label: string, value: string, last = false) => `
+              <tr>
+                <td style="${font} padding: 9px 0; ${last ? '' : 'border-bottom: 1px solid #e2e8f0;'} color: #64748b; font-size: 13px; width: 120px;">${esc(label)}</td>
+                <td style="${font} padding: 9px 0; ${last ? '' : 'border-bottom: 1px solid #e2e8f0;'} color: #0f172a; font-size: 15px; font-weight: bold;">${esc(value)}</td>
+              </tr>`;
+    const names = o.students.length
+      ? `<ol style="${font} margin: 0; padding-left: 22px; color: #0f172a; font-size: 14px; line-height: 1.8;">${o.students.map((n) => `<li>${esc(n)}</li>`).join('')}</ol>`
+      : `<p style="${font} margin: 0; color: #64748b; font-size: 14px;">No students added yet. They will appear on your batch page as the admin adds them.</p>`;
+    const html = `<!doctype html>
+<html><body style="margin: 0; padding: 0; background: #f1f5f9;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background: #f1f5f9; padding: 24px 12px;">
+    <tr><td align="center">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 560px; background: #ffffff; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 8px rgba(15,23,42,0.06);">
+        <tr>
+          <td style="background: #0c8ee9; background-image: linear-gradient(135deg, #0c8ee9, #4f46e5); padding: 24px 32px;">
+            <p style="${font} margin: 0; color: #ffffff; font-size: 22px; font-weight: 800;">ScholarLogic</p>
+            <p style="${font} margin: 6px 0 0; color: #ffffff; font-size: 17px; font-weight: bold;">New batch assigned: ${esc(o.batchCode)}</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 28px 32px 6px;">
+            <p style="${font} margin: 0 0 14px; color: #0f172a; font-size: 15px;">Dear <strong>${esc(o.name)}</strong>,</p>
+            <p style="${font} margin: 0 0 18px; color: #334155; font-size: 15px; line-height: 1.6;">You have been assigned the batch below. Please check the timing and the student list.</p>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 4px 20px;">
+              ${row('Batch', o.batchCode)}
+              ${row('Subject', o.subject)}
+              ${row('Timing', o.timing)}
+              ${row('Mode', o.mode)}
+              ${row('Starts on', o.startDate)}
+              ${row('Expected end', o.endDate)}
+              ${row('Students', String(o.students.length), true)}
+            </table>
+            <p style="${font} margin: 22px 0 8px; color: #0f172a; font-size: 16px; font-weight: 800;">Students (${o.students.length})</p>
+            ${names}
+            <table role="presentation" cellpadding="0" cellspacing="0" style="margin: 24px 0 8px;">
+              <tr><td style="border-radius: 10px; background: #0c8ee9;"><a href="${esc(portal)}" style="${font} display: inline-block; padding: 12px 24px; color: #ffffff; font-size: 14px; font-weight: bold; text-decoration: none;">Open my batches &rarr;</a></td></tr>
+            </table>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding: 18px 32px; background: #f8fafc; border-top: 1px solid #e2e8f0;">
+            <p style="${font} margin: 0 0 4px; color: #475569; font-size: 13px;">Questions? Reply to this email or call <a href="tel:+919008625716" style="color: #0c8ee9; text-decoration: none;">+91 90086 25716</a>.</p>
+            <p style="${font} margin: 0; color: #94a3b8; font-size: 12px;">Regards, ScholarLogic Team</p>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`;
+    const text = [
+      `Dear ${o.name},`,
+      '',
+      `You have been assigned batch ${o.batchCode}.`,
+      '',
+      `Subject: ${o.subject}`,
+      `Timing: ${o.timing}`,
+      `Mode: ${o.mode}`,
+      `Starts on: ${o.startDate}`,
+      `Expected end: ${o.endDate}`,
+      `Students: ${o.students.length}`,
+      '',
+      ...o.students.map((n, i) => `${i + 1}. ${n}`),
+      '',
+      `Open your batches: ${portal}`,
+      '',
+      'Regards,',
+      'ScholarLogic Team',
+    ].join('\n');
+    const info = await this.transporter.sendMail({
+      from: process.env.EMAIL_FROM || 'ScholarLogic <noreply@scholarlogiclms.in>',
+      replyTo: process.env.EMAIL_REPLY_TO || 'tech@scholarlogic.net',
+      to: o.to,
+      subject: `New batch assigned: ${o.batchCode} (${o.subject}, ${o.timing}) • ${o.students.length} student${o.students.length === 1 ? '' : 's'}`,
+      html,
+      text,
+    });
+    return String(info.messageId || '');
+  }
+
   async sendApplicationStatusEmail(
     studentEmail: string,
     studentName: string,

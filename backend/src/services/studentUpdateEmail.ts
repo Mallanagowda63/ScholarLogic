@@ -144,3 +144,35 @@ async function sendOverview(studentId: any, opts: { askIdCard?: boolean } = {}) 
   });
   console.log(`📧 Course overview (${course.code}) sent to ${student.studentId}`);
 }
+
+/** Email the trainer when they are given a batch: batch, subject, timing, dates and the students' names */
+export function queueTrainerBatchEmail(batchId: any) {
+  if ((process.env.STUDENT_UPDATE_EMAILS || '').toLowerCase() === 'off') return;
+  queue.push(() => sendTrainerBatch(batchId));
+  void drain();
+}
+
+async function sendTrainerBatch(batchId: any) {
+  const { StudentBatchAllocation, ACTIVE_ALLOCATION_STATUSES } = await import('../models/tracking/StudentBatchAllocation');
+  const b: any = await Batch.findById(batchId).select('batchCode subjectId trainerId timing mode startDate expectedEndDate').lean();
+  if (!b?.trainerId) return;
+  const [trainer, subject]: any[] = await Promise.all([User.findById(b.trainerId).select('fullName email').lean(), Subject.findById(b.subjectId).select('name').lean()]);
+  const email = String(trainer?.email || '').trim();
+  if (!email || !/@/.test(email)) return;
+  const allocations = await StudentBatchAllocation.find({ batchId: b._id, status: { $in: ACTIVE_ALLOCATION_STATUSES } }).select('studentId').lean();
+  const students: any[] = await Student.find({ _id: { $in: allocations.map((a: any) => a.studentId) } }).select('userId').populate('userId', 'fullName').lean();
+  const names = students.map((s) => s.userId?.fullName || 'Student').sort((x: string, y: string) => x.localeCompare(y));
+  await emailService.sendTrainerBatchEmail({
+    to: email,
+    name: trainer.fullName || 'Trainer',
+    batchCode: b.batchCode,
+    subject: subject?.name || '',
+    timing: b.timing || '',
+    mode: b.mode === 'ONLINE' ? 'Online' : b.mode === 'HYBRID' ? 'Hybrid' : 'Offline',
+    startDate: fmtDay(b.startDate),
+    endDate: fmtDay(b.expectedEndDate),
+    students: names,
+    siteUrl: /localhost|127.0.0.1/.test(env.FRONTEND_URL) ? 'https://scholarlogiclms.in' : env.FRONTEND_URL,
+  });
+  console.log(`📧 Batch ${b.batchCode} email sent to trainer ${trainer.fullName} (${names.length} students)`);
+}

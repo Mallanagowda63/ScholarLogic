@@ -1,5 +1,5 @@
 import { Response } from 'express';
-import { queueCourseOverviewEmail } from '../services/studentUpdateEmail';
+import { queueCourseOverviewEmail, queueTrainerBatchEmail } from '../services/studentUpdateEmail';
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import { AuthRequest } from '../middleware/auth';
@@ -606,6 +606,7 @@ export const createBatch = async (req: AuthRequest, res: Response) => {
     remarks,
     history: [{ at: new Date(), action: 'CREATED', details: `${subject.name} • ${timing}`, byUserId: req.user?.userId }],
   });
+  if (batch.trainerId) queueTrainerBatchEmail(batch._id);
   res.status(201).json({ success: true, data: { batch } });
 };
 
@@ -613,13 +614,15 @@ export const createBatch = async (req: AuthRequest, res: Response) => {
 export const updateBatch = async (req: AuthRequest, res: Response) => {
   const batch = await Batch.findById(oid(req.params.id, 'batch'));
   if (!batch) throw new AppError('Batch not found', 404, 'NOT_FOUND');
-  const { trainerId, timing, expectedEndDate, capacity, remarks, status, mode } = req.body;
+  const { trainerId, timing, startDate, expectedEndDate, capacity, remarks, status, mode } = req.body;
+  let trainerAssigned = false;
 
   if (trainerId !== undefined && String(trainerId || '') !== String(batch.trainerId || '')) {
     const trainer = trainerId ? await User.findOne({ _id: oid(trainerId, 'trainer'), role: 'TRAINER' }) : null;
     if (trainerId && !trainer) throw new AppError('Trainer not found', 404, 'NOT_FOUND');
     logBatch(batch, req, 'TRAINER_CHANGED', `Trainer → ${trainer?.fullName || 'unassigned'}`);
     batch.trainerId = trainer?._id;
+    trainerAssigned = !!trainer;
   }
   if (typeof timing === 'string' && timing.trim() && timing.trim() !== batch.timing) {
     logBatch(batch, req, 'TIMING_CHANGED', `${batch.timing} → ${timing.trim()}`);
@@ -629,8 +632,21 @@ export const updateBatch = async (req: AuthRequest, res: Response) => {
     logBatch(batch, req, 'MODE_CHANGED', `${batch.mode} → ${mode}`);
     batch.mode = mode;
   }
+  // Admin edits the start date: students still waiting for the batch follow the new date
+  if (startDate) {
+    const next = new Date(startDate);
+    if (Number.isNaN(next.getTime())) throw new AppError('Invalid start date', 400, 'INVALID_DATE');
+    // Compared by calendar day, so saving the form unchanged logs nothing
+    if (next.toISOString().slice(0, 10) !== new Date(batch.startDate).toISOString().slice(0, 10)) {
+      logBatch(batch, req, 'START_DATE_CHANGED', `${new Date(batch.startDate).toDateString()} → ${next.toDateString()}`);
+      batch.startDate = next;
+      await StudentBatchAllocation.updateMany({ batchId: batch._id, status: 'BATCH_ALLOCATED' }, { $set: { startDate: next } });
+    }
+  }
   if (expectedEndDate) {
     const next = new Date(expectedEndDate);
+    if (Number.isNaN(next.getTime())) throw new AppError('Invalid end date', 400, 'INVALID_DATE');
+    if (next.getTime() < new Date(batch.startDate).getTime()) throw new AppError('The end date must be after the start date', 400, 'INVALID_DATE');
     if (next.getTime() !== batch.expectedEndDate.getTime()) {
       logBatch(batch, req, 'END_DATE_CHANGED', `${batch.expectedEndDate.toDateString()} → ${next.toDateString()}`);
       batch.expectedEndDate = next;
@@ -668,6 +684,8 @@ export const updateBatch = async (req: AuthRequest, res: Response) => {
     }
   }
   await batch.save();
+  // The new trainer gets an email: batch, timing, dates and the students' names
+  if (trainerAssigned) queueTrainerBatchEmail(batch._id);
   res.json({ success: true, data: { batch } });
 };
 

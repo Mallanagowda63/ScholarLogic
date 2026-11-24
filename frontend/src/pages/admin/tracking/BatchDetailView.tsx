@@ -33,6 +33,7 @@ const EditBatchModal: React.FC<{ batch: any; onClose: () => void; onDone: (m: st
     trainerId: batch.trainer?._id || '',
     timing: batch.timing,
     mode: batch.mode,
+    startDate: String(batch.startDate).slice(0, 10),
     expectedEndDate: String(batch.expectedEndDate).slice(0, 10),
     capacity: String(batch.capacity),
     remarks: batch.remarks || '',
@@ -52,7 +53,7 @@ const EditBatchModal: React.FC<{ batch: any; onClose: () => void; onDone: (m: st
     }
   };
   return (
-    <Modal title={`Edit ${batch.batchCode}`} subtitle="Change trainer, timing or extend the end date. Every change is logged in batch history." onClose={onClose}>
+    <Modal title={`Edit ${batch.batchCode}`} subtitle="Change trainer, timing, start or end date. A new trainer gets an email with the batch and its students. Every change is logged in batch history." onClose={onClose}>
       <ErrorNote text={error} />
       <form onSubmit={submit} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Trainer">
@@ -74,8 +75,11 @@ const EditBatchModal: React.FC<{ batch: any; onClose: () => void; onDone: (m: st
             <option value="ONLINE">Online</option>
           </select>
         </Field>
+        <Field label="Start date">
+          <input type="date" className={inputClass} value={form.startDate} onChange={set('startDate')} required />
+        </Field>
         <Field label="Expected end date">
-          <input type="date" className={inputClass} value={form.expectedEndDate} onChange={set('expectedEndDate')} />
+          <input type="date" className={inputClass} value={form.expectedEndDate} min={form.startDate} onChange={set('expectedEndDate')} />
         </Field>
         <Field label="Capacity">
           <input type="number" min={1} className={inputClass} value={form.capacity} onChange={set('capacity')} />
