@@ -43,6 +43,25 @@ const JOB_TYPE_LABEL: Record<string, string> = {
 
 const driveCode = (id: string) => `SL-JOB-${String(id).slice(-5).toUpperCase()}`;
 
+// Posted-date filter and sort for the drive list
+type PostedKey = 'ANY' | 'TODAY' | 'WEEK' | 'MONTH';
+type SortKey = 'SMART' | 'NEWEST' | 'ENDING' | 'OLDEST';
+const POSTED: [PostedKey, string][] = [
+  ['ANY', 'Any time'],
+  ['TODAY', 'Posted today'],
+  ['WEEK', 'This week'],
+  ['MONTH', 'This month'],
+];
+const IST_MS = 5.5 * 3600000;
+const postedSince = (k: PostedKey, now: number) => {
+  // Start of today in India time
+  const startToday = Math.floor((now + IST_MS) / 86400000) * 86400000 - IST_MS;
+  if (k === 'TODAY') return startToday;
+  if (k === 'WEEK') return startToday - 6 * 86400000;
+  if (k === 'MONTH') return startToday - 29 * 86400000;
+  return 0;
+};
+
 const isDriveOpen = (job: any, now: number) => job.status === 'OPEN' && new Date(job.deadline).getTime() > now;
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -84,6 +103,8 @@ export const StudentJobs: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<DriveTab>('all');
   const [search, setSearch] = useState('');
+  const [posted, setPosted] = useState<PostedKey>('ANY');
+  const [sortBy, setSortBy] = useState<SortKey>('SMART');
   const [now, setNow] = useState(() => Date.now());
 
   // Tick every second so countdowns and open/closed status stay live
@@ -246,12 +267,23 @@ export const StudentJobs: React.FC = () => {
         if (activeTab === 'internship' && job.type !== 'INTERNSHIP') return false;
         if (activeTab === 'applied' && !job.appliedStatus) return false;
         if (activeTab === 'linkedin' && !isLinkedInJob(job)) return false;
+        if (posted !== 'ANY' && !(job.createdAt && new Date(job.createdAt).getTime() >= postedSince(posted, now))) return false;
         if (!q) return true;
         return [job.title, job.companyId?.name, job.location, ...(job.requiredSkills || [])]
           .filter(Boolean)
           .some((v: string) => v.toLowerCase().includes(q));
       })
       .sort((a: any, b: any) => {
+        const created = (j: any) => new Date(j.createdAt || 0).getTime();
+        if (sortBy === 'NEWEST') return created(b) - created(a);
+        if (sortBy === 'OLDEST') return created(a) - created(b);
+        if (sortBy === 'ENDING') {
+          // Open drives closing soonest first; closed ones after
+          const ao = isDriveOpen(a, now);
+          const bo = isDriveOpen(b, now);
+          if (ao !== bo) return ao ? -1 : 1;
+          return new Date(a.deadline).getTime() - new Date(b.deadline).getTime();
+        }
         const aOpen = isDriveOpen(a, now);
         const bOpen = isDriveOpen(b, now);
         if (aOpen !== bOpen) return aOpen ? -1 : 1;
@@ -260,7 +292,7 @@ export const StudentJobs: React.FC = () => {
         // Open drives: closing soonest first. Closed drives: most recently closed first.
         return aOpen ? aTime - bTime : bTime - aTime;
       });
-  }, [jobs, activeTab, search, now]);
+  }, [jobs, activeTab, search, now, posted, sortBy]);
 
   const tabCounts: Record<DriveTab, number> = {
     all: jobs.length,
@@ -339,16 +371,46 @@ export const StudentJobs: React.FC = () => {
         })}
       </nav>
 
-      {/* Search */}
-      <label className="relative block max-w-md">
-        <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by role, company, location or skill"
-          className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 py-2.5 pl-10 pr-3 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-        />
-      </label>
+      {/* Search, posted date and sort */}
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+        <label className="relative block w-full max-w-md">
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by role, company, location or skill"
+            className="w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 py-2.5 pl-10 pr-3 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+          />
+        </label>
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Posted date">
+          {POSTED.map(([k, text]) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setPosted(k)}
+              aria-pressed={posted === k}
+              className={`rounded-full px-3 py-1.5 text-xs font-bold transition-colors ${
+                posted === k ? 'bg-brand-600 text-white shadow' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700'
+              }`}
+            >
+              {text}
+            </button>
+          ))}
+        </div>
+        <label className="flex items-center gap-2 text-xs font-semibold text-slate-500 lg:ml-auto">
+          Sort
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as SortKey)}
+            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-800 focus:border-brand-500 focus:outline-none dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+          >
+            <option value="SMART">Open drives first</option>
+            <option value="NEWEST">Newest first</option>
+            <option value="ENDING">Ending soon</option>
+            <option value="OLDEST">Oldest first</option>
+          </select>
+        </label>
+      </div>
 
       {loading ? (
         <div className="flex h-64 items-center justify-center">
@@ -440,7 +502,14 @@ export const StudentJobs: React.FC = () => {
                     }`}
                   >
                     <CalendarClock className="h-4 w-4" />
-                    {deadlineLabel(job, now)}
+                    <span>
+                      {deadlineLabel(job, now)}
+                      {job.createdAt && (
+                        <span className="block text-[10px] font-medium text-slate-400">
+                          Posted {new Date(job.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                        </span>
+                      )}
+                    </span>
                   </span>
                   <button
                     type="button"
