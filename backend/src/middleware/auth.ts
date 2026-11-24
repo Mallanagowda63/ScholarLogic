@@ -5,14 +5,13 @@ import { UserRole } from '../models/User';
 import { Student } from '../models/Student';
 import { User } from '../models/User';
 
-// Staff accounts can be switched off or have their password reset by an admin. Their sessions are checked
-// against the database (cached briefly) so that takes effect within seconds, not when the token expires.
+// Staff and student accounts can be switched off or have their password reset by an admin. Their sessions are
+// checked against the database (cached briefly) so that takes effect within seconds, not when the token expires.
 const STAFF_CHECK_MS = 15000;
 const staffChecks = new Map<string, { at: number; ok: boolean; role?: string; changedAt?: number }>();
 export const forgetStaffCheck = (userId: string) => staffChecks.delete(userId);
 
 async function staffSessionValid(decoded: AuthUserPayload & { iat?: number }) {
-  if (decoded.role === 'STUDENT') return true;
   let entry = staffChecks.get(decoded.userId);
   if (!entry || Date.now() - entry.at > STAFF_CHECK_MS) {
     const u: any = await User.findById(decoded.userId).select('isActive role passwordChangedAt').lean();

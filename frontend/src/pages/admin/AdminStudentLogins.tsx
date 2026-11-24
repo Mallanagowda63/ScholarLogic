@@ -28,7 +28,7 @@ interface StudentLogin {
   loginSharedAt: string | null;
 }
 
-type LoginFilter = 'ALL' | 'NEVER' | 'LOGGED' | 'NOPASS' | 'EMAIL' | 'NOEMAIL' | 'SENT' | 'NOTSENT' | 'SCLR' | 'NOSCLR' | 'READY';
+type LoginFilter = 'ALL' | 'NEVER' | 'LOGGED' | 'NOPASS' | 'EMAIL' | 'NOEMAIL' | 'SENT' | 'NOTSENT' | 'SCLR' | 'NOSCLR' | 'READY' | 'ACCESS_ON' | 'ACCESS_OFF';
 
 // Students whose login ID is an SCLR card number (from the eSSL machine or the ID card form)
 const hasSclr = (s: { loginId: string; studentId: string }) => /^SCLR\d+$/i.test(s.loginId || s.studentId || '');
@@ -134,6 +134,41 @@ export const AdminStudentLogins: React.FC = () => {
       .then(() => toast.show('Login copied'))
       .catch(() => toast.show('Could not copy'));
 
+  // Portal access on/off: off = the student cannot log in (an open session ends within seconds)
+  const [accessFor, setAccessFor] = useState<StudentLogin | null>(null);
+  const setAccess = async (s: StudentLogin, active: boolean) => {
+    setBusy(true);
+    try {
+      const res: any = await api.post(`/admin/student-logins/${s._id}/access`, { active });
+      const apply = (x: StudentLogin) => (x._id === s._id ? { ...x, loginActive: active } : x);
+      setStudents((list) => (list ? list.map(apply) : list));
+      setChecked((c: any) => (c?.ok && c.student?._id === s._id ? { ...c, student: apply(c.student) } : c));
+      toast.show(res.message);
+      setAccessFor(null);
+    } catch (e: any) {
+      toast.show(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const AccessSwitch: React.FC<{ s: StudentLogin }> = ({ s }) => (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={s.loginActive}
+      aria-label={`Portal access for ${s.fullName}: ${s.loginActive ? 'on' : 'off'}`}
+      title={s.loginActive ? 'Can log in. Click to switch access off' : 'Cannot log in. Click to give access'}
+      disabled={busy}
+      onClick={() => (s.loginActive ? setAccessFor(s) : setAccess(s, true))}
+      className={`inline-flex items-center gap-1.5 rounded-full py-0.5 pl-0.5 pr-2 text-[10px] font-bold transition-colors ${
+        s.loginActive ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300' : 'bg-rose-100 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300'
+      }`}
+    >
+      <span className={`h-4 w-4 rounded-full shadow ${s.loginActive ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+      {s.loginActive ? 'On' : 'Off'}
+    </button>
+  );
+
   // Opens WhatsApp (app or web) with the message typed; the admin presses Send there
   const sendWhatsApp = (s: StudentLogin, password = s.password) => {
     const num = waNumber(s.phone);
@@ -232,6 +267,8 @@ export const AdminStudentLogins: React.FC = () => {
       if (filter === 'NOTSENT' && s.loginSharedAt) return false;
       if (filter === 'SCLR' && !hasSclr(s)) return false;
       if (filter === 'NOSCLR' && hasSclr(s)) return false;
+      if (filter === 'ACCESS_ON' && !s.loginActive) return false;
+      if (filter === 'ACCESS_OFF' && s.loginActive) return false;
       if (filter === 'READY' && !(s.email && hasSclr(s) && !s.loginSharedAt && s.password)) return false;
       if (!term) return true;
       return [s.fullName, s.studentId, s.machineCode, s.phone, s.email, s.course].join(' ').toLowerCase().includes(term);
@@ -372,6 +409,9 @@ export const AdminStudentLogins: React.FC = () => {
                   </button>
                   <WhatsAppBtn s={checked.student} big />
                 </div>
+                <div className="flex items-center gap-2 text-xs text-slate-500">
+                  Portal access <AccessSwitch s={checked.student} />
+                </div>
               </div>
             </div>
           </div>
@@ -396,6 +436,8 @@ export const AdminStudentLogins: React.FC = () => {
             <option value="SCLR">With SCLR ID ({sclrCount})</option>
             <option value="NOSCLR">Without SCLR ID ({(students || []).length - sclrCount})</option>
             <option value="READY">★ Ready to email: email + SCLR ID, login not sent ({readyCount})</option>
+            <option value="ACCESS_ON">Access on ({(students || []).filter((x) => x.loginActive).length})</option>
+            <option value="ACCESS_OFF">Access off ({(students || []).filter((x) => !x.loginActive).length})</option>
           </select>
           <button type="button" className={secondaryBtn} onClick={downloadList} disabled={!visible.length} title="Download this list with login IDs and passwords (opens in Excel)">
             <Download className="h-4 w-4" /> Download list
@@ -490,7 +532,7 @@ export const AdminStudentLogins: React.FC = () => {
             <table className="w-full min-w-[1060px] text-xs">
               <thead className="border-b border-slate-200 bg-slate-50 text-[10px] font-bold uppercase text-slate-500 dark:border-slate-800 dark:bg-slate-800/60">
                 <tr>
-                  {['', 'Student', 'Student ID', 'Course', 'Login ID', 'Password', 'Login status', ''].map((h) => (
+                  {['', 'Student', 'Student ID', 'Course', 'Login ID', 'Password', 'Login status', 'Access', ''].map((h) => (
                     <th key={h} className="px-3 py-3 text-left whitespace-nowrap">
                       {h}
                     </th>
@@ -499,7 +541,7 @@ export const AdminStudentLogins: React.FC = () => {
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                 {visible.length === 0 ? (
-                  <EmptyRow colSpan={8} text="No students match." />
+                  <EmptyRow colSpan={9} text="No students match." />
                 ) : (
                   visible.map((s) => (
                     <tr key={s._id} className={`hover:bg-slate-50 dark:hover:bg-slate-800/40 ${selected.has(s._id) ? 'bg-brand-50/60 dark:bg-brand-950/20' : ''}`}>
@@ -519,6 +561,9 @@ export const AdminStudentLogins: React.FC = () => {
                       <td className="px-3 py-2.5 whitespace-nowrap">
                         <LoginStatus s={s} />
                         {s.loginSharedAt && <span className="ml-1 text-[10px] text-slate-400">sent {shortDate(s.loginSharedAt)}</span>}
+                      </td>
+                      <td className="px-3 py-2.5 whitespace-nowrap">
+                        <AccessSwitch s={s} />
                       </td>
                       <td className="px-3 py-2.5 whitespace-nowrap text-right">
                         <WhatsAppBtn s={s} />{' '}
@@ -596,6 +641,23 @@ export const AdminStudentLogins: React.FC = () => {
 
       {emailResults && <EmailResultPopup results={emailResults} onClose={() => setEmailResults(null)} />}
       {toast.node}
+      {accessFor && (
+        <Modal title={`Switch off ${accessFor.fullName}'s access?`} subtitle={`${accessFor.studentId} • ${accessFor.loginId}`} onClose={() => !busy && setAccessFor(null)}>
+          <ul className="list-disc space-y-1 pl-5 text-sm text-slate-600 dark:text-slate-300">
+            <li>They cannot log in to the portal (LMS, attendance, tests, jobs).</li>
+            <li>If they are logged in now, they are signed out within a few seconds.</li>
+            <li>Their data, batches and attendance stay. Switch it on again any time.</li>
+          </ul>
+          <div className="flex justify-end gap-2 pt-4">
+            <button type="button" className={secondaryBtn} disabled={busy} onClick={() => setAccessFor(null)}>
+              Keep access
+            </button>
+            <button type="button" className="inline-flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white shadow hover:bg-rose-700" disabled={busy} onClick={() => setAccess(accessFor, false)}>
+              {busy ? 'Saving…' : 'Switch access off'}
+            </button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 };

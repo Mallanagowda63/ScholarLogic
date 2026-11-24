@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
-import { authenticateUser, authorizeRoles, AuthRequest } from '../middleware/auth';
+import { authenticateUser, authorizeRoles, AuthRequest, forgetStaffCheck } from '../middleware/auth';
 import { asyncHandler } from '../utils/asyncHandler';
 import { AppError } from '../middleware/errorHandler';
 import { Student } from '../models/Student';
@@ -183,6 +183,31 @@ router.post(
       ipAddress: req.ip,
     }).catch(() => undefined);
     res.json({ success: true, data: { loginSharedAt: student.loginSharedAt } });
+  })
+);
+
+// Admin switches a student's portal access on or off. Off = they cannot log in, and an open session ends within seconds.
+router.post(
+  '/:id/access',
+  asyncHandler(async (req: AuthRequest, res: Response) => {
+    if (!mongoose.isValidObjectId(req.params.id)) throw new AppError('Invalid student', 400, 'INVALID_ID');
+    const active = req.body?.active === true;
+    const student: any = await Student.findById(req.params.id).select('studentId userId').populate('userId', 'fullName isActive');
+    if (!student?.userId) throw new AppError('Student or their login account not found', 404, 'NOT_FOUND');
+    await User.updateOne({ _id: student.userId._id }, active ? { $set: { isActive: true } } : { $set: { isActive: false }, $unset: { refreshToken: 1 } });
+    forgetStaffCheck(String(student.userId._id));
+    await AuditLog.create({
+      userId: req.user?.userId,
+      userRole: req.user?.role,
+      action: active ? 'STUDENT_ACCESS_ON' : 'STUDENT_ACCESS_OFF',
+      resource: 'STUDENT',
+      metadata: { studentId: student.studentId, name: student.userId.fullName, reason: String(req.body?.reason || '').slice(0, 300) },
+    }).catch(() => undefined);
+    res.json({
+      success: true,
+      message: active ? `${student.userId.fullName} can log in again` : `${student.userId.fullName}'s access is switched off`,
+      data: { loginActive: active },
+    });
   })
 );
 

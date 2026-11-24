@@ -41,7 +41,13 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
   }
 
   if (user.isActive === false) {
-    throw new AppError('Your access has been removed. Please contact the admin.', 403, 'ACCESS_REMOVED');
+    throw new AppError(
+      user.role === 'STUDENT'
+        ? 'Your access to the ScholarLogic portal is switched off. Please contact the ScholarLogic office.'
+        : 'Your access has been removed. Please contact the admin.',
+      403,
+      'ACCESS_REMOVED'
+    );
   }
 
   const isMatch = await user.comparePassword(password);
