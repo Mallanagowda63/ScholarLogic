@@ -1,5 +1,9 @@
 import { Response } from 'express';
-import { queueCourseOverviewEmail, queueTrainerBatchEmail } from '../services/studentUpdateEmail';
+import { queueClassLinkEmails, queueCourseOverviewEmail, queueTrainerBatchEmail } from '../services/studentUpdateEmail';
+
+/** How a student joins this batch: a hybrid batch keeps each student's own way (online or in class) */
+const seatMode = (batchMode: string, studentMode?: string): 'ONLINE' | 'OFFLINE' =>
+  batchMode === 'HYBRID' ? (studentMode === 'ONLINE' || studentMode === 'HYBRID' ? 'ONLINE' : 'OFFLINE') : batchMode === 'ONLINE' ? 'ONLINE' : 'OFFLINE';
 import bcrypt from 'bcryptjs';
 import mongoose from 'mongoose';
 import { AuthRequest } from '../middleware/auth';
@@ -336,7 +340,7 @@ export const allocateStudent = async (req: AuthRequest, res: Response) => {
     allocationDate: now,
     startDate: batch.startDate > now ? batch.startDate : now,
     status: hadEarlier ? 'RE_ATTENDING' : batch.status === 'UPCOMING' ? 'BATCH_ALLOCATED' : 'ATTENDING',
-    mode: batch.mode,
+    mode: seatMode(batch.mode, student.enrollment?.mode),
     remarks: req.body.remarks || '',
     previousAllocationId: hadEarlier?._id,
     allocatedById: req.user?.userId,
@@ -345,7 +349,7 @@ export const allocateStudent = async (req: AuthRequest, res: Response) => {
   const subject = await Subject.findById(batch.subjectId);
   logBatch(batch, req, 'STUDENT_ADDED', `${student.studentId} allocated`);
   await batch.save();
-  await addTimeline(student._id, 'ALLOCATED', `Allocated ${batch.batchCode}`, `${subject?.name || ''} • ${batch.timing} • ${batch.mode === 'ONLINE' ? 'Online' : 'Offline'}${req.body.remarks ? ` • ${req.body.remarks}` : ''}`, { batchId: batch._id, subjectId: batch.subjectId, allocationId: allocation._id }, req.user);
+  await addTimeline(student._id, 'ALLOCATED', `Allocated ${batch.batchCode}`, `${subject?.name || ''} • ${batch.timing} • ${batch.mode === 'ONLINE' ? 'Online' : batch.mode === 'HYBRID' ? `Hybrid (joins ${seatMode(batch.mode, student.enrollment?.mode) === 'OFFLINE' ? 'in class' : 'online'})` : 'Offline'}${req.body.remarks ? ` • ${req.body.remarks}` : ''}`, { batchId: batch._id, subjectId: batch.subjectId, allocationId: allocation._id }, req.user);
   res.status(201).json({ success: true, data: { allocation } });
 };
 
@@ -426,7 +430,7 @@ export const reallocate = async (req: AuthRequest, res: Response) => {
     allocationDate: now,
     startDate: newBatch.startDate > now ? newBatch.startDate : now,
     status: oldStatus === 'MOVED' && old.status !== 'MISSED' ? (newBatch.status === 'UPCOMING' ? 'BATCH_ALLOCATED' : 'ATTENDING') : 'RE_ATTENDING',
-    mode: newBatch.mode,
+    mode: seatMode(newBatch.mode, student.enrollment?.mode),
     reason,
     remarks,
     previousAllocationId: old._id,
@@ -527,7 +531,7 @@ export const changeMode = async (req: AuthRequest, res: Response) => {
 // Batches
 // ---------------------------------------------------------------------------
 
-const summarizeBatch = (b: any, subject: any, trainer: any, studentCount: number) => {
+const summarizeBatch = (b: any, subject: any, trainer: any, studentCount: number, onlineCount = 0) => {
   const progress = batchProgress(b, subject);
   const estimate = estimateBatchCompletion(b, subject);
   return {
@@ -542,6 +546,9 @@ const summarizeBatch = (b: any, subject: any, trainer: any, studentCount: number
     actualEndDate: b.actualEndDate,
     capacity: b.capacity,
     studentCount,
+    // Hybrid batch: how many of its students join online (the rest are in class)
+    onlineCount,
+    inClassCount: Math.max(0, studentCount - onlineCount),
     availableSeats: Math.max(0, b.capacity - studentCount),
     status: effectiveBatchStatus(b),
     storedStatus: b.status,
@@ -563,15 +570,23 @@ async function listBatchSummaries(filter: Record<string, any> = {}) {
     User.find({ _id: { $in: batches.map((b) => b.trainerId).filter(Boolean) } }).select('fullName').lean(),
     StudentBatchAllocation.aggregate([
       { $match: { batchId: { $in: batches.map((b) => b._id) }, status: { $in: ACTIVE_ALLOCATION_STATUSES } } },
-      { $group: { _id: '$batchId', count: { $sum: 1 } } },
+      { $lookup: { from: 'students', localField: 'studentId', foreignField: '_id', as: 'st' } },
+      {
+        $group: {
+          _id: '$batchId',
+          count: { $sum: 1 },
+          online: { $sum: { $cond: [{ $in: [{ $arrayElemAt: ['$st.enrollment.mode', 0] }, ['ONLINE', 'HYBRID']] }, 1, 0] } },
+        },
+      },
     ]),
   ]);
   const subjectMap = new Map(subjects.map((s: any) => [String(s._id), s]));
   const trainerMap = new Map(trainers.map((t: any) => [String(t._id), t]));
-  const countMap = new Map(counts.map((c) => [String(c._id), c.count]));
-  return batches.map((b) =>
-    summarizeBatch(b, subjectMap.get(String(b.subjectId)), b.trainerId ? trainerMap.get(String(b.trainerId)) : null, countMap.get(String(b._id)) || 0)
-  );
+  const countMap = new Map(counts.map((c) => [String(c._id), c]));
+  return batches.map((b) => {
+    const c: any = countMap.get(String(b._id));
+    return summarizeBatch(b, subjectMap.get(String(b.subjectId)), b.trainerId ? trainerMap.get(String(b.trainerId)) : null, c?.count || 0, c?.online || 0);
+  });
 }
 
 export const listBatches = async (req: AuthRequest, res: Response) => {
@@ -628,7 +643,7 @@ export const updateBatch = async (req: AuthRequest, res: Response) => {
     logBatch(batch, req, 'TIMING_CHANGED', `${batch.timing} → ${timing.trim()}`);
     batch.timing = timing.trim();
   }
-  if (mode && mode !== batch.mode && ['ONLINE', 'OFFLINE'].includes(mode)) {
+  if (mode && mode !== batch.mode && ['ONLINE', 'OFFLINE', 'HYBRID'].includes(mode)) {
     logBatch(batch, req, 'MODE_CHANGED', `${batch.mode} → ${mode}`);
     batch.mode = mode;
   }
@@ -812,7 +827,7 @@ export const getBatchDetail = async (req: AuthRequest, res: Response) => {
       trainingStatus: s?.enrollment?.status || 'ACTIVE',
       status: a.status,
       active: ACTIVE_ALLOCATION_STATUSES.includes(a.status),
-      mode: a.mode,
+      mode: batch.mode === 'HYBRID' ? seatMode('HYBRID', s?.enrollment?.mode) : a.mode,
       allocationDate: a.allocationDate,
       endDate: a.endDate,
       reason: a.reason,
@@ -827,7 +842,7 @@ export const getBatchDetail = async (req: AuthRequest, res: Response) => {
   res.json({
     success: true,
     data: {
-      batch: summarizeBatch(batch, subject, trainer, activeCount),
+      batch: summarizeBatch(batch, subject, trainer, activeCount, rows.filter((r) => r.active && r.mode === 'ONLINE').length),
       topics: (subject?.topics || [])
         .slice()
         .sort((a: any, b: any) => a.order - b.order)
@@ -953,6 +968,7 @@ export const setMeetingLink = async (req: AuthRequest, res: Response) => {
   batch.history.push({ at: new Date(), action: 'MEETING_LINK', details: link ? `Class meeting link set${at ? ` for ${whenText(at)}` : ''}` : 'Class meeting link removed', byUserId: req.user?.userId as any });
   await batch.save();
   const told = link ? await notifyBatchStudents(batch, 'Class link ready', `Join your ${batch.batchCode} class${at ? ` on ${whenText(at)}` : ''} from your dashboard.`) : 0;
+  if (link && batch.mode !== 'OFFLINE') queueClassLinkEmails(batch._id, at);
   res.json({ success: true, message: link ? `Class link saved${told ? `. ${told} students were told.` : ''}` : 'Class link removed', data: { batch } });
 };
 
@@ -975,6 +991,7 @@ export const createBatchZohoMeeting = async (req: AuthRequest, res: Response) =>
   batch.history.push({ at: new Date(), action: 'ZOHO_MEETING', details: `Zoho meeting created for ${whenText(start)} (${duration} min)`, byUserId: req.user?.userId as any });
   await batch.save();
   const told = await notifyBatchStudents(batch, 'Class scheduled', `${topic} on ${whenText(start)}. Join from your dashboard.`);
+  if (batch.mode !== 'OFFLINE') queueClassLinkEmails(batch._id, start);
   res.json({ success: true, message: `Zoho meeting created for ${whenText(start)}${told ? `. ${told} students were told.` : ''}`, data: { batch } });
 };
 

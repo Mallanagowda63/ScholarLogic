@@ -26,7 +26,7 @@ export interface IStudentBatchAllocation extends Document {
   startDate: Date;
   endDate?: Date;
   status: AllocationStatus;
-  mode: 'ONLINE' | 'OFFLINE';
+  mode: 'ONLINE' | 'OFFLINE' | 'HYBRID';
   reason: string;
   remarks: string;
   previousAllocationId?: mongoose.Types.ObjectId;
@@ -49,7 +49,7 @@ const StudentBatchAllocationSchema = new Schema<IStudentBatchAllocation>(
       enum: ['BATCH_ALLOCATED', 'ATTENDING', 'RE_ATTENDING', 'COMPLETED', 'MISSED', 'MOVED', 'REALLOCATION_REQUIRED', 'DROPPED', 'ON_HOLD'],
       default: 'BATCH_ALLOCATED',
     },
-    mode: { type: String, enum: ['ONLINE', 'OFFLINE'], default: 'OFFLINE' },
+    mode: { type: String, enum: ['ONLINE', 'OFFLINE', 'HYBRID'], default: 'OFFLINE' },
     reason: { type: String, default: '' },
     remarks: { type: String, default: '' },
     previousAllocationId: { type: Schema.Types.ObjectId, ref: 'StudentBatchAllocation' },

@@ -124,6 +124,7 @@ const CreateBatchModal: React.FC<{ onClose: () => void; onDone: (id: string) => 
           <select className={inputClass} value={form.mode} onChange={set('mode')}>
             <option value="OFFLINE">Offline</option>
             <option value="ONLINE">Online</option>
+            <option value="HYBRID">Hybrid (class + online together)</option>
           </select>
         </Field>
         <Field label="Start date" required>
@@ -271,7 +272,14 @@ export const AdminBatches: React.FC = () => {
                       </td>
                       <td className="px-3 py-3 font-semibold text-slate-800 dark:text-slate-200">{b.subject?.name}</td>
                       <td className="px-3 py-3">{b.trainer?.fullName || <span className="text-amber-600">Unassigned</span>}</td>
-                      <td className="px-3 py-3">{fmtMode(b.mode)}</td>
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        {fmtMode(b.mode)}
+                        {b.mode === 'HYBRID' && (
+                          <span className="block text-[10px] text-slate-500">
+                            {b.inClassCount} in class • <span className="font-semibold text-sky-600">{b.onlineCount} online</span>
+                          </span>
+                        )}
+                      </td>
                       <td className="px-3 py-3 whitespace-nowrap">{b.timing}</td>
                       <td className="px-3 py-3 whitespace-nowrap">{fmtDate(b.startDate)}</td>
                       <td className="px-3 py-3 whitespace-nowrap">

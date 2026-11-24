@@ -176,3 +176,57 @@ async function sendTrainerBatch(batchId: any) {
   });
   console.log(`📧 Batch ${b.batchCode} email sent to trainer ${trainer.fullName} (${names.length} students)`);
 }
+
+/**
+ * Online or hybrid batch got a class link (Zoho meeting or pasted): email it to the students who join online
+ * (in a hybrid batch: students whose mode is Online or Hybrid; in an online batch: everyone).
+ */
+export function queueClassLinkEmails(batchId: any, classAt?: Date | null) {
+  if ((process.env.STUDENT_UPDATE_EMAILS || '').toLowerCase() === 'off') return;
+  queue.push(async () => {
+    const { StudentBatchAllocation, ACTIVE_ALLOCATION_STATUSES } = await import('../models/tracking/StudentBatchAllocation');
+    const b: any = await Batch.findById(batchId).select('batchCode subjectId trainerId timing mode meetingLink').lean();
+    if (!b?.meetingLink || b.mode === 'OFFLINE') return;
+    const [subject, trainer]: any[] = await Promise.all([
+      Subject.findById(b.subjectId).select('name').lean(),
+      b.trainerId ? User.findById(b.trainerId).select('fullName').lean() : null,
+    ]);
+    const allocations = await StudentBatchAllocation.find({ batchId: b._id, status: { $in: ACTIVE_ALLOCATION_STATUSES } }).select('studentId').lean();
+    const students: any[] = await Student.find({ _id: { $in: allocations.map((a: any) => a.studentId) } })
+      .select('studentId userId enrollment')
+      .populate('userId', 'fullName email')
+      .lean();
+    const online = students.filter((s) => b.mode === 'ONLINE' || ['ONLINE', 'HYBRID'].includes(s.enrollment?.mode));
+    const when = classAt ? new Date(classAt).toLocaleString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : '';
+    for (const s of online) {
+      const email = String(s.userId?.email || '').trim();
+      if (!email || email.endsWith('@students.scholarlogic.local') || !/@/.test(email)) continue;
+      queue.push(() =>
+        emailService
+          .sendStudentUpdateEmail({
+            to: email,
+            name: s.userId.fullName || 'Student',
+            subject: `Your online class link: ${b.batchCode}${when ? ` (${when})` : ''}`,
+            heading: 'Your online class link',
+            intro: b.mode === 'HYBRID' ? 'Your class runs in the classroom and online at the same time. You join online with the link below.' : 'Your class is online. Join with the link below.',
+            update: when ? `Next class: ${when}` : 'Class link ready',
+            details: 'Join a few minutes early. Your attendance is marked by the trainer.',
+            rows: [
+              ['Batch', b.batchCode],
+              ['Subject', subject?.name || ''],
+              ...(trainer?.fullName ? ([['Trainer', trainer.fullName]] as [string, string][]) : []),
+              ['Timing', b.timing || ''],
+              ['Student ID', s.studentId],
+            ].filter(([, v]) => v) as [string, string][],
+            kind: 'info',
+            joinLink: b.meetingLink,
+            siteUrl: /localhost|127.0.0.1/.test(env.FRONTEND_URL) ? 'https://scholarlogiclms.in' : env.FRONTEND_URL,
+          })
+          .then(() => undefined)
+      );
+    }
+    void drain();
+    if (online.length) console.log(`📧 Class link for ${b.batchCode} queued to ${online.length} online student(s)`);
+  });
+  void drain();
+}

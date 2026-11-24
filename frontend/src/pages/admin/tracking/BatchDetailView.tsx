@@ -73,6 +73,7 @@ const EditBatchModal: React.FC<{ batch: any; onClose: () => void; onDone: (m: st
           <select className={inputClass} value={form.mode} onChange={set('mode')}>
             <option value="OFFLINE">Offline</option>
             <option value="ONLINE">Online</option>
+            <option value="HYBRID">Hybrid (class + online together)</option>
           </select>
         </Field>
         <Field label="Start date">
@@ -275,7 +276,7 @@ const AddStudentModal: React.FC<{ batch: any; onClose: () => void; onDone: (m: s
 };
 
 // After-class update: topics ticked + attendance, replaces the paper register
-const DailyUpdateForm: React.FC<{ batchId: string; topics: any[]; students: any[]; onDone: (m: string) => void }> = ({ batchId, topics, students, onDone }) => {
+const DailyUpdateForm: React.FC<{ batchId: string; batchMode?: string; topics: any[]; students: any[]; onDone: (m: string) => void }> = ({ batchId, batchMode, topics, students, onDone }) => {
   const pending = topics.filter((t) => !t.completed);
   const [form, setForm] = useState({
     date: new Date().toISOString().slice(0, 10),
@@ -376,6 +377,11 @@ const DailyUpdateForm: React.FC<{ batchId: string; topics: any[]; students: any[
                       <li key={id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-xs">
                         <span>
                           <b className="text-slate-900 dark:text-white">{s.fullName}</b> <span className="font-mono text-slate-400">{s.studentId}</span>
+                          {batchMode === 'HYBRID' && (
+                            <span className={`ml-1.5 rounded-full px-1.5 py-0.5 text-[9px] font-bold ${s.mode === 'ONLINE' ? 'bg-sky-100 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>
+                              {s.mode === 'ONLINE' ? 'Online' : 'In class'}
+                            </span>
+                          )}
                         </span>
                         <div className="flex gap-1">
                           {ATTENDANCE.map((a) => (
@@ -490,7 +496,13 @@ export const BatchDetailView: React.FC<{ batchId: string; role: Role }> = ({ bat
               <StatusBadge status={b.status} />
             </div>
             <p className="flex flex-wrap items-center gap-x-1 text-sm font-semibold text-slate-600 dark:text-slate-300">
-              {b.subject?.name} • {b.timing} • {fmtMode(b.mode)} • {b.trainer?.fullName || <span className="text-amber-600">No trainer</span>}
+              {b.subject?.name} • {b.timing} • {fmtMode(b.mode)}
+              {b.mode === 'HYBRID' && (
+                <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[11px] font-bold text-sky-700 dark:bg-sky-950/40 dark:text-sky-300">
+                  {b.inClassCount} in class • {b.onlineCount} online
+                </span>
+              )}{' '}
+              • {b.trainer?.fullName || <span className="text-amber-600">No trainer</span>}
               {isAdmin && b.trainer && (
                 <button
                   type="button"
@@ -564,7 +576,7 @@ export const BatchDetailView: React.FC<{ batchId: string; role: Role }> = ({ bat
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
-          {!isAdmin && !closed && <DailyUpdateForm key={data.updates.length} batchId={batchId} topics={data.topics} students={data.students} onDone={done} />}
+          {!isAdmin && !closed && <DailyUpdateForm key={data.updates.length} batchId={batchId} batchMode={b.mode} topics={data.topics} students={data.students} onDone={done} />}
 
           <nav className="flex gap-5 border-b border-slate-200 dark:border-slate-800 text-sm font-semibold">
             {([
@@ -613,7 +625,15 @@ export const BatchDetailView: React.FC<{ batchId: string; role: Role }> = ({ bat
                           <ProgressBar value={s.progress.percentage} className="mt-1" />
                         </td>
                         <td className="px-3 py-3"><StatusBadge status={s.status} /></td>
-                        <td className="px-3 py-3">{fmtMode(s.mode)}</td>
+                        <td className="px-3 py-3">
+                          {b.mode === 'HYBRID' ? (
+                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${s.mode === 'ONLINE' ? 'bg-sky-100 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>
+                              {s.mode === 'ONLINE' ? 'Online' : 'In class'}
+                            </span>
+                          ) : (
+                            fmtMode(s.mode)
+                          )}
+                        </td>
                         <td className="px-3 py-3 max-w-[160px] truncate text-slate-500">{s.remarks || s.reason || '—'}</td>
                         {isAdmin && (
                           <td className="px-3 py-3">

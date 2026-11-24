@@ -1,7 +1,8 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
 export type BatchStatus = 'UPCOMING' | 'RUNNING' | 'DELAYED' | 'COMPLETED' | 'CANCELLED';
-export type LearningMode = 'ONLINE' | 'OFFLINE';
+// HYBRID = one class taught in the room and on Zoho at the same time (some students join online)
+export type LearningMode = 'ONLINE' | 'OFFLINE' | 'HYBRID';
 
 export interface IBatchHistoryEntry {
   at: Date;
@@ -48,7 +49,7 @@ const BatchSchema = new Schema<IBatch>(
     batchCode: { type: String, required: true, unique: true, uppercase: true, trim: true },
     subjectId: { type: Schema.Types.ObjectId, ref: 'Subject', required: true, index: true },
     trainerId: { type: Schema.Types.ObjectId, ref: 'User', index: true },
-    mode: { type: String, enum: ['ONLINE', 'OFFLINE'], default: 'OFFLINE' },
+    mode: { type: String, enum: ['ONLINE', 'OFFLINE', 'HYBRID'], default: 'OFFLINE' },
     timing: { type: String, required: true, trim: true },
     startDate: { type: Date, required: true },
     expectedEndDate: { type: Date, required: true },
