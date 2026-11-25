@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { api } from '../../services/api';
 import { Badge } from '../../components/Badge';
+import { ClassRecordCard } from '../../components/ClassRecordCard';
 import { User, ShieldCheck, BookOpen, Award, CheckCircle2, TrendingUp, ArrowLeft } from 'lucide-react';
 import { ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
 
@@ -76,6 +77,8 @@ export const StudentDetailView: React.FC = () => {
           </div>
         </div>
       </div>
+
+      <ClassRecordCard records={student.classRecords} />
 
       {/* Learning & Topic Performance Breakdown */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

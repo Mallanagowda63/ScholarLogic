@@ -1,71 +1,467 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../../services/api';
-import { StudentProfile } from '../../types';
-import { Badge } from '../../components/Badge';
-import { Users, Search, ShieldCheck } from 'lucide-react';
+import { Search, UserPlus, Eye, Pencil, CalendarPlus, ArrowRightLeft, RotateCcw, History, Trash2, Wifi, X } from 'lucide-react';
+import {
+  Card,
+  EmptyRow,
+  Modal,
+  ModeChangeModal,
+  PageHeader,
+  ProgressBar,
+  Spinner,
+  StatusBadge,
+  StudentFormModal,
+  fmtDate,
+  fmtMode,
+  inputClass,
+  primaryBtn,
+  secondaryBtn,
+  statusTone,
+  useToast,
+} from './tracking/shared';
+
+const ALLOCATION_OPTIONS = ['ALLOCATED', 'WAITING', 'REALLOCATION_REQUIRED', 'PAUSED', 'COMPLETED', 'NOT_ENROLLED'];
+const STATUS_OPTIONS = ['ACTIVE', 'ON_HOLD', 'DROPPED', 'REJOINED'];
+// Tab value for students with no course / no current subject yet
+const NONE = '__NONE__';
+const SHEET = 'sheet:';
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+// Class-sheet batch names are typed many ways ("July Aug2026", "Jul-aug 2026", "May -Jun26"); group them as "Jul-Aug 2026"
+const sheetKey = (raw?: string) => {
+  if (!raw || raw.trim() === '(top)') return '';
+  const months = (raw.toLowerCase().match(/[a-z]+/g) || []).map((w) => w.slice(0, 3)).filter((m) => MONTHS.includes(m));
+  const yr = raw.match(/(\d)(\d{2})(?!.*\d)|(\d{2})(?!.*\d)/);
+  if (!months.length) return SHEET + raw.trim();
+  const label = months.map((m) => m[0].toUpperCase() + m.slice(1)).join('-');
+  return `${SHEET}${label}${yr ? ` 20${yr[2] || yr[3]}` : ''}`;
+};
 
 export const AdminStudents: React.FC = () => {
-  const [students, setStudents] = useState<StudentProfile[]>([]);
+  const navigate = useNavigate();
+  const toast = useToast();
+  const [students, setStudents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showNew, setShowNew] = useState(false);
+  // Delete: confirmation modal; the student's login and records are removed permanently
+  const [deleting, setDeleting] = useState<any | null>(null);
+  const [modeFor, setModeFor] = useState<any | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
+  const confirmDelete = async () => {
+    if (!deleting) return;
+    setDeleteBusy(true);
+    setDeleteError('');
+    try {
+      const res: any = await api.delete(`/tracking/students/${deleting._id}`);
+      setStudents((list) => list.filter((x) => x._id !== deleting._id));
+      setDeleting(null);
+      toast.show(res.message || 'Student deleted');
+    } catch (err: any) {
+      setDeleteError(err.message);
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
+  const [pendingRegistrations, setPendingRegistrations] = useState(0);
+  const [trainerNames, setTrainerNames] = useState<string[]>([]);
+  const [batchCodes, setBatchCodes] = useState<string[]>([]);
+  const [q, setQ] = useState('');
+  const [f, setF] = useState({ course: '', subject: '', batch: '', trainer: '', mode: '', status: '', month: '', allocation: '' });
 
-  useEffect(() => {
-    api.get('/students')
-      .then((res: any) => {
-        if (res.success) setStudents(res.data.students || []);
-      })
+  const load = () => {
+    setLoading(true);
+    api
+      .get('/tracking/students')
+      .then((res: any) => setStudents(res.data?.students || []))
       .catch(console.error)
       .finally(() => setLoading(false));
+  };
+  useEffect(load, []);
+  useEffect(() => {
+    api.get('/tracking/registrations').then((r: any) => setPendingRegistrations(r.data?.counts?.PENDING || 0)).catch(() => {});
+    api.get('/tracking/batches').then((r: any) => setBatchCodes((r.data?.batches || []).map((b: any) => b.batchCode))).catch(() => {});
+    api.get('/tracking/trainers').then((r: any) => setTrainerNames((r.data?.trainers || []).map((t: any) => t.fullName))).catch(() => {});
   }, []);
 
-  return (
-    <div className="space-y-6 pb-12">
-      <div>
-        <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">Student Directory & Identity Registry</h1>
-        <p className="text-xs text-slate-500">Central Student ID management across all academy modules</p>
-      </div>
+  const options = useMemo(() => {
+    const uniq = (xs: (string | undefined)[]) => [...new Set(xs.filter(Boolean) as string[])].sort();
+    return {
+      course: uniq(students.map((s) => s.course?.name)),
+      subject: uniq(students.map((s) => s.currentSubject?.name)),
+      // Website batches, then the class-sheet batches (e.g. "Jul-Aug 2026"), then "No batch yet"
+      batch: [
+        ...uniq([...batchCodes, ...students.map((s) => s.currentBatch?.batchCode)]),
+        ...uniq(students.map((s) => (s.currentBatch ? '' : sheetKey(s.sheetBatch)))),
+        NONE,
+      ],
+      // Every trainer is listed, even one with no students yet, plus "No trainer yet"
+      trainer: [...uniq([...trainerNames, ...students.map((s) => s.currentBatch?.trainer?.fullName)]), NONE],
+    };
+  }, [students, trainerNames, batchCodes]);
+  const batchOf = (s: any) => s.currentBatch?.batchCode || sheetKey(s.sheetBatch) || NONE;
+  const batchCount = (name: string) => students.filter((s) => batchOf(s) === name).length;
+  const trainerCount = (name: string) => students.filter((s) => (s.currentBatch?.trainer?.fullName || NONE) === name).length;
 
-      {loading ? (
-        <div className="flex h-64 items-center justify-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-500 border-t-transparent" />
+  const visible = useMemo(() => {
+    const term = q.trim().toLowerCase();
+    return students.filter((s) => {
+      if (term) {
+        const hay = [s.fullName, s.studentId, s.phone, s.currentBatch?.batchCode, s.sheetBatch, s.course?.name, s.currentSubject?.name].filter(Boolean).join(' ').toLowerCase();
+        if (!hay.includes(term)) return false;
+      }
+      if (f.course && (f.course === NONE ? !!s.course?.name : s.course?.name !== f.course)) return false;
+      if (f.subject && (f.subject === NONE ? !!s.currentSubject?.name : s.currentSubject?.name !== f.subject)) return false;
+      if (f.batch && batchOf(s) !== f.batch) return false;
+      if (f.trainer && (s.currentBatch?.trainer?.fullName || NONE) !== f.trainer) return false;
+      if (f.mode && (f.mode === 'CONVERTED' ? !s.convertedToOnline : s.mode !== f.mode)) return false;
+      if (f.status && s.trainingStatus !== f.status) return false;
+      if (f.allocation && s.allocationStatus !== f.allocation) return false;
+      if (f.month && !(s.joiningDate || '').startsWith(f.month)) return false;
+      return true;
+    });
+  }, [students, q, f]);
+
+  // Separate list per course (tabs) and per subject inside it (chips), with live counts
+  const courseTabs = useMemo(() => {
+    const counts = new Map<string, number>();
+    students.forEach((s) => counts.set(s.course?.name || NONE, (counts.get(s.course?.name || NONE) || 0) + 1));
+    return [...counts.entries()].sort(([a], [b]) => (a === NONE ? 1 : b === NONE ? -1 : a.localeCompare(b)));
+  }, [students]);
+  const subjectChips = useMemo(() => {
+    const inCourse = students.filter((s) => !f.course || (f.course === NONE ? !s.course?.name : s.course?.name === f.course));
+    const counts = new Map<string, number>();
+    inCourse.forEach((s) => counts.set(s.currentSubject?.name || NONE, (counts.get(s.currentSubject?.name || NONE) || 0) + 1));
+    return { total: inCourse.length, list: [...counts.entries()].sort(([a], [b]) => (a === NONE ? 1 : b === NONE ? -1 : a.localeCompare(b))) };
+  }, [students, f.course]);
+  const pickCourse = (course: string) => setF((x) => ({ ...x, course, subject: '', batch: '' }));
+  const pickSubject = (subject: string) => setF((x) => ({ ...x, subject, batch: '' }));
+  const tabCls = (active: boolean) =>
+    `relative shrink-0 pb-3 ${active ? 'text-slate-900 dark:text-white' : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'}`;
+  const chipCls = (active: boolean) =>
+    `shrink-0 rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${
+      active
+        ? 'border-brand-600 bg-brand-600 text-white'
+        : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 hover:border-brand-300'
+    }`;
+
+  const activeFilters = Object.values(f).filter(Boolean).length;
+  const setFilter = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLSelectElement | HTMLInputElement>) => setF((x) => ({ ...x, [k]: e.target.value }));
+  const go = (s: any, action?: string) => navigate(`/admin/students/${s._id}${action ? `?action=${action}` : ''}`);
+
+  const select = (key: keyof typeof f, label: string, opts: string[], labels?: (o: string) => string) => (
+    <select className={`${inputClass} !py-1.5 text-xs`} value={f[key]} onChange={setFilter(key)} aria-label={label}>
+      <option value="">{label}</option>
+      {opts.map((o) => (
+        <option key={o} value={o}>
+          {labels ? labels(o) : o}
+        </option>
+      ))}
+    </select>
+  );
+
+  return (
+    <div className="space-y-5 pb-12">
+      <PageHeader
+        title="Students"
+        subtitle="Where every student is right now — course, subject, batch, trainer and progress."
+        action={
+          <div className="flex flex-wrap gap-2">
+            <button type="button" className={primaryBtn} onClick={() => setShowNew(true)}>
+              <UserPlus className="h-4 w-4" /> New Student
+            </button>
+          </div>
+        }
+      />
+
+      {pendingRegistrations > 0 && (
+        <Link
+          to="/admin/registrations"
+          className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-amber-200 dark:border-amber-900 bg-amber-50 dark:bg-amber-950/40 px-4 py-3 text-sm text-amber-800 dark:text-amber-300 hover:border-amber-300"
+        >
+          <span>
+            <b>{pendingRegistrations} new Google Form registration{pendingRegistrations > 1 ? 's' : ''}</b> pending verification
+          </span>
+          <span className="text-xs font-bold">Review →</span>
+        </Link>
+      )}
+
+      <Card className="p-4 space-y-3">
+        <label className="relative block">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input className={`${inputClass} pl-9`} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name, Student ID (e.g. SCLR245), phone, course or batch ID" />
+        </label>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-8">
+          {select('course', 'All courses', [...options.course, ...(courseTabs.some(([c]) => c === NONE) ? [NONE] : [])], (o) => (o === NONE ? 'No course yet' : o))}
+          {select('subject', 'All subjects', [...options.subject, ...(subjectChips.list.some(([c]) => c === NONE) ? [NONE] : [])], (o) => (o === NONE ? 'No subject yet' : o))}
+          {select('batch', 'All batches', options.batch, (o) => `${o === NONE ? 'No batch yet' : o.startsWith(SHEET) ? `${o.slice(SHEET.length)} • class sheet` : o} (${batchCount(o)})`)}
+          {select('trainer', 'All trainers', options.trainer, (o) => `${o === NONE ? 'No trainer yet' : o} (${trainerCount(o)})`)}
+          {select('mode', 'Any mode', ['ONLINE', 'OFFLINE', 'HYBRID', 'CONVERTED'], (o) => { const n = o === 'CONVERTED' ? students.filter((x) => x.convertedToOnline).length : students.filter((x) => x.mode === o).length; return `${o === 'CONVERTED' ? 'Converted to online' : fmtMode(o)} (${n})`; })}
+          {select('status', 'Any status', STATUS_OPTIONS, (o) => o.replace('_', ' '))}
+          <input type="month" className={`${inputClass} !py-1.5 text-xs`} value={f.month} onChange={setFilter('month')} aria-label="Joining month" title="Joining month" />
+          {select('allocation', 'Allocation', ALLOCATION_OPTIONS, (o) => o.replace(/_/g, ' '))}
         </div>
-      ) : (
-        <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden shadow-sm">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 dark:bg-slate-800/60 text-slate-500 uppercase text-[10px] font-bold border-b border-slate-200 dark:border-slate-800">
-              <tr>
-                <th className="p-4">Student ID</th>
-                <th className="p-4">Full Name</th>
-                <th className="p-4">Degree & Branch</th>
-                <th className="p-4">CGPA</th>
-                <th className="p-4">Verified Skills</th>
-                <th className="p-4">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-              {students.map((st) => (
-                <tr key={st._id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40">
-                  <td className="p-4 font-mono font-bold text-brand-600 dark:text-brand-400">{st.studentId}</td>
-                  <td className="p-4 font-bold text-slate-900 dark:text-white">{(st.userId as any)?.fullName || 'Student'}</td>
-                  <td className="p-4 text-slate-600 dark:text-slate-400">{st.degree} — {st.branch} ({st.graduationYear})</td>
-                  <td className="p-4 font-bold text-emerald-600">{st.cgpa}</td>
-                  <td className="p-4">
-                    <div className="flex flex-wrap gap-1 max-w-xs">
-                      {st.skills.slice(0, 4).map((sk) => (
-                        <span key={sk} className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-[10px]">
-                          {sk}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="p-4">
-                    <Badge variant="green">ACTIVE</Badge>
-                  </td>
-                </tr>
+        {activeFilters > 0 && (
+          <button type="button" className="inline-flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200" onClick={() => setF({ course: '', subject: '', batch: '', trainer: '', mode: '', status: '', month: '', allocation: '' })}>
+            <X className="h-3.5 w-3.5" /> Clear {activeFilters} filter{activeFilters > 1 ? 's' : ''}
+          </button>
+        )}
+      </Card>
+
+      {!loading && students.length > 0 && (
+        <div className="space-y-3">
+          <nav className="flex gap-5 overflow-x-auto border-b border-slate-200 dark:border-slate-800 text-sm font-semibold" aria-label="Courses">
+            {[['', students.length] as [string, number], ...courseTabs].map(([course, n]) => (
+              <button key={course || 'all'} type="button" onClick={() => pickCourse(course)} className={tabCls(f.course === course)}>
+                {course === '' ? 'All courses' : course === NONE ? 'No course yet' : course}
+                <span className={`ml-1.5 rounded-full px-1.5 text-[10px] ${f.course === course ? 'bg-brand-600 text-white' : 'text-slate-400'}`}>{n}</span>
+                <span className={`absolute inset-x-0 -bottom-px h-0.5 rounded-full bg-brand-500 ${f.course === course ? 'opacity-100' : 'opacity-0'}`} />
+              </button>
+            ))}
+          </nav>
+          {subjectChips.list.length > 0 && (
+            <div className="flex gap-2 overflow-x-auto pb-1" aria-label="Subjects">
+              <button type="button" onClick={() => pickSubject('')} className={chipCls(f.subject === '')}>
+                All subjects • {subjectChips.total}
+              </button>
+              {subjectChips.list.map(([subject, n]) => (
+                <button key={subject} type="button" onClick={() => pickSubject(subject)} className={chipCls(f.subject === subject)}>
+                  {subject === NONE ? 'No subject yet' : subject} • {n}
+                </button>
               ))}
-            </tbody>
-          </table>
+            </div>
+          )}
         </div>
       )}
+
+      {loading ? (
+        <Spinner />
+      ) : (
+        <>
+          {/* Same search as the box above, kept next to the list so it's at hand while scrolling the table */}
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="relative block w-full sm:w-96">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input className={`${inputClass} pl-9 pr-8`} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search students: name, Student ID, course…" aria-label="Search students" />
+              {q && (
+                <button type="button" onClick={() => setQ('')} title="Clear search" className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </label>
+            <span className="text-xs text-slate-500">
+              Showing <b className="text-slate-800 dark:text-slate-200">{visible.length}</b> of {students.length} students
+            </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 px-2.5 py-1 text-[11px] font-semibold text-sky-700 dark:bg-sky-950/40 dark:text-sky-300">
+              <span className="h-2.5 w-2.5 rounded-sm bg-sky-500" /> Blue rows = online students ({visible.filter((x) => x.mode === 'ONLINE').length})
+            </span>
+          </div>
+          <Card className="overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1450px] text-left text-xs">
+                <thead className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 text-[10px] font-bold uppercase text-slate-500">
+                  <tr>
+                    {['Student ID', 'Name', 'Course', 'Mode', 'Current Subject', 'Current Batch', 'Trainer', 'Progress', 'Next Subject', 'Allocation', 'Joined', 'Expected Completion', 'Status', 'Actions'].map((h) => (
+                      <th key={h} className="px-3 py-3 whitespace-nowrap">
+                        {h}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {visible.length === 0 ? (
+                    <EmptyRow colSpan={14} text={students.length ? 'No students match your filters.' : 'No students yet. Add your first student.'} />
+                  ) : (
+                    visible.map((s) => (
+                      <tr key={s._id} className={s.mode === 'ONLINE' ? 'bg-sky-50 shadow-[inset_4px_0_0_#0ea5e9] hover:bg-sky-100 dark:bg-sky-950/30 dark:hover:bg-sky-950/50' : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'}>
+                        <td className="px-3 py-3 font-mono font-bold text-brand-600 dark:text-brand-400 whitespace-nowrap">
+                          <Link to={`/admin/students/${s._id}`}>{s.studentId}</Link>
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          <Link to={`/admin/students/${s._id}`} className="font-bold text-slate-900 dark:text-white hover:underline">
+                            {s.fullName}
+                          </Link>
+                          <span className="block text-[10px] text-slate-400">
+                            {s.phone || '—'}
+                            {s.registrationSource === 'GOOGLE_FORM' && <span className="ml-1.5 rounded bg-emerald-50 px-1 font-semibold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300">Google Form</span>}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap text-slate-600 dark:text-slate-300">{s.course?.name || '—'}</td>
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          {s.mode === 'ONLINE' ? (
+                            <>
+                              <span className="inline-flex items-center gap-1 rounded-full bg-sky-600 px-2 py-0.5 text-[10px] font-bold text-white">
+                                <span className="h-1.5 w-1.5 rounded-full bg-white" /> Online
+                              </span>
+                              {s.convertedToOnline && (
+                                <span className="mt-0.5 block text-[10px] font-semibold text-sky-700 dark:text-sky-300" title={s.convertedAt ? `Since ${fmtDate(s.convertedAt)}` : ''}>
+                                  ↻ Converted{s.convertedAt ? ` ${fmtDate(s.convertedAt)}` : ''}
+                                </span>
+                              )}
+                            </>
+                          ) : s.mode === 'HYBRID' ? (
+                            <span className="inline-flex items-center gap-1 rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-bold text-white">
+                              <span className="h-1.5 w-1.5 rounded-full bg-white" /> Hybrid
+                            </span>
+                          ) : (
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-600 dark:bg-slate-800 dark:text-slate-300">{fmtMode(s.mode)}</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          {s.currentSubject ? (
+                            <>
+                              <span className="font-semibold text-slate-800 dark:text-slate-200">{s.currentSubject.name}</span>
+                              <StatusBadge status={s.currentSubject.status} className="ml-1.5" />
+                            </>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap">
+                          {s.currentBatch ? (
+                            <Link to={`/admin/batches/${s.currentBatch._id}`} className="font-mono font-bold text-slate-800 dark:text-slate-200 hover:text-brand-600">
+                              {s.currentBatch.batchCode}
+                              <span className="block font-sans text-[10px] font-normal text-slate-400">{s.currentBatch.timing}</span>
+                            </Link>
+                          ) : s.sheetBatch ? (
+                            <span className="font-semibold text-slate-700 dark:text-slate-300" title="From the office class sheet">
+                              {s.sheetBatch}
+                              <span className="block text-[10px] font-normal text-amber-600 dark:text-amber-400">class sheet</span>
+                            </span>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap">{s.currentBatch?.trainer?.fullName || '—'}</td>
+                        <td className="px-3 py-3 w-32">
+                          {s.currentSubject ? (
+                            <>
+                              <span className="text-[11px] font-bold text-slate-800 dark:text-slate-200">
+                                {s.currentSubject.progress.percentage}%{' '}
+                                <span className="font-normal text-slate-400">
+                                  ({s.currentSubject.progress.completed}/{s.currentSubject.progress.total})
+                                </span>
+                              </span>
+                              <ProgressBar value={s.currentSubject.progress.percentage} tone={statusTone(s.currentSubject.status)} className="mt-1" />
+                            </>
+                          ) : (
+                            '—'
+                          )}
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap">{s.nextSubject?.name || '—'}</td>
+                        <td className="px-3 py-3">
+                          <StatusBadge status={s.allocationStatus} />
+                        </td>
+                        <td className="px-3 py-3 whitespace-nowrap">{fmtDate(s.joiningDate)}</td>
+                        <td className="px-3 py-3 whitespace-nowrap">{s.course ? fmtDate(s.expectedCompletion) : '—'}</td>
+                        <td className="px-3 py-3">
+                          <StatusBadge status={s.trainingStatus} />
+                        </td>
+                        <td className="px-3 py-3">
+                          <div className="flex items-center gap-1.5">
+                            {[
+                              { icon: Eye, label: 'View', action: undefined, tone: 'bg-sky-50 text-sky-600 ring-sky-200 hover:bg-sky-100 dark:bg-sky-950/40 dark:text-sky-300 dark:ring-sky-900' },
+                              { icon: Pencil, label: 'Edit', action: 'edit', tone: 'bg-indigo-50 text-indigo-600 ring-indigo-200 hover:bg-indigo-100 dark:bg-indigo-950/40 dark:text-indigo-300 dark:ring-indigo-900' },
+                              { icon: CalendarPlus, label: 'Allocate', action: 'allocate', tone: 'bg-emerald-50 text-emerald-600 ring-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:ring-emerald-900' },
+                              { icon: ArrowRightLeft, label: 'Move', action: 'move', tone: 'bg-amber-50 text-amber-600 ring-amber-200 hover:bg-amber-100 dark:bg-amber-950/40 dark:text-amber-300 dark:ring-amber-900' },
+                              { icon: RotateCcw, label: 'Reallocate', action: 'reallocate', tone: 'bg-violet-50 text-violet-600 ring-violet-200 hover:bg-violet-100 dark:bg-violet-950/40 dark:text-violet-300 dark:ring-violet-900' },
+                              { icon: History, label: 'History', action: 'history', tone: 'bg-slate-100 text-slate-600 ring-slate-200 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:ring-slate-700' },
+                            ].map(({ icon: Icon, label, action, tone }) => (
+                              <button
+                                key={label}
+                                type="button"
+                                title={label}
+                                aria-label={`${label} ${s.fullName}`}
+                                onClick={() => go(s, action)}
+                                className={`rounded-lg p-2 ring-1 transition ${tone}`}
+                              >
+                                <Icon className="h-4 w-4" />
+                              </button>
+                            ))}
+                            <button
+                              type="button"
+                              title={s.mode === 'ONLINE' ? 'Change mode' : 'Convert to online / change mode'}
+                              aria-label={`Change mode of ${s.fullName}`}
+                              onClick={() => setModeFor(s)}
+                              className="rounded-lg bg-cyan-50 p-2 text-cyan-600 ring-1 ring-cyan-200 transition hover:bg-cyan-100 dark:bg-cyan-950/40 dark:text-cyan-300 dark:ring-cyan-900"
+                            >
+                              <Wifi className="h-4 w-4" />
+                            </button>
+                            <button
+                              type="button"
+                              title="Delete"
+                              aria-label={`Delete ${s.fullName}`}
+                              onClick={() => {
+                                setDeleteError('');
+                                setDeleting(s);
+                              }}
+                              className="rounded-lg bg-rose-50 p-2 text-rose-600 ring-1 ring-rose-200 transition hover:bg-rose-600 hover:text-white dark:bg-rose-950/40 dark:text-rose-300 dark:ring-rose-900"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div className="border-t border-slate-100 dark:border-slate-800 px-4 py-2.5 text-[11px] text-slate-500">
+              Showing {visible.length} of {students.length} students
+            </div>
+          </Card>
+        </>
+      )}
+
+      {showNew && (
+        <StudentFormModal
+          onClose={() => setShowNew(false)}
+          onDone={(msg, id) => {
+            setShowNew(false);
+            toast.show(msg);
+            if (id) navigate(`/admin/students/${id}?action=allocate`);
+            else load();
+          }}
+        />
+      )}
+      {modeFor && (
+        <ModeChangeModal
+          student={{ _id: modeFor._id, fullName: modeFor.fullName, studentId: modeFor.studentId }}
+          current={modeFor.mode || 'OFFLINE'}
+          onClose={() => setModeFor(null)}
+          onDone={(msg) => {
+            setModeFor(null);
+            toast.show(msg);
+            load();
+          }}
+        />
+      )}
+      {deleting && (
+        <Modal title={`Delete ${deleting.fullName}?`} subtitle={`${deleting.studentId} • This cannot be undone`} onClose={() => !deleteBusy && setDeleting(null)}>
+          <div className="space-y-3 text-sm text-slate-600 dark:text-slate-300">
+            <p className="rounded-xl bg-rose-50 p-3 text-xs text-rose-800 dark:bg-rose-950/40 dark:text-rose-200">
+              This permanently removes the student's <b>login</b>, profile, batch history, progress, exams, resumes and applications. They will no longer be able to sign in.
+            </p>
+            <p className="text-xs text-slate-500">eSSL machine punches and Google Form responses are kept, just no longer linked to this student.</p>
+            {deleteError && <p className="rounded-xl bg-rose-50 p-3 text-xs font-semibold text-rose-700 dark:bg-rose-950/40 dark:text-rose-300">{deleteError}</p>}
+            <div className="flex justify-end gap-2 pt-1">
+              <button type="button" className={secondaryBtn} disabled={deleteBusy} onClick={() => setDeleting(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deleteBusy}
+                onClick={confirmDelete}
+                className="inline-flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+              >
+                <Trash2 className="h-4 w-4" /> {deleteBusy ? 'Deleting…' : 'Delete student'}
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+      {toast.node}
     </div>
   );
 };

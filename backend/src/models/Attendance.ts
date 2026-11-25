@@ -10,7 +10,8 @@ export interface IAttendanceRecord {
 
 export interface IAttendance extends Document {
   _id: mongoose.Types.ObjectId;
-  courseId: mongoose.Types.ObjectId;
+  courseId?: mongoose.Types.ObjectId; // LMS course sessions
+  batchId?: mongoose.Types.ObjectId; // batch-tracking classes
   trainerId: mongoose.Types.ObjectId;
   sessionName: string;
   date: Date;
@@ -21,7 +22,9 @@ export interface IAttendance extends Document {
 
 const AttendanceSchema = new Schema<IAttendance>(
   {
-    courseId: { type: Schema.Types.ObjectId, ref: 'Course', required: true, index: true },
+    // Either an LMS course session or a tracked batch class
+    courseId: { type: Schema.Types.ObjectId, ref: 'Course', index: true },
+    batchId: { type: Schema.Types.ObjectId, ref: 'Batch', index: true },
     trainerId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     sessionName: { type: String, required: true, trim: true },
     date: { type: Date, required: true, default: Date.now },

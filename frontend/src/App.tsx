@@ -1,5 +1,6 @@
-import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import React, { Suspense, lazy, useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrandLoader } from './components/BrandLoader';
 import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { RoleGuard } from './components/RoleGuard';
@@ -15,74 +16,150 @@ import { AdminLayout } from './layouts/AdminLayout';
 // Public Pages
 import { Home } from './pages/public/Home';
 import { Login } from './pages/public/Login';
-import { Register } from './pages/public/Register';
 import { VerifyCertificate } from './pages/public/VerifyCertificate';
 import { PlacementDrive } from './pages/public/PlacementDrive';
 import { About } from './pages/public/About';
 
+// Portal pages are code-split so public visitors don't download the whole app.
+// Pages use named exports, so map the named export to the `default` React.lazy expects.
+// Each portal's pages are also remembered here, so they can be downloaded quietly in the background
+// right after someone opens that portal: clicking around afterwards opens pages instantly.
+type Portal = 'admin' | 'student' | 'trainer' | 'placement';
+const portalLoaders: Record<Portal, Array<() => Promise<unknown>>> = { admin: [], student: [], trainer: [], placement: [] };
+const portalOf = (name: string): Portal =>
+  name.startsWith('Admin')
+    ? 'admin'
+    : name.startsWith('Trainer') || name === 'CourseContentEditor' || name === 'StudentDetailView'
+      ? 'trainer'
+      : name.startsWith('Placement')
+        ? 'placement'
+        : 'student';
+
+const lazyPage = <K extends string>(loader: () => Promise<Record<K, React.ComponentType>>, name: K) => {
+  portalLoaders[portalOf(name)].push(loader);
+  return lazy(() => loader().then((m) => ({ default: m[name] })));
+};
+
+const PageFallback: React.FC = () => <BrandLoader />;
+
+// After the first page of a portal has shown, fetch the rest of that portal's pages while the browser is idle
+const prefetched = new Set<Portal>();
+const PortalPrefetcher: React.FC = () => {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    const portal = (['admin', 'student', 'trainer', 'placement'] as Portal[]).find((p) => pathname.startsWith(`/${p}`));
+    if (!portal || prefetched.has(portal)) return;
+    const conn = (navigator as any).connection;
+    if (conn?.saveData || /(^|-)2g$/.test(conn?.effectiveType || '')) return; // respect data saver and very slow networks
+    prefetched.add(portal);
+    const idle = (cb: () => void) => ((window as any).requestIdleCallback ? (window as any).requestIdleCallback(cb, { timeout: 3000 }) : setTimeout(cb, 1200));
+    const queue = [...portalLoaders[portal]];
+    const next = () => {
+      const load = queue.shift();
+      if (!load) return;
+      load()
+        .catch(() => undefined)
+        .finally(() => idle(next));
+    };
+    idle(next);
+  }, [pathname]);
+  return null;
+};
+
 // Student Pages
-import { StudentDashboard } from './pages/student/StudentDashboard';
-import { StudentCourses } from './pages/student/StudentCourses';
-import { CourseDetail } from './pages/student/CourseDetail';
-import { StudentExams } from './pages/student/StudentExams';
-import { ExamInstructions } from './pages/student/ExamInstructions';
-import { ExamRunner } from './pages/student/ExamRunner';
-import { ExamResult } from './pages/student/ExamResult';
-import { ResumeBuilder } from './pages/student/ResumeBuilder';
-import { StudentJobs } from './pages/student/StudentJobs';
-import { StudentApplications } from './pages/student/StudentApplications';
-import { StudentProfile } from './pages/student/StudentProfile';
-import { Certificates } from './pages/student/Certificates';
-import { VoiceMockInterview } from './pages/student/VoiceMockInterview';
+const StudentDashboard = lazyPage(() => import('./pages/student/StudentDashboard'), 'StudentDashboard');
+const StudentCourses = lazyPage(() => import('./pages/student/StudentCourses'), 'StudentCourses');
+const CourseDetail = lazyPage(() => import('./pages/student/CourseDetail'), 'CourseDetail');
+const StudentExams = lazyPage(() => import('./pages/student/StudentExams'), 'StudentExams');
+const ExamInstructions = lazyPage(() => import('./pages/student/ExamInstructions'), 'ExamInstructions');
+const ExamRunner = lazyPage(() => import('./pages/student/ExamRunner'), 'ExamRunner');
+const ExamResult = lazyPage(() => import('./pages/student/ExamResult'), 'ExamResult');
+const ExamResults = lazyPage(() => import('./pages/student/ExamResults'), 'ExamResults');
+const ResumeBuilder = lazyPage(() => import('./pages/student/ResumeBuilder'), 'ResumeBuilder');
+const StudentJobs = lazyPage(() => import('./pages/student/StudentJobs'), 'StudentJobs');
+const StudentApplications = lazyPage(() => import('./pages/student/StudentApplications'), 'StudentApplications');
+const StudentProfile = lazyPage(() => import('./pages/student/StudentProfile'), 'StudentProfile');
+const Certificates = lazyPage(() => import('./pages/student/Certificates'), 'Certificates');
+const VoiceMockInterview = lazyPage(() => import('./pages/student/VoiceMockInterview'), 'VoiceMockInterview');
 
 // Admin Pages
-import { AdminDashboard } from './pages/admin/AdminDashboard';
-import { AdminStudents } from './pages/admin/AdminStudents';
+const AdminDashboard = lazyPage(() => import('./pages/admin/AdminDashboard'), 'AdminDashboard');
+const AdminStudents = lazyPage(() => import('./pages/admin/AdminStudents'), 'AdminStudents');
+const AdminStudentJourney = lazyPage(() => import('./pages/admin/AdminStudentJourney'), 'AdminStudentJourney');
+const AdminRegistrations = lazyPage(() => import('./pages/admin/AdminRegistrations'), 'AdminRegistrations');
+const AdminBanners = lazyPage(() => import('./pages/admin/AdminBanners'), 'AdminBanners');
+const OnlineCheckIn = lazyPage(() => import('./pages/public/OnlineCheckIn'), 'OnlineCheckIn');
+const AdminOnlineAttendance = lazyPage(() => import('./pages/admin/AdminOnlineAttendance'), 'AdminOnlineAttendance');
+const AdminStaff = lazyPage(() => import('./pages/admin/AdminStaff'), 'AdminStaff');
+const AdminStudentLogins = lazyPage(() => import('./pages/admin/AdminStudentLogins'), 'AdminStudentLogins');
+const AdminIdCardForm = lazyPage(() => import('./pages/admin/AdminIdCardForm'), 'AdminIdCardForm');
+const AdminAccount = lazyPage(() => import('./pages/admin/AdminAccount'), 'AdminAccount');
+const AdminBatches = lazyPage(() => import('./pages/admin/AdminBatches'), 'AdminBatches');
+const AdminBatchDetail = lazyPage(() => import('./pages/admin/AdminOperations'), 'AdminBatchDetail');
+const AdminTrainers = lazyPage(() => import('./pages/admin/AdminOperations'), 'AdminTrainers');
+const AdminAttendance = lazyPage(() => import('./pages/admin/AdminOperations'), 'AdminAttendance');
+const AdminHistory = lazyPage(() => import('./pages/admin/AdminOperations'), 'AdminHistory');
+const AdminBiometric = lazyPage(() => import('./pages/admin/AdminBiometric'), 'AdminBiometric');
+const AdminEssl = lazyPage(() => import('./pages/admin/AdminEssl'), 'AdminEssl');
+const AdminNextAllocations = lazyPage(() => import('./pages/admin/AdminPlanning'), 'AdminNextAllocations');
+const AdminMonthlyPlanning = lazyPage(() => import('./pages/admin/AdminPlanning'), 'AdminMonthlyPlanning');
+const AdminCourses = lazyPage(() => import('./pages/admin/AdminCourses'), 'AdminCourses');
+const TrainerBatches = lazyPage(() => import('./pages/trainer/TrainerBatches'), 'TrainerBatches');
+const TrainerBatchDetail = lazyPage(() => import('./pages/trainer/TrainerBatches'), 'TrainerBatchDetail');
 
 // Upgraded Trainer Workspace Pages
-import { TrainerDashboard } from './pages/trainer/TrainerDashboard';
-import { TrainerCourses } from './pages/trainer/TrainerCourses';
-import { CourseContentEditor } from './pages/trainer/CourseContentEditor';
-import { TrainerStudents } from './pages/trainer/TrainerStudents';
-import { StudentDetailView } from './pages/trainer/StudentDetailView';
-import { TrainerAssignments } from './pages/trainer/TrainerAssignments';
-import { TrainerAssessments } from './pages/trainer/TrainerAssessments';
-import { TrainerQuestionBank } from './pages/trainer/TrainerQuestionBank';
-import { TrainerExamResults } from './pages/trainer/TrainerExamResults';
-import { TrainerAttendance } from './pages/trainer/TrainerAttendance';
-import { TrainerCalendar } from './pages/trainer/TrainerCalendar';
-import { TrainerAnnouncements } from './pages/trainer/TrainerAnnouncements';
-import { TrainerMessages } from './pages/trainer/TrainerMessages';
-import { TrainerAnalytics } from './pages/trainer/TrainerAnalytics';
-import { TrainerProfile } from './pages/trainer/TrainerProfile';
-import { TrainerGradingPanel } from './pages/trainer/TrainerGradingPanel';
-import { QuestionBankImporter } from './pages/trainer/QuestionBankImporter';
+const TrainerDashboard = lazyPage(() => import('./pages/trainer/TrainerDashboard'), 'TrainerDashboard');
+const TrainerCourses = lazyPage(() => import('./pages/trainer/TrainerCourses'), 'TrainerCourses');
+const CourseContentEditor = lazyPage(() => import('./pages/trainer/CourseContentEditor'), 'CourseContentEditor');
+const TrainerStudents = lazyPage(() => import('./pages/trainer/TrainerStudents'), 'TrainerStudents');
+const StudentDetailView = lazyPage(() => import('./pages/trainer/StudentDetailView'), 'StudentDetailView');
+const TrainerAssignments = lazyPage(() => import('./pages/trainer/TrainerAssignments'), 'TrainerAssignments');
+const TrainerAssessments = lazyPage(() => import('./pages/trainer/TrainerAssessments'), 'TrainerAssessments');
+const TrainerQuestionBank = lazyPage(() => import('./pages/trainer/TrainerQuestionBank'), 'TrainerQuestionBank');
+const TrainerExamResults = lazyPage(() => import('./pages/trainer/TrainerExamResults'), 'TrainerExamResults');
+const TrainerAttendance = lazyPage(() => import('./pages/trainer/TrainerAttendance'), 'TrainerAttendance');
+const TrainerCalendar = lazyPage(() => import('./pages/trainer/TrainerCalendar'), 'TrainerCalendar');
+const TrainerAnnouncements = lazyPage(() => import('./pages/trainer/TrainerAnnouncements'), 'TrainerAnnouncements');
+const TrainerMessages = lazyPage(() => import('./pages/trainer/TrainerMessages'), 'TrainerMessages');
+const TrainerAnalytics = lazyPage(() => import('./pages/trainer/TrainerAnalytics'), 'TrainerAnalytics');
+const StaffProfile = lazyPage(() => import('./pages/shared/StaffProfile'), 'StaffProfile');
+const OfflineMarks = lazyPage(() => import('./pages/shared/OfflineMarks'), 'OfflineMarks');
+const CodingBank = lazyPage(() => import('./pages/shared/CodingBank'), 'CodingBank');
+const AdminCrm = lazyPage(() => import('./pages/admin/AdminCrm'), 'AdminCrm');
+const StudentCoding = lazyPage(() => import('./pages/student/StudentCoding'), 'StudentCoding');
+const StudentCodingFolder = lazyPage(() => import('./pages/student/StudentCoding'), 'StudentCodingFolder');
+const CodingTestPage = lazyPage(() => import('./pages/student/CodingTestPage'), 'CodingTestPage');
+const TrainerGradingPanel = lazyPage(() => import('./pages/trainer/TrainerGradingPanel'), 'TrainerGradingPanel');
+const QuestionBankImporter = lazyPage(() => import('./pages/trainer/QuestionBankImporter'), 'QuestionBankImporter');
 
 // Upgraded Placement Intelligence Platform Pages
-import { PlacementDashboard } from './pages/placement/PlacementDashboard';
-import { PlacementCompanies } from './pages/placement/PlacementCompanies';
-import { CompanyComparison } from './pages/placement/CompanyComparison';
-import { PlacementJobs } from './pages/placement/PlacementJobs';
-import { HiringIntelligence } from './pages/placement/HiringIntelligence';
-import { PlacementReports } from './pages/placement/PlacementReports';
+const PlacementDashboard = lazyPage(() => import('./pages/placement/PlacementDashboard'), 'PlacementDashboard');
+const PlacementCompanies = lazyPage(() => import('./pages/placement/PlacementCompanies'), 'PlacementCompanies');
+const PlacementJobs = lazyPage(() => import('./pages/placement/PlacementJobs'), 'PlacementJobs');
+const PlacementApplications = lazyPage(() => import('./pages/placement/PlacementApplications'), 'PlacementApplications');
+const PlacementReadyStudents = lazyPage(() => import('./pages/placement/PlacementReadyStudents'), 'PlacementReadyStudents');
 
 export const App: React.FC = () => {
   return (
     <ThemeProvider>
       <AuthProvider>
         <BrowserRouter>
+          <PortalPrefetcher />
+          <Suspense fallback={<PageFallback />}>
           <Routes>
             {/* Public Marketing Routes */}
             <Route element={<PublicLayout />}>
               <Route element={<GuestRoute />}>
                 <Route path="/" element={<Home />} />
                 <Route path="/login" element={<Login />} />
-                <Route path="/register" element={<Register />} />
+                <Route path="/register" element={<Navigate to="/login" replace />} />
               </Route>
               <Route path="/courses" element={<StudentCourses />} />
               <Route path="/placement" element={<PlacementDrive />} />
               <Route path="/about" element={<About />} />
               <Route path="/verify/:certificateId" element={<VerifyCertificate />} />
+              {/* Opened on a phone by scanning an online student's dashboard QR code */}
+              <Route path="/attendance/check-in" element={<OnlineCheckIn />} />
             </Route>
 
             {/* Exam Runner View (Full Screen Canvas Layout for Enrolled Students) */}
@@ -99,8 +176,11 @@ export const App: React.FC = () => {
                 <Route path="/student/exams" element={<StudentExams />} />
                 <Route path="/student/exams/:id/instructions" element={<ExamInstructions />} />
                 <Route path="/student/results/:id" element={<ExamResult />} />
-                <Route path="/student/results" element={<StudentDashboard />} />
+                <Route path="/student/results" element={<ExamResults />} />
                 <Route path="/student/resume" element={<ResumeBuilder />} />
+                <Route path="/student/coding" element={<StudentCoding />} />
+                <Route path="/student/coding/:folderId" element={<StudentCodingFolder />} />
+                <Route path="/coding-test/:token" element={<CodingTestPage />} />
                 <Route path="/student/jobs" element={<StudentJobs />} />
                 <Route path="/student/applications" element={<StudentApplications />} />
                 <Route path="/student/mock-interview" element={<VoiceMockInterview />} />
@@ -113,6 +193,8 @@ export const App: React.FC = () => {
             <Route element={<RoleGuard allowedRoles={['TRAINER', 'ADMIN', 'SUPER_ADMIN']} />}>
               <Route element={<TrainerLayout />}>
                 <Route path="/trainer/dashboard" element={<TrainerDashboard />} />
+                <Route path="/trainer/batches" element={<TrainerBatches />} />
+                <Route path="/trainer/batches/:id" element={<TrainerBatchDetail />} />
                 <Route path="/trainer/courses" element={<TrainerCourses />} />
                 <Route path="/trainer/content" element={<CourseContentEditor />} />
                 <Route path="/trainer/students" element={<TrainerStudents />} />
@@ -124,11 +206,13 @@ export const App: React.FC = () => {
                 <Route path="/trainer/question-bank/import" element={<QuestionBankImporter />} />
                 <Route path="/trainer/exams/:examId/results" element={<TrainerExamResults />} />
                 <Route path="/trainer/attendance" element={<TrainerAttendance />} />
+                <Route path="/trainer/offline-marks" element={<OfflineMarks />} />
+                <Route path="/trainer/coding" element={<CodingBank />} />
                 <Route path="/trainer/calendar" element={<TrainerCalendar />} />
                 <Route path="/trainer/announcements" element={<TrainerAnnouncements />} />
                 <Route path="/trainer/messages" element={<TrainerMessages />} />
                 <Route path="/trainer/analytics" element={<TrainerAnalytics />} />
-                <Route path="/trainer/profile" element={<TrainerProfile />} />
+                <Route path="/trainer/profile" element={<StaffProfile />} />
               </Route>
             </Route>
 
@@ -137,15 +221,11 @@ export const App: React.FC = () => {
               <Route element={<PlacementLayout />}>
                 <Route path="/placement/dashboard" element={<PlacementDashboard />} />
                 <Route path="/placement/companies" element={<PlacementCompanies />} />
-                <Route path="/placement/comparison" element={<CompanyComparison />} />
                 <Route path="/placement/jobs" element={<PlacementJobs />} />
-                <Route path="/placement/jobs/official" element={<PlacementJobs />} />
-                <Route path="/placement/applications" element={<StudentApplications />} />
-                <Route path="/placement/hiring-intelligence" element={<HiringIntelligence />} />
-                <Route path="/placement/hiring-intelligence/skills" element={<HiringIntelligence />} />
-                <Route path="/placement/hiring-intelligence/locations" element={<HiringIntelligence />} />
-                <Route path="/placement/hiring-intelligence/trends" element={<HiringIntelligence />} />
-                <Route path="/placement/reports" element={<PlacementReports />} />
+                <Route path="/placement/applications" element={<PlacementApplications />} />
+                <Route path="/placement/ready-students" element={<PlacementReadyStudents />} />
+                <Route path="/placement/profile" element={<StaffProfile />} />
+                <Route path="/placement/banners" element={<AdminBanners />} />
               </Route>
             </Route>
 
@@ -154,8 +234,30 @@ export const App: React.FC = () => {
               <Route element={<AdminLayout />}>
                 <Route path="/admin/dashboard" element={<AdminDashboard />} />
                 <Route path="/admin/students" element={<AdminStudents />} />
-                <Route path="/admin/courses" element={<StudentCourses />} />
+                <Route path="/admin/students/:id" element={<AdminStudentJourney />} />
+                <Route path="/admin/registrations" element={<AdminRegistrations />} />
+                <Route path="/admin/banners" element={<AdminBanners />} />
+                <Route path="/admin/staff" element={<AdminStaff />} />
+                <Route path="/admin/student-logins" element={<AdminStudentLogins />} />
+                <Route path="/admin/id-card-form" element={<AdminIdCardForm />} />
+                <Route path="/admin/online-attendance" element={<AdminOnlineAttendance />} />
+                <Route path="/admin/account" element={<AdminAccount />} />
+                <Route path="/admin/profile" element={<StaffProfile />} />
+                <Route path="/admin/batches" element={<AdminBatches />} />
+                <Route path="/admin/batches/:id" element={<AdminBatchDetail />} />
+                <Route path="/admin/next-allocations" element={<AdminNextAllocations />} />
+                <Route path="/admin/planning" element={<AdminMonthlyPlanning />} />
+                <Route path="/admin/courses" element={<AdminCourses />} />
+                <Route path="/admin/trainers" element={<AdminTrainers />} />
+                <Route path="/admin/attendance" element={<AdminAttendance />} />
+                <Route path="/admin/biometric" element={<AdminBiometric />} />
+                <Route path="/admin/essl" element={<AdminEssl />} />
+                <Route path="/admin/history" element={<AdminHistory />} />
+                <Route path="/admin/lms" element={<StudentCourses />} />
                 <Route path="/admin/exams" element={<StudentExams />} />
+                <Route path="/admin/offline-marks" element={<OfflineMarks />} />
+                <Route path="/admin/coding" element={<CodingBank />} />
+                <Route path="/admin/crm" element={<AdminCrm />} />
                 <Route path="/admin/audit-logs" element={<AdminDashboard />} />
               </Route>
             </Route>
@@ -163,6 +265,7 @@ export const App: React.FC = () => {
             {/* Fallback */}
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
+          </Suspense>
         </BrowserRouter>
       </AuthProvider>
     </ThemeProvider>

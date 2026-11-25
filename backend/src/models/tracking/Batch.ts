@@ -1,0 +1,94 @@
+import mongoose, { Schema, Document } from 'mongoose';
+
+export type BatchStatus = 'UPCOMING' | 'RUNNING' | 'DELAYED' | 'COMPLETED' | 'CANCELLED';
+// HYBRID = one class taught in the room and on Zoho at the same time (some students join online)
+export type LearningMode = 'ONLINE' | 'OFFLINE' | 'HYBRID';
+
+export interface IBatchHistoryEntry {
+  at: Date;
+  action: string;
+  details: string;
+  byUserId?: mongoose.Types.ObjectId;
+}
+
+export interface IBatch extends Document {
+  _id: mongoose.Types.ObjectId;
+  batchCode: string; // short ID, e.g. PY-B01
+  subjectId: mongoose.Types.ObjectId;
+  trainerId?: mongoose.Types.ObjectId; // User with role TRAINER
+  mode: LearningMode;
+  timing: string; // e.g. "7-8 AM"
+  startDate: Date;
+  expectedEndDate: Date;
+  actualEndDate?: Date;
+  capacity: number;
+  status: BatchStatus;
+  remarks: string;
+  completedTopicIds: mongoose.Types.ObjectId[]; // syllabus topics the trainer has finished for this batch
+  classesConducted: number;
+  // One shared Zoho folder per batch: the trainer uploads every class recording there, students open the same link
+  recordingsLink?: string;
+  recordingsLinkUpdatedAt?: Date;
+  // Live class: the link students use to join (a Zoho Meeting join link, or any meeting link the trainer pastes)
+  meetingLink?: string;
+  meetingStartLink?: string; // Zoho host link, only for the trainer
+  meetingKey?: string; // Zoho meeting key when created from ScholarLogic
+  nextClassAt?: Date;
+  meetingUpdatedAt?: Date;
+  // Every Zoho meeting created for this batch, so its recording can be picked up afterwards
+  zohoMeetings?: { meetingKey: string; topic: string; startAt: Date; createdAt: Date }[];
+  // One entry per class recording (from Zoho automatically, or a link the trainer adds)
+  classRecordings?: { _id?: mongoose.Types.ObjectId; title: string; url: string; recordedAt?: Date; durationMinutes?: number; source: 'ZOHO' | 'MANUAL'; zohoRecordingId?: string; meetingKey?: string; addedAt: Date }[];
+  history: IBatchHistoryEntry[]; // append-only log of batch changes
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const BatchSchema = new Schema<IBatch>(
+  {
+    batchCode: { type: String, required: true, unique: true, uppercase: true, trim: true },
+    subjectId: { type: Schema.Types.ObjectId, ref: 'Subject', required: true, index: true },
+    trainerId: { type: Schema.Types.ObjectId, ref: 'User', index: true },
+    mode: { type: String, enum: ['ONLINE', 'OFFLINE', 'HYBRID'], default: 'OFFLINE' },
+    timing: { type: String, required: true, trim: true },
+    startDate: { type: Date, required: true },
+    expectedEndDate: { type: Date, required: true },
+    actualEndDate: { type: Date },
+    capacity: { type: Number, default: 30 },
+    status: { type: String, enum: ['UPCOMING', 'RUNNING', 'DELAYED', 'COMPLETED', 'CANCELLED'], default: 'UPCOMING' },
+    remarks: { type: String, default: '' },
+    completedTopicIds: [{ type: Schema.Types.ObjectId }],
+    classesConducted: { type: Number, default: 0 },
+    recordingsLink: { type: String, default: '', trim: true },
+    recordingsLinkUpdatedAt: { type: Date },
+    meetingLink: { type: String, default: '', trim: true },
+    meetingStartLink: { type: String, default: '', trim: true },
+    meetingKey: { type: String, default: '' },
+    nextClassAt: { type: Date },
+    meetingUpdatedAt: { type: Date },
+    zohoMeetings: [{ _id: false, meetingKey: String, topic: String, startAt: Date, createdAt: Date }],
+    classRecordings: [
+      {
+        title: { type: String, default: '' },
+        url: { type: String, required: true },
+        recordedAt: { type: Date },
+        durationMinutes: { type: Number },
+        source: { type: String, enum: ['ZOHO', 'MANUAL'], default: 'MANUAL' },
+        zohoRecordingId: { type: String, default: '' },
+        meetingKey: { type: String, default: '' },
+        addedAt: { type: Date, default: Date.now },
+      },
+    ],
+    history: [
+      {
+        at: { type: Date, default: Date.now },
+        action: String,
+        details: String,
+        byUserId: { type: Schema.Types.ObjectId, ref: 'User' },
+      },
+    ],
+  },
+  { timestamps: true }
+);
+
+export const Batch = mongoose.model<IBatch>('Batch', BatchSchema);

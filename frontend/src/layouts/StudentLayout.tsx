@@ -2,6 +2,7 @@ import React from 'react';
 import { Outlet } from 'react-router-dom';
 import { Navbar } from '../components/Navbar';
 import { StudentSidebar } from '../sidebars/StudentSidebar';
+import { NewJobsPopup } from '../components/NewJobsPopup';
 
 export const StudentLayout: React.FC = () => {
   return (
@@ -13,6 +14,7 @@ export const StudentLayout: React.FC = () => {
           <Outlet />
         </main>
       </div>
+      <NewJobsPopup />
     </div>
   );
 };

@@ -32,10 +32,11 @@ const CompanySchema = new Schema<ICompany>(
     website: { type: String, default: '' },
     officialCareersUrl: { type: String, default: '' },
     industry: { type: String, required: true, default: 'Information Technology' },
-    description: { type: String, required: true },
+    // Optional so a company can be added just by typing its name when publishing a job
+    description: { type: String, default: '' },
     location: { type: String, required: true },
     headquarters: { type: String, default: '' },
-    contactEmail: { type: String, required: true },
+    contactEmail: { type: String, default: '' },
     contactPhone: { type: String, default: '' },
     hiringStatus: {
       type: String,

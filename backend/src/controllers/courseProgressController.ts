@@ -9,6 +9,7 @@ import { Quiz } from '../models/Quiz';
 import { Assignment } from '../models/Assignment';
 import { Exam } from '../models/Exam';
 import { AppError } from '../middleware/errorHandler';
+import { batchIdsForStudentUser, filterLessonsForBatches } from '../services/lessonVisibility';
 
 export const getStudentCourseProgress = async (req: AuthRequest, res: Response): Promise<void> => {
   const { courseId } = req.params;
@@ -20,7 +21,10 @@ export const getStudentCourseProgress = async (req: AuthRequest, res: Response):
   const modules = await Module.find({ courseId }).sort({ order: 1 });
   const moduleIds = modules.map((m) => m._id);
 
-  const lessons = await Lesson.find({ moduleId: { $in: moduleIds }, isPublished: true }).sort({ order: 1 });
+  const lessons = filterLessonsForBatches(
+    await Lesson.find({ moduleId: { $in: moduleIds }, isPublished: true }).sort({ order: 1 }),
+    await batchIdsForStudentUser(studentId)
+  );
   const totalLessons = lessons.length;
 
   const totalVideos = lessons.filter((l) => l.videoUrl || l.type === 'VIDEO').length;
@@ -67,6 +71,10 @@ export const getStudentCourseProgress = async (req: AuthRequest, res: Response):
         title: les.title,
         type: les.type,
         videoUrl: les.videoUrl,
+        videoSource: les.videoSource,
+        externalProvider: les.externalProvider,
+        externalRecordingId: les.externalRecordingId,
+        externalRecordingUrl: les.externalRecordingUrl,
         notesFileUrl: les.notesFileUrl,
         notesFileType: les.notesFileType,
         durationMinutes: les.durationMinutes || 20,

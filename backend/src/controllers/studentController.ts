@@ -1,6 +1,8 @@
 import { Response } from 'express';
+import { OfflineTest } from '../models/OfflineTest';
 import { AuthRequest } from '../middleware/auth';
 import { Student } from '../models/Student';
+import { User } from '../models/User';
 import { Course } from '../models/Course';
 import { VideoProgress } from '../models/VideoProgress';
 import { LessonProgress } from '../models/LessonProgress';
@@ -9,6 +11,7 @@ import { Exam } from '../models/Exam';
 import { Result } from '../models/Result';
 import { Application } from '../models/Application';
 import { ResumeAnalysis } from '../models/ResumeAnalysis';
+import { Resume } from '../models/Resume';
 import { AppError } from '../middleware/errorHandler';
 
 export const getStudentDashboard = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -60,8 +63,12 @@ export const getStudentDashboard = async (req: AuthRequest, res: Response): Prom
     .limit(3);
 
   // 4. Resume ATS Score for THIS student
-  const latestAnalysis = await ResumeAnalysis.findOne({ studentId: student._id }).sort({ createdAt: -1 });
+  const latestAnalysis: any = await ResumeAnalysis.findOne({ studentId: student._id }).sort({ createdAt: -1 }).lean();
   const atsScore = latestAnalysis ? latestAnalysis.atsScore : null;
+  const resumeScore = latestAnalysis
+    ? { score: latestAnalysis.atsScore, kind: latestAnalysis.kind || 'JOB_MATCH', target: latestAnalysis.target || '', resumeName: latestAnalysis.resumeName || '', at: latestAnalysis.createdAt }
+    : null;
+  const hasResume = !!(await Resume.exists({ studentId: student._id }));
 
   // 5. Job Applications Metrics for THIS student (Zero fallback!)
   const totalApplications = await Application.countDocuments({ studentId: student._id });
@@ -102,14 +109,74 @@ export const getStudentDashboard = async (req: AuthRequest, res: Response): Prom
     totalLessons: doc.totalLessonsCount,
   }));
 
+  // 8. Exam Leaderboard: points = sum of each student's best score per exam
+  const standings: { _id: any; points: number; examsTaken: number }[] = await Result.aggregate([
+    { $group: { _id: { studentId: '$studentId', examId: '$examId' }, best: { $max: '$score' } } },
+    { $group: { _id: '$_id.studentId', points: { $sum: '$best' }, examsTaken: { $sum: 1 } } },
+    // Skip results left behind by deleted student/user accounts
+    { $lookup: { from: Student.collection.name, localField: '_id', foreignField: '_id', as: 'student' } },
+    { $unwind: '$student' },
+    { $lookup: { from: User.collection.name, localField: 'student.userId', foreignField: '_id', as: 'user' } },
+    { $unwind: '$user' },
+    { $addFields: { name: '$user.fullName' } },
+    { $project: { student: 0, user: 0 } },
+    { $sort: { points: -1, _id: 1 } },
+  ]);
+  // Offline (written) tests whose marks trainers uploaded from Excel count too: marks add to the points
+  const offline: { _id: any; points: number; tests: number; name: string }[] = await OfflineTest.aggregate([
+    { $unwind: '$entries' },
+    { $group: { _id: '$entries.studentId', points: { $sum: '$entries.marks' }, tests: { $sum: 1 } } },
+    { $lookup: { from: Student.collection.name, localField: '_id', foreignField: '_id', as: 'student' } },
+    { $unwind: '$student' },
+    { $lookup: { from: User.collection.name, localField: 'student.userId', foreignField: '_id', as: 'user' } },
+    { $unwind: '$user' },
+    { $project: { points: 1, tests: 1, name: '$user.fullName' } },
+  ]);
+  for (const o of offline) {
+    const s: any = standings.find((x) => String(x._id) === String(o._id));
+    if (s) {
+      s.points += o.points;
+      s.examsTaken += o.tests;
+    } else standings.push({ _id: o._id, points: o.points, examsTaken: o.tests, name: o.name } as any);
+  }
+  standings.sort((a, b) => b.points - a.points || String(a._id).localeCompare(String(b._id)));
+
+  const topStandings = standings.slice(0, 10);
+  const nameByStudentId = new Map(topStandings.map((s: any) => [String(s._id), s.name || 'Student']));
+
+  const myIndex = standings.findIndex((s) => String(s._id) === String(student._id));
+  const myLatestResult = recentResults[0];
+
+  const leaderboard = {
+    top: topStandings.map((s, i) => ({
+      rank: i + 1,
+      name: nameByStudentId.get(String(s._id)) || 'Student',
+      points: Math.round(s.points),
+      examsTaken: s.examsTaken,
+      isMe: String(s._id) === String(student._id),
+    })),
+    me: myIndex >= 0
+      ? {
+          rank: myIndex + 1,
+          points: Math.round(standings[myIndex].points),
+          examsTaken: standings[myIndex].examsTaken,
+          latestResultId: myLatestResult?._id || null,
+        }
+      : null,
+    totalParticipants: standings.length,
+  };
+
   res.json({
     success: true,
     data: {
+      leaderboard,
       student,
       metrics: {
         learningProgressPct,
         enrolledCoursesCount,
         atsScore,
+        resumeScore,
+        hasResume,
         totalApplications,
         shortlistedApplications,
         pendingInterviews,
@@ -150,6 +217,7 @@ export const updateStudentProfile = async (req: AuthRequest, res: Response): Pro
     'skills',
     'projects',
     'certifications',
+    'experiences',
     'githubUrl',
     'linkedInUrl',
     'portfolioUrl',
@@ -163,7 +231,16 @@ export const updateStudentProfile = async (req: AuthRequest, res: Response): Pro
     }
   });
 
+  // Display name lives on the User record
+  const fullName = typeof req.body.fullName === 'string' ? req.body.fullName.trim() : undefined;
+  if (fullName === '') {
+    throw new AppError('Name cannot be empty', 400, 'VALIDATION_ERROR');
+  }
+
   await student.save();
+  if (fullName) {
+    await User.updateOne({ _id: req.user.userId }, { fullName });
+  }
 
   res.json({
     success: true,

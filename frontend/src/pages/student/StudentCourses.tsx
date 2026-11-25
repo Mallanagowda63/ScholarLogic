@@ -4,7 +4,7 @@ import { useAuth } from '../../context/AuthContext';
 import { api } from '../../services/api';
 import { Course } from '../../types';
 import { Badge } from '../../components/Badge';
-import { Search, BookOpen, Clock, ArrowRight, Video, FileText, CheckCircle2, Play, Download, Eye, TrendingUp, Filter, Sparkles } from 'lucide-react';
+import { Search, BookOpen, ArrowRight, Video, FileText, CheckCircle2, Play, Download, Eye, TrendingUp, Filter, Sparkles } from 'lucide-react';
 
 export const StudentCourses: React.FC = () => {
   const { user, studentProfile } = useAuth();
@@ -15,7 +15,7 @@ export const StudentCourses: React.FC = () => {
   const [courses, setCourses] = useState<Course[]>([]);
   const [registeredProgress, setRegisteredProgress] = useState<any[]>([]);
   const [selectedCourseId, setSelectedCourseId] = useState<string>(courseParam || '');
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(() => searchParams.get('q') || '');
   const [category, setCategory] = useState('');
   const [loading, setLoading] = useState(true);
 
@@ -38,7 +38,7 @@ export const StudentCourses: React.FC = () => {
           setCourses(fetchedCourses);
 
           // Auto-match selected course based on student's preferred role if not explicitly set
-          if (!courseParam && studentProfile?.preferredRole && fetchedCourses.length > 0) {
+          if (!courseParam && !user && studentProfile?.preferredRole && fetchedCourses.length > 0) {
             const role = studentProfile.preferredRole.toLowerCase();
             const matched = fetchedCourses.find((c: any) => {
               const title = c.title.toLowerCase();
@@ -193,6 +193,10 @@ export const StudentCourses: React.FC = () => {
         <div className="flex h-64 items-center justify-center">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-500 border-t-transparent" />
         </div>
+      ) : activeTab === 'COURSES' && user && courses.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-slate-300 p-10 text-center text-sm text-slate-500 dark:border-slate-700">
+          Your course lessons will appear here once the office assigns your course.
+        </div>
       ) : activeTab === 'COURSES' ? (
         /* TAB 1: Registered Courses Cards */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -245,16 +249,12 @@ export const StudentCourses: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="p-5 pt-0 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between mt-4">
-                  <span className="text-xs text-slate-500 font-mono flex items-center gap-1">
-                    <Clock className="h-3.5 w-3.5 text-brand-500" /> {c.durationHours}h
-                  </span>
-
+                <div className="p-5 pt-0 border-t border-slate-100 dark:border-slate-800 flex items-center justify-end mt-4">
                   <Link
-                    to={user ? `/student/courses/${c._id}` : '/register'}
+                    to={user ? `/student/courses/${c._id}` : '/login'}
                     className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-brand-600 text-white text-xs font-bold shadow-md hover:bg-brand-700 transition-colors"
                   >
-                    {user ? 'Open LMS' : 'Enroll Now'} <ArrowRight className="h-3.5 w-3.5" />
+                    {user ? 'Open LMS' : 'Sign in to start'} <ArrowRight className="h-3.5 w-3.5" />
                   </Link>
                 </div>
               </div>

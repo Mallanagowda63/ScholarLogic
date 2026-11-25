@@ -21,6 +21,7 @@ export interface ILesson extends Document {
   notesFileType?: string;
   assignmentId?: mongoose.Types.ObjectId;
   quizId?: mongoose.Types.ObjectId;
+  batchIds: mongoose.Types.ObjectId[]; // batches the trainer sent this to; empty = everyone in the course
   isPublished: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -53,6 +54,7 @@ const LessonSchema = new Schema<ILesson>(
     notesFileType: { type: String, default: 'PDF' },
     assignmentId: { type: Schema.Types.ObjectId, ref: 'Assignment' },
     quizId: { type: Schema.Types.ObjectId, ref: 'Quiz' },
+    batchIds: [{ type: Schema.Types.ObjectId, ref: 'Batch' }],
     isPublished: { type: Boolean, default: true },
   },
   { timestamps: true }

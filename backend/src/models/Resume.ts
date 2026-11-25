@@ -30,6 +30,7 @@ export interface IResumeProject {
 
 export interface IResumeData {
   fullName: string;
+  headline?: string; // target role shown under the name
   email: string;
   phone: string;
   location: string;
@@ -70,7 +71,8 @@ const ResumeSchema = new Schema<IResume>(
     },
     data: {
       fullName: { type: String, required: true },
-      email: { type: String, required: true },
+      headline: { type: String, default: '' },
+      email: { type: String, default: '' },
       phone: { type: String, default: '' },
       location: { type: String, default: '' },
       linkedInUrl: { type: String, default: '' },

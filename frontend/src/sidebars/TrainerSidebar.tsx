@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { UserAvatar } from '../components/UserAvatar';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -16,6 +17,8 @@ import {
   User,
   ChevronDown,
   ChevronRight,
+  ClipboardList,
+  Code2,
 } from 'lucide-react';
 
 export const TrainerSidebar: React.FC = () => {
@@ -30,11 +33,7 @@ export const TrainerSidebar: React.FC = () => {
         {/* Trainer Header Card (NO STUDENT FIELDS) */}
         <div className="mb-6 p-4 rounded-2xl bg-gradient-to-br from-slate-900 via-indigo-950 to-brand-950 text-white border border-brand-500/30 shadow-xl">
           <div className="flex items-center gap-3">
-            <img
-              src={user.avatarUrl || 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=100'}
-              alt={user.fullName}
-              className="h-10 w-10 rounded-xl border border-brand-400/40 object-cover"
-            />
+            <UserAvatar user={user} className="h-10 w-10 rounded-xl border border-brand-400/40" />
             <div className="overflow-hidden">
               <h4 className="font-bold text-xs truncate text-white">{user.fullName}</h4>
               <span className="inline-block mt-0.5 px-2 py-0.5 rounded bg-brand-500/30 text-brand-300 text-[10px] font-bold uppercase tracking-wider">
@@ -98,10 +97,13 @@ export const TrainerSidebar: React.FC = () => {
             )}
           </div>
 
+          <NavLink to="/trainer/batches" className={({ isActive }) => `flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold ${isActive ? 'bg-brand-600 text-white' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100'}`}><CheckSquare className="h-4 w-4 text-brand-500" /> My Batches &amp; Class Updates</NavLink>
           <NavLink to="/trainer/students" className={({ isActive }) => `flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold ${isActive ? 'bg-brand-600 text-white' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100'}`}><Users className="h-4 w-4 text-indigo-500" /> Students</NavLink>
           <NavLink to="/trainer/assignments" className={({ isActive }) => `flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold ${isActive ? 'bg-brand-600 text-white' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100'}`}><FileText className="h-4 w-4 text-amber-500" /> Assignments</NavLink>
           <NavLink to="/trainer/exams?tab=quizzes" className={({ isActive }) => `flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold ${isActive ? 'bg-brand-600 text-white' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100'}`}><HelpCircle className="h-4 w-4 text-purple-500" /> Quizzes</NavLink>
           <NavLink to="/trainer/exams" className={({ isActive }) => `flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold ${isActive ? 'bg-brand-600 text-white' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100'}`}><FileCheck className="h-4 w-4 text-blue-500" /> Exams</NavLink>
+          <NavLink to="/trainer/coding" className={({ isActive }) => `flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold ${isActive ? 'bg-brand-600 text-white' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100'}`}><Code2 className="h-4 w-4 text-sky-500" /> Technical Practice</NavLink>
+          <NavLink to="/trainer/offline-marks" className={({ isActive }) => `flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold ${isActive ? 'bg-brand-600 text-white' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100'}`}><ClipboardList className="h-4 w-4 text-emerald-500" /> Offline Test Marks</NavLink>
           <NavLink to="/trainer/attendance" className={({ isActive }) => `flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold ${isActive ? 'bg-brand-600 text-white' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100'}`}><CheckSquare className="h-4 w-4 text-teal-500" /> Attendance</NavLink>
           <NavLink to="/trainer/students?tab=progress" className={({ isActive }) => `flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold ${isActive ? 'bg-brand-600 text-white' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100'}`}><TrendingUp className="h-4 w-4 text-rose-500" /> Student Performance</NavLink>
           <NavLink to="/trainer/announcements" className={({ isActive }) => `flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-semibold ${isActive ? 'bg-brand-600 text-white' : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100'}`}><Bell className="h-4 w-4 text-amber-500" /> Announcements</NavLink>

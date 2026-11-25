@@ -144,75 +144,10 @@ export const CourseDetail: React.FC = () => {
       <div className="border-b border-slate-200 dark:border-slate-800 pb-4">
         <div className="flex items-center gap-2 mb-1">
           <Badge variant="purple">{course.level || 'BEGINNER'}</Badge>
-          <span className="text-xs text-slate-500 font-mono font-bold">• {course.totalHours || 40} Hours Total</span>
+          <span className="text-xs text-slate-500 font-mono font-bold">• {course.category || 'Course'}</span>
         </div>
-        <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">{course.title || 'Data Analytics & Power BI Mastery'}</h1>
+        <h1 className="text-2xl font-extrabold text-slate-900 dark:text-white">{course.title || 'Course'}</h1>
         <p className="text-xs text-slate-500 mt-1">{course.description}</p>
-      </div>
-
-      {/* 1. COURSE PROGRESS HERO (Requirement 1 & 28) */}
-      <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Course Progress</span>
-            <div className="flex items-baseline gap-3 mt-1">
-              <span className="text-3xl font-black text-brand-600 dark:text-brand-400">{p.progressPercentage}% Completed</span>
-              <span className="text-xs font-bold text-slate-500 font-mono">{p.completedLessons} / {p.totalLessons} Lessons Completed ({p.remainingLessons} Remaining)</span>
-            </div>
-          </div>
-
-          {p.certificateEligible ? (
-            <Link
-              to="/student/certificates"
-              className="px-5 py-2.5 rounded-2xl bg-emerald-600 text-white font-extrabold text-xs shadow-lg hover:bg-emerald-700 flex items-center gap-2"
-            >
-              <GraduationCap className="h-5 w-5" /> 🎉 Claim Certificate
-            </Link>
-          ) : (
-            <button
-              onClick={() => setActiveLesson(nextL)}
-              className="px-5 py-2.5 rounded-2xl bg-brand-600 text-white font-extrabold text-xs shadow-lg hover:bg-brand-700 flex items-center gap-2"
-            >
-              <Play className="h-4 w-4" /> Continue Learning →
-            </button>
-          )}
-        </div>
-
-        {/* Dynamic Progress Bar */}
-        <div className="h-3.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden p-0.5">
-          <div
-            className="h-full bg-gradient-to-r from-brand-600 to-indigo-500 rounded-full transition-all duration-500"
-            style={{ width: `${p.progressPercentage}%` }}
-          />
-        </div>
-
-        {/* 2. COURSE OVERVIEW CARDS (Requirement 2) */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 text-center text-xs">
-          <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
-            <span className="text-[10px] text-slate-400 font-bold uppercase block">Lessons</span>
-            <span className="font-black text-slate-900 dark:text-white text-base">{p.completedLessons} / {p.totalLessons}</span>
-          </div>
-          <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
-            <span className="text-[10px] text-slate-400 font-bold uppercase block">Videos</span>
-            <span className="font-black text-emerald-600 text-base">{p.completedVideos} / {p.totalVideos}</span>
-          </div>
-          <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
-            <span className="text-[10px] text-slate-400 font-bold uppercase block">Notes</span>
-            <span className="font-black text-brand-600 text-base">{p.completedNotes} / {p.totalNotes}</span>
-          </div>
-          <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
-            <span className="text-[10px] text-slate-400 font-bold uppercase block">Quizzes</span>
-            <span className="font-black text-purple-600 text-base">{p.completedQuizzes} / {p.totalQuizzes}</span>
-          </div>
-          <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
-            <span className="text-[10px] text-slate-400 font-bold uppercase block">Assignments</span>
-            <span className="font-black text-amber-600 text-base">{p.completedAssignments} / {p.totalAssignments}</span>
-          </div>
-          <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800">
-            <span className="text-[10px] text-slate-400 font-bold uppercase block">Exams</span>
-            <span className="font-black text-blue-600 text-base">{p.completedExams} / {p.totalExams}</span>
-          </div>
-        </div>
       </div>
 
       {/* ACTIVE LESSON PLAYER & CONTENT WORKSPACE (Requirements 7, 8, 14, 17) */}
@@ -326,9 +261,9 @@ export const CourseDetail: React.FC = () => {
       )}
 
       {/* 4. COURSE CURRICULUM & OVERVIEW SIDEBAR (Requirements 4, 5, 10) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left 2 Cols: Course Curriculum Panel */}
-        <div className="lg:col-span-2 rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-6">
+      <div className="grid grid-cols-1 gap-8">
+        {/* Course Curriculum Panel */}
+        <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-6">
           <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
             <h3 className="font-extrabold text-base text-slate-900 dark:text-white flex items-center gap-2">
               <BookOpen className="h-5 w-5 text-brand-500" /> Course Curriculum & Lesson Status
@@ -387,48 +322,6 @@ export const CourseDetail: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Col: Streak, Activity & Academic Performance (Requirements 11, 13, 14, 15) */}
-        <div className="space-y-6">
-          {/* Learning Streak */}
-          <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm space-y-3">
-            <h3 className="font-bold text-xs text-slate-900 dark:text-white flex items-center gap-2">
-              <Flame className="h-4 w-4 text-amber-500" /> 🔥 {p.streakDays} Day Learning Streak
-            </h3>
-            <div className="grid grid-cols-5 gap-1.5 text-center text-[10px] font-bold">
-              <div className="p-2 rounded-xl bg-amber-500 text-white">Mon ✓</div>
-              <div className="p-2 rounded-xl bg-amber-500 text-white">Tue ✓</div>
-              <div className="p-2 rounded-xl bg-amber-500 text-white">Wed ✓</div>
-              <div className="p-2 rounded-xl bg-amber-500 text-white">Thu ✓</div>
-              <div className="p-2 rounded-xl bg-amber-500 text-white">Fri ✓</div>
-            </div>
-          </div>
-
-          {/* Academic Performance (Requirement 15) */}
-          <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm space-y-3">
-            <h3 className="font-bold text-xs text-slate-900 dark:text-white flex items-center gap-2">
-              <Award className="h-4 w-4 text-brand-500" /> Academic Performance Score
-            </h3>
-
-            <div className="space-y-2 text-xs">
-              <div className="flex justify-between">
-                <span className="text-slate-500 font-medium">Quiz Average:</span>
-                <span className="font-extrabold text-purple-600">{p.quizAvgScore}%</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500 font-medium">Assignment Average:</span>
-                <span className="font-extrabold text-amber-600">{p.assignmentAvgScore}%</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500 font-medium">Exam Average:</span>
-                <span className="font-extrabold text-blue-600">{p.examAvgScore}%</span>
-              </div>
-              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-between font-black">
-                <span className="text-slate-900 dark:text-white">Overall Score:</span>
-                <span className="text-emerald-600">{p.academicScore}%</span>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Notes Viewer Modal */}

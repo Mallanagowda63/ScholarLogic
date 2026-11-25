@@ -1,13 +1,12 @@
 import { Response } from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
-import mongoose from 'mongoose';
 import { User } from '../models/User';
 import { Student } from '../models/Student';
-import { Resume } from '../models/Resume';
-import { getNextStudentId } from '../models/Counter';
 import { env } from '../config/env';
-import { AuthRequest } from '../middleware/auth';
+import { AuthRequest, forgetStaffCheck } from '../middleware/auth';
+import { AuditLog } from '../models/AuditLog';
+import { ProfilePhoto } from '../models/ProfilePhoto';
 import { AppError } from '../middleware/errorHandler';
 
 function generateTokens(payload: any) {
@@ -16,147 +15,39 @@ function generateTokens(payload: any) {
   return { accessToken, refreshToken };
 }
 
-export const register = async (req: AuthRequest, res: Response): Promise<void> => {
-  const { email, password, fullName, role = 'STUDENT', college, degree, branch, preferredRole } = req.body;
-
-  if (!email || !password || !fullName) {
-    throw new AppError('Email, password, and full name are required', 400, 'MISSING_FIELDS');
-  }
-
-  const normalizedEmail = email.trim().toLowerCase();
-
-  const existingUser = await User.findOne({ email: normalizedEmail });
-  if (existingUser) {
-    throw new AppError('An account with this email already exists. Please Sign In using your password, or use a different email.', 400, 'USER_EXISTS');
-  }
-
-  const salt = await bcrypt.genSalt(10);
-  const passwordHash = await bcrypt.hash(password, salt);
-
-  let newUser: any;
-  let studentId: string | undefined;
-  let studentDoc: any;
-
-  // Wrap User + Student + Resume creation in a transaction so a mid-way failure
-  // (e.g. a transient DB blip) can never leave an orphaned User with no Student profile.
-  const session = await mongoose.startSession();
-  try {
-    await session.withTransaction(async () => {
-      const createdUsers = await User.create(
-        [
-          {
-            email: normalizedEmail,
-            passwordHash,
-            fullName,
-            role: role as any,
-            isVerified: true,
-          },
-        ],
-        { session }
-      );
-      newUser = createdUsers[0];
-
-      if (newUser.role === 'STUDENT') {
-        studentId = await getNextStudentId(session);
-        const createdStudents = await Student.create(
-          [
-            {
-              userId: newUser._id,
-              studentId,
-              college: college || 'ScholarLogic Institute of Technology',
-              degree: degree || 'B.Tech',
-              branch: branch || 'Computer Science & Engineering',
-              preferredRole: preferredRole || 'DevOps & Infrastructure',
-              graduationYear: 2026,
-              cgpa: 8.5,
-            },
-          ],
-          { session }
-        );
-        studentDoc = createdStudents[0];
-
-        // Auto-create default ATS Resume record for student
-        await Resume.create(
-          [
-            {
-              studentId: studentDoc._id,
-              title: `${newUser.fullName} Profile Resume`,
-              versionName: 'Primary Profile Version',
-              template: 'MODERN',
-              isDefault: true,
-              data: {
-                fullName: newUser.fullName,
-                email: newUser.email,
-                phone: '+91 98765 43210',
-                location: 'India',
-                summary: `Student pursuing ${degree || 'B.Tech'} in ${branch || 'Computer Science & Engineering'} at ${college || 'ScholarLogic Institute of Technology'}.`,
-                skills: ['Python', 'JavaScript', 'React', 'SQL', 'Git'],
-                experience: [],
-                education: [
-                  {
-                    institution: college || 'ScholarLogic Institute of Technology',
-                    degree: degree || 'B.Tech',
-                    fieldOfStudy: branch || 'Computer Science & Engineering',
-                    startDate: '2022',
-                    endDate: '2026',
-                    grade: 'CGPA: 8.5',
-                  },
-                ],
-                projects: [],
-                certifications: [],
-              },
-            },
-          ],
-          { session }
-        );
-      }
-    });
-  } finally {
-    await session.endSession();
-  }
-
-  const tokenPayload = {
-    userId: newUser._id.toString(),
-    email: newUser.email,
-    role: newUser.role,
-    fullName: newUser.fullName,
-    studentId,
-    studentMongoId: studentDoc?._id?.toString(),
-  };
-
-  const tokens = generateTokens(tokenPayload);
-
-  newUser.refreshToken = tokens.refreshToken;
-  await newUser.save();
-
-  res.status(201).json({
-    success: true,
-    message: 'Registration successful',
-    data: {
-      user: {
-        id: newUser._id,
-        email: newUser.email,
-        fullName: newUser.fullName,
-        role: newUser.role,
-        studentId,
-      },
-      tokens,
-    },
-  });
-};
+// Public self-registration was removed: students are created from the Google Form (admin Verify) or the
+// eSSL machine import, and staff by an admin on Staff Access.
 
 export const login = async (req: AuthRequest, res: Response): Promise<void> => {
   const { email, password } = req.body;
 
   if (!email || !password) {
-    throw new AppError('Email and password are required', 400, 'MISSING_FIELDS');
+    throw new AppError('Email / Student ID and password are required', 400, 'MISSING_FIELDS');
   }
 
-  const normalizedEmail = email.trim().toLowerCase();
-
-  const user = await User.findOne({ email: normalizedEmail });
+  // The identifier may be an email, a Student ID, or the student's machine code from eSSL (e.g. SCLR245)
+  const identifier = String(email).trim();
+  let user;
+  if (identifier.includes('@')) {
+    user = await User.findOne({ email: identifier.toLowerCase() });
+  } else {
+    const student =
+      (await Student.findOne({ studentId: identifier.toUpperCase() }).select('userId')) ||
+      (await Student.findOne({ biometricId: { $in: [identifier, identifier.toUpperCase()] } }).select('userId'));
+    user = student ? await User.findById(student.userId) : null;
+  }
   if (!user) {
-    throw new AppError('No account found with this email address. Please register a new account.', 401, 'INVALID_CREDENTIALS');
+    throw new AppError('No account found with this email, Student ID or machine code.', 401, 'INVALID_CREDENTIALS');
+  }
+
+  if (user.isActive === false) {
+    throw new AppError(
+      user.role === 'STUDENT'
+        ? 'Your access to the ScholarLogic portal is switched off. Please contact the ScholarLogic office.'
+        : 'Your access has been removed. Please contact the admin.',
+      403,
+      'ACCESS_REMOVED'
+    );
   }
 
   const isMatch = await user.comparePassword(password);
@@ -186,6 +77,8 @@ export const login = async (req: AuthRequest, res: Response): Promise<void> => {
 
   const tokens = generateTokens(tokenPayload);
   user.refreshToken = tokens.refreshToken;
+  user.lastLoginAt = new Date();
+  user.loginCount = (user.loginCount || 0) + 1;
   await user.save();
 
   res.json({
@@ -216,7 +109,7 @@ export const refreshToken = async (req: AuthRequest, res: Response): Promise<voi
     const decoded = jwt.verify(token, env.JWT_REFRESH_SECRET) as any;
     const user = await User.findById(decoded.userId);
 
-    if (!user || user.refreshToken !== token) {
+    if (!user || user.refreshToken !== token || user.isActive === false) {
       throw new AppError('Invalid refresh token', 401, 'INVALID_REFRESH_TOKEN');
     }
 
@@ -269,4 +162,138 @@ export const getMe = async (req: AuthRequest, res: Response): Promise<void> => {
       studentProfile,
     },
   });
+};
+
+/**
+ * Admins change their own login email and/or password (current password required).
+ * Trainers, the placement team and students cannot change theirs; an admin resets those.
+ * A new password signs out the admin's other sessions; this one gets fresh tokens.
+ */
+export const updateMyCredentials = async (req: AuthRequest, res: Response): Promise<void> => {
+  const { currentPassword, newEmail, newPassword } = req.body || {};
+  const user = await User.findById(req.user!.userId);
+  if (!user || !['ADMIN', 'SUPER_ADMIN'].includes(user.role)) throw new AppError('Only admins can change their login here', 403, 'FORBIDDEN');
+  if (!currentPassword || !(await user.comparePassword(String(currentPassword)))) {
+    throw new AppError('Your current password is not correct', 400, 'WRONG_PASSWORD');
+  }
+
+  const changed: string[] = [];
+  const email = typeof newEmail === 'string' ? newEmail.trim().toLowerCase() : '';
+  if (email && email !== user.email) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new AppError('Enter a valid email address', 400, 'INVALID_EMAIL');
+    if (await User.exists({ email, _id: { $ne: user._id } })) throw new AppError('Another account already uses this email', 409, 'DUPLICATE');
+    user.email = email;
+    changed.push('email');
+  }
+  if (typeof newPassword === 'string' && newPassword) {
+    const pw = newPassword;
+    if (pw.length < 10 || !/[A-Za-z]/.test(pw) || !/\d/.test(pw)) {
+      throw new AppError('The new password needs at least 10 characters, with letters and numbers', 400, 'WEAK_PASSWORD');
+    }
+    if (pw === String(currentPassword)) throw new AppError('The new password must be different from the current one', 400, 'SAME_PASSWORD');
+    if (/^(admin|password|scholarlogic)@?123/i.test(pw)) throw new AppError('Choose a password that is harder to guess', 400, 'WEAK_PASSWORD');
+    user.passwordHash = await bcrypt.hash(pw, 10);
+    user.passwordChangedAt = new Date();
+    changed.push('password');
+  }
+  if (!changed.length) throw new AppError('Enter a new email or a new password', 400, 'NOTHING_TO_CHANGE');
+
+  const payload = { userId: user._id.toString(), email: user.email, role: user.role, fullName: user.fullName };
+  const tokens = generateTokens(payload);
+  user.refreshToken = tokens.refreshToken;
+  await user.save();
+  forgetStaffCheck(user._id.toString());
+  await AuditLog.create({
+    userId: user._id,
+    userEmail: user.email,
+    userRole: user.role,
+    action: 'ADMIN_CREDENTIALS_CHANGED',
+    resource: 'ACCOUNT',
+    metadata: { changed },
+    ipAddress: req.ip,
+  }).catch(() => undefined);
+
+  res.json({
+    success: true,
+    message: `Your ${changed.join(' and ')} ${changed.length > 1 ? 'were' : 'was'} changed`,
+    data: { user: { id: user._id, email: user.email, fullName: user.fullName, role: user.role }, tokens },
+  });
+};
+
+// ---------------------------------------------------------------------------
+// My Profile (admins, trainers, placement team): name and contact/work details only.
+// Email (the login ID), password and role are never changed here.
+// ---------------------------------------------------------------------------
+const PROFILE_FIELDS = ['phone', 'designation', 'department', 'specialization', 'experience', 'bio'] as const;
+const PROFILE_LIMITS: Record<(typeof PROFILE_FIELDS)[number], number> = { phone: 20, designation: 80, department: 80, specialization: 120, experience: 40, bio: 600 };
+
+const profileView = (u: any) => ({
+  fullName: u.fullName,
+  avatarUrl: u.avatarUrl || '',
+  email: u.email,
+  role: u.role,
+  profile: Object.fromEntries(PROFILE_FIELDS.map((k) => [k, u.profile?.[k] || ''])),
+});
+
+export const getMyProfile = async (req: AuthRequest, res: Response): Promise<void> => {
+  const user = await User.findById(req.user!.userId).select('fullName email role profile avatarUrl').lean();
+  if (!user) throw new AppError('Account not found', 404, 'NOT_FOUND');
+  res.json({ success: true, data: profileView(user) });
+};
+
+export const updateMyProfile = async (req: AuthRequest, res: Response): Promise<void> => {
+  const user = await User.findById(req.user!.userId);
+  if (!user) throw new AppError('Account not found', 404, 'NOT_FOUND');
+  const body = req.body || {};
+  if (body.email !== undefined || body.password !== undefined || body.newPassword !== undefined || body.role !== undefined) {
+    throw new AppError('Your login email, password and role can only be changed by an admin', 403, 'NOT_ALLOWED');
+  }
+  if (body.fullName !== undefined) {
+    const name = String(body.fullName).trim();
+    if (name.length < 2 || name.length > 80) throw new AppError('Enter your full name (2 to 80 characters)', 400, 'INVALID_NAME');
+    user.fullName = name;
+  }
+  const profile: any = user.profile ? { ...(user.profile as any).toObject?.() ?? user.profile } : {};
+  for (const k of PROFILE_FIELDS) {
+    if (body[k] === undefined) continue;
+    const v = String(body[k] ?? '').trim();
+    if (v.length > PROFILE_LIMITS[k]) throw new AppError(`${k} is too long (max ${PROFILE_LIMITS[k]} characters)`, 400, 'TOO_LONG');
+    if (k === 'phone' && v && !/^[+\d][\d\s-]{6,19}$/.test(v)) throw new AppError('Enter a valid phone number', 400, 'INVALID_PHONE');
+    profile[k] = v;
+  }
+  user.profile = profile;
+  await user.save();
+  res.json({ success: true, message: 'Profile saved', data: profileView(user) });
+};
+
+// ---------------------------------------------------------------------------
+// Profile photo (staff): stored in the database, served publicly by user id (an <img> sends no token)
+// ---------------------------------------------------------------------------
+const PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+
+export const uploadMyPhoto = async (req: AuthRequest, res: Response): Promise<void> => {
+  const file = (req as any).file as Express.Multer.File | undefined;
+  if (!file) throw new AppError('Choose a photo', 400, 'MISSING_FILE');
+  if (!PHOTO_TYPES.includes(file.mimetype)) throw new AppError('Use a JPG, PNG or WEBP photo', 400, 'INVALID_FILE');
+  const userId = req.user!.userId;
+  await ProfilePhoto.updateOne({ userId }, { $set: { data: file.buffer, type: file.mimetype, size: file.size } }, { upsert: true });
+  const avatarUrl = `/api/auth/photo/${userId}?v=${Date.now()}`;
+  await User.updateOne({ _id: userId }, { $set: { avatarUrl } });
+  res.json({ success: true, message: 'Photo updated', data: { avatarUrl } });
+};
+
+export const removeMyPhoto = async (req: AuthRequest, res: Response): Promise<void> => {
+  const userId = req.user!.userId;
+  await ProfilePhoto.deleteOne({ userId });
+  await User.updateOne({ _id: userId }, { $set: { avatarUrl: '' } });
+  res.json({ success: true, message: 'Photo removed', data: { avatarUrl: '' } });
+};
+
+export const getPhoto = async (req: AuthRequest, res: Response): Promise<void> => {
+  const id = String(req.params.userId || '');
+  const photo = /^[a-f\d]{24}$/i.test(id) ? await ProfilePhoto.findOne({ userId: id }).lean() : null;
+  if (!photo) throw new AppError('No photo', 404, 'NOT_FOUND');
+  res.setHeader('Content-Type', photo.type);
+  res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+  res.send(Buffer.from((photo.data as any).buffer ?? photo.data));
 };

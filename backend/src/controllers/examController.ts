@@ -166,7 +166,10 @@ export const getExams = async (req: AuthRequest, res: Response): Promise<void> =
 export const getExamById = async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params;
 
-  const exam = await Exam.findById(id).populate('courseId', 'title').populate('questionIds');
+  const isStudent = req.user?.role === 'STUDENT';
+  const exam = await Exam.findById(id)
+    .populate('courseId', 'title')
+    .populate({ path: 'questionIds', select: isStudent ? '-correctAnswer -explanation' : undefined });
   if (!exam) throw new AppError('Exam not found', 404, 'NOT_FOUND');
 
   const questionCount = exam.questionIds ? exam.questionIds.length : await Question.countDocuments({ examId: exam._id });
@@ -258,6 +261,7 @@ export const startExam = async (req: AuthRequest, res: Response): Promise<void> 
 
   const exam = await Exam.findById(id);
   if (!exam) throw new AppError('Exam not found', 404, 'NOT_FOUND');
+  if (exam.kind === 'LINK') throw new AppError('This test is taken on another website. Open its link.', 400, 'LINK_TEST');
 
   // Check attempt limit
   const previousAttempts = await ExamAttempt.countDocuments({ examId: exam._id, studentId: student._id });
@@ -286,6 +290,9 @@ export const startExam = async (req: AuthRequest, res: Response): Promise<void> 
   let questions: any[] = [];
   if (exam.questionIds && exam.questionIds.length > 0) {
     questions = await Question.find({ _id: { $in: exam.questionIds } }).select('-correctAnswer -explanation');
+    // Keep the trainer's order (e.g. the Excel sheet order)
+    const position = new Map(exam.questionIds.map((qid, i) => [String(qid), i]));
+    questions.sort((a, b) => (position.get(String(a._id)) ?? 0) - (position.get(String(b._id)) ?? 0));
   } else {
     questions = await Question.find({ examId: exam._id }).select('-correctAnswer -explanation');
   }
@@ -442,8 +449,11 @@ export const submitExam = async (req: AuthRequest, res: Response): Promise<void>
       unansweredCount += 1;
     } else {
       let isCorrect = false;
-      if (q.type === 'MCQ' || q.type === 'TRUE_FALSE') {
+      if (q.type === 'MCQ') {
         isCorrect = String(studentAns) === String(q.correctAnswer);
+      } else if (q.type === 'TRUE_FALSE') {
+        // Runner submits booleans (false) while stored answers may be 'False'/'false'/false
+        isCorrect = String(studentAns).toLowerCase() === String(q.correctAnswer).toLowerCase();
       } else if (q.type === 'MULTIPLE_SELECT') {
         const stdArr = Array.isArray(studentAns) ? studentAns.map(String).sort() : [];
         const corrArr = Array.isArray(q.correctAnswer) ? q.correctAnswer.map(String).sort() : [];

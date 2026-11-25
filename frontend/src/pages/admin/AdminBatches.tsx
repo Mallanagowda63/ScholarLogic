@@ -1,0 +1,365 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
+import { api } from '../../services/api';
+import { AlertTriangle, Plus, Search, Trash2 } from 'lucide-react';
+import {
+  Card,
+  EmptyRow,
+  ErrorNote,
+  Field,
+  Modal,
+  PageHeader,
+  ProgressBar,
+  Spinner,
+  StatusBadge,
+  fmtDate,
+  fmtMode,
+  inputClass,
+  primaryBtn,
+  secondaryBtn,
+  statusTone,
+  useToast,
+} from './tracking/shared';
+
+// Short, unique code for a new subject (used in batch IDs): initials for several words, else the first letters
+const suggestCode = (name: string, taken: Set<string>) => {
+  const words = name.toUpperCase().replace(/[^A-Z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
+  const base = (words.length > 1 ? words.map((w) => w[0]).join('') : words[0] || 'SUB').slice(0, 4) || 'SUB';
+  let code = base;
+  for (let i = 2; taken.has(code); i += 1) code = `${base}${i}`;
+  return code;
+};
+
+const CreateBatchModal: React.FC<{ onClose: () => void; onDone: (id: string) => void }> = ({ onClose, onDone }) => {
+  const [subjects, setSubjects] = useState<any[]>([]);
+  const [trainers, setTrainers] = useState<any[]>([]);
+  const [courses, setCourses] = useState<any[]>([]);
+  // Subject is typed: an existing one is picked by name (or "Name (CODE)"), a new name is created on submit
+  const [subjectText, setSubjectText] = useState('');
+  const [form, setForm] = useState({ subjectId: '', trainerId: '', mode: 'OFFLINE', timing: '', startDate: new Date().toISOString().slice(0, 10), expectedEndDate: '', capacity: '25', batchCode: '', remarks: '' });
+  const [error, setError] = useState('');
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    api.get('/tracking/subjects').then((r: any) => setSubjects(r.data?.subjects || [])).catch(() => {});
+    api.get('/tracking/trainers').then((r: any) => setTrainers(r.data?.trainers || [])).catch(() => {});
+    api.get('/tracking/courses').then((r: any) => setCourses(r.data?.courses || [])).catch(() => {});
+  }, []);
+  const set = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const typed = subjectText.trim();
+  const matched = subjects.find((s) => {
+    const t = typed.toLowerCase();
+    return s.name.toLowerCase() === t || `${s.name} (${s.code})`.toLowerCase() === t || s.code.toLowerCase() === t;
+  });
+  const newCode = typed && !matched ? suggestCode(typed, new Set(subjects.map((s) => s.code))) : '';
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!typed) return setError('Type or pick a subject');
+    setSaving(true);
+    setError('');
+    try {
+      let subjectId = matched?._id;
+      if (!subjectId) {
+        const created: any = await api.post('/tracking/subjects', { name: typed, code: newCode, expectedDurationDays: 30, topics: [] });
+        subjectId = created.data.subject._id;
+      }
+      const res: any = await api.post('/tracking/batches', { ...form, subjectId, capacity: Number(form.capacity), expectedEndDate: form.expectedEndDate || undefined });
+      onDone(res.data.batch._id);
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <Modal title="Create batch" subtitle="Batch ID is generated from the subject code (e.g. PY-B03) unless you enter one." onClose={onClose}>
+      <ErrorNote text={error} />
+      <form onSubmit={submit} className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Field label="Subject" required>
+          <input
+            id="batch-subject"
+            className={inputClass}
+            list="batch-subject-list"
+            value={subjectText}
+            onChange={(e) => setSubjectText(e.target.value)}
+            placeholder="Type or pick, e.g. Python"
+            autoComplete="off"
+            required
+          />
+          <datalist id="batch-subject-list">
+            {subjects.map((s) => (
+              <option key={s._id} value={s.name}>
+                {s.code}
+              </option>
+            ))}
+          </datalist>
+          {matched && (
+            <span className="mt-1 block text-[11px] font-semibold text-brand-600 dark:text-brand-400">
+              {(() => {
+                const forCourses = courses.filter((c) => (c.subjects || []).some((x: any) => String(x.subjectId?._id || x.subjectId) === String(matched._id))).map((c) => c.code);
+                return forCourses.length ? `Common batch: students from ${forCourses.join(', ')} can join` : 'No course has this subject yet';
+              })()}
+            </span>
+          )}
+          {newCode && (
+            <span className="mt-1 block text-[11px] text-emerald-600">
+              New subject "{typed}" (code {newCode}, 30 days) will be added. Add its topics later under Subjects.
+            </span>
+          )}
+        </Field>
+        <Field label="Trainer">
+          <select className={inputClass} value={form.trainerId} onChange={set('trainerId')}>
+            <option value="">Assign later</option>
+            {trainers.map((t) => (
+              <option key={t._id} value={t._id}>
+                {t.fullName}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Timing" required>
+          <input className={inputClass} value={form.timing} onChange={set('timing')} placeholder="e.g. 7-8 AM" required />
+        </Field>
+        <Field label="Mode">
+          <select className={inputClass} value={form.mode} onChange={set('mode')}>
+            <option value="OFFLINE">Offline</option>
+            <option value="ONLINE">Online</option>
+            <option value="HYBRID">Hybrid (class + online together)</option>
+          </select>
+        </Field>
+        <Field label="Start date" required>
+          <input type="date" className={inputClass} value={form.startDate} onChange={set('startDate')} required />
+        </Field>
+        <Field label="Expected end date" hint="Defaults to subject duration">
+          <input type="date" className={inputClass} value={form.expectedEndDate} onChange={set('expectedEndDate')} />
+        </Field>
+        <Field label="Capacity">
+          <input type="number" min={1} className={inputClass} value={form.capacity} onChange={set('capacity')} />
+        </Field>
+        <Field label="Batch ID" hint="Optional">
+          <input className={inputClass} value={form.batchCode} onChange={set('batchCode')} placeholder="Auto" />
+        </Field>
+        <div className="sm:col-span-2">
+          <Field label="Remarks">
+            <input className={inputClass} value={form.remarks} onChange={set('remarks')} />
+          </Field>
+        </div>
+        <div className="flex justify-end gap-2 sm:col-span-2">
+          <button type="button" className={secondaryBtn} onClick={onClose}>
+            Cancel
+          </button>
+          <button type="submit" className={primaryBtn} disabled={saving}>
+            {saving ? 'Creating…' : 'Create batch'}
+          </button>
+        </div>
+      </form>
+    </Modal>
+  );
+};
+
+export const AdminBatches: React.FC = () => {
+  const navigate = useNavigate();
+  const [batches, setBatches] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showNew, setShowNew] = useState(false);
+  const [q, setQ] = useState('');
+  const [status, setStatus] = useState('');
+  const [subject, setSubject] = useState('');
+  const [removing, setRemoving] = useState<any | null>(null);
+  const [removeBusy, setRemoveBusy] = useState(false);
+  const [removeError, setRemoveError] = useState('');
+  const toast = useToast();
+
+  const askRemove = (b: any) => {
+    setRemoveError('');
+    setRemoving(b);
+  };
+  const removeBatch = async () => {
+    if (!removing) return;
+    setRemoveBusy(true);
+    setRemoveError('');
+    try {
+      const res: any = await api.delete(`/tracking/batches/${removing._id}`);
+      setBatches((list) => list.filter((x) => x._id !== removing._id));
+      setRemoving(null);
+      toast.show(res.message || 'Batch removed');
+    } catch (e: any) {
+      setRemoveError(e.message);
+    } finally {
+      setRemoveBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    api
+      .get('/tracking/batches')
+      .then((res: any) => setBatches(res.data?.batches || []))
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
+  const subjects = useMemo(() => [...new Set(batches.map((b) => b.subject?.name).filter(Boolean))].sort(), [batches]);
+  const visible = batches.filter((b) => {
+    const term = q.trim().toLowerCase();
+    if (term && ![b.batchCode, b.subject?.name, b.trainer?.fullName, b.timing].filter(Boolean).join(' ').toLowerCase().includes(term)) return false;
+    if (status && b.status !== status) return false;
+    if (subject && b.subject?.name !== subject) return false;
+    return true;
+  });
+  const counts = ['RUNNING', 'UPCOMING', 'DELAYED', 'COMPLETED'].map((s) => [s, batches.filter((b) => b.status === s).length] as const);
+
+  return (
+    <div className="space-y-5 pb-12">
+      <PageHeader
+        title="Batches"
+        subtitle="Every batch with its trainer, timing, seats and topic progress."
+        action={
+          <button type="button" className={primaryBtn} onClick={() => setShowNew(true)}>
+            <Plus className="h-4 w-4" /> Create Batch
+          </button>
+        }
+      />
+
+      <div className="flex flex-wrap gap-2">
+        <button type="button" onClick={() => setStatus('')} className={`rounded-full px-3 py-1.5 text-xs font-bold ${!status ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>
+          All {batches.length}
+        </button>
+        {counts.map(([s, n]) => (
+          <button key={s} type="button" onClick={() => setStatus(s)} className={`rounded-full px-3 py-1.5 text-xs font-bold ${status === s ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300'}`}>
+            {s.charAt(0) + s.slice(1).toLowerCase()} {n}
+          </button>
+        ))}
+      </div>
+
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <label className="relative block flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input className={`${inputClass} pl-9`} value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search batch ID, subject, trainer or timing" />
+        </label>
+        <select className={`${inputClass} sm:w-48`} value={subject} onChange={(e) => setSubject(e.target.value)}>
+          <option value="">All subjects</option>
+          {subjects.map((s) => (
+            <option key={s}>{s}</option>
+          ))}
+        </select>
+      </div>
+
+      {loading ? (
+        <Spinner />
+      ) : (
+        <Card className="overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1000px] text-left text-xs">
+              <thead className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/60 text-[10px] font-bold uppercase text-slate-500">
+                <tr>
+                  {['Batch ID', 'Subject', 'Trainer', 'Mode', 'Timing', 'Start', 'Expected End', 'Seats', 'Progress', 'Status', ''].map((h) => (
+                    <th key={h} className="px-3 py-3 whitespace-nowrap">
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {visible.length === 0 ? (
+                  <EmptyRow colSpan={11} text={batches.length ? 'No batches match.' : 'No batches yet. Create the first one.'} />
+                ) : (
+                  visible.map((b) => (
+                    <tr key={b._id} className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/40" onClick={() => navigate(`/admin/batches/${b._id}`)}>
+                      <td className="px-3 py-3 font-mono text-sm font-bold text-brand-600 dark:text-brand-400">
+                        <Link to={`/admin/batches/${b._id}`} onClick={(e) => e.stopPropagation()}>
+                          {b.batchCode}
+                        </Link>
+                      </td>
+                      <td className="px-3 py-3 font-semibold text-slate-800 dark:text-slate-200">{b.subject?.name}</td>
+                      <td className="px-3 py-3">{b.trainer?.fullName || <span className="text-amber-600">Unassigned</span>}</td>
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        {fmtMode(b.mode)}
+                        {b.mode === 'HYBRID' && (
+                          <span className="block text-[10px] text-slate-500">
+                            {b.inClassCount} in class • <span className="font-semibold text-sky-600">{b.onlineCount} online</span>
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-3 whitespace-nowrap">{b.timing}</td>
+                      <td className="px-3 py-3 whitespace-nowrap">{fmtDate(b.startDate)}</td>
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        {fmtDate(b.expectedEndDate)}
+                        {b.estimateBasis === 'PACE' && <span className="block text-[10px] text-slate-400">At current pace: {fmtDate(b.estimatedCompletion)}</span>}
+                      </td>
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        <b>{b.studentCount}</b> / {b.capacity}
+                        <span className="block text-[10px] text-slate-400">{b.availableSeats} free</span>
+                      </td>
+                      <td className="px-3 py-3 w-36">
+                        <span className="text-[11px] font-bold text-slate-800 dark:text-slate-200">
+                          {b.progress.completed}/{b.progress.total} • {b.progress.percentage}%
+                        </span>
+                        <ProgressBar value={b.progress.percentage} tone={statusTone(b.status)} className="mt-1" />
+                      </td>
+                      <td className="px-3 py-3">
+                        <StatusBadge status={b.status} />
+                      </td>
+                      <td className="px-3 py-3 text-right">
+                        <button
+                          type="button"
+                          title={`Remove batch ${b.batchCode}`}
+                          aria-label={`Remove batch ${b.batchCode}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            askRemove(b);
+                          }}
+                          className="inline-flex items-center gap-1 rounded-lg px-2 py-1.5 text-[11px] font-bold text-rose-600 hover:bg-rose-50 dark:text-rose-400 dark:hover:bg-rose-950/40"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" /> Remove
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+
+      {removing && (
+        <Modal title={`Remove batch ${removing.batchCode}?`} subtitle={`${removing.subject?.name || 'Subject'} • ${removing.timing} • ${fmtDate(removing.startDate)}`} onClose={() => !removeBusy && setRemoving(null)}>
+          <div className="space-y-3 text-sm text-slate-600 dark:text-slate-300">
+            <div className="flex gap-3 rounded-xl bg-rose-50 p-3 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300">
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+              <p>
+                The batch is deleted for good.
+                {removing.studentCount > 0 ? (
+                  <>
+                    {' '}
+                    Its <b>{removing.studentCount} student{removing.studentCount === 1 ? '' : 's'}</b> go back to “needs a batch” for {removing.subject?.name || 'this subject'}, so you can put them in another batch.
+                  </>
+                ) : (
+                  ' No students are in it.'
+                )}
+              </p>
+            </div>
+            <p className="text-xs text-slate-500">A batch that already has attendance or trainer updates can’t be removed. Set its status to Cancelled instead, so that history is kept.</p>
+            <ErrorNote text={removeError} />
+          </div>
+          <div className="flex justify-end gap-2 pt-4">
+            <button type="button" className={secondaryBtn} disabled={removeBusy} onClick={() => setRemoving(null)}>
+              Keep batch
+            </button>
+            <button
+              type="button"
+              disabled={removeBusy}
+              onClick={removeBatch}
+              className="inline-flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2 text-xs font-bold text-white shadow hover:bg-rose-700 disabled:opacity-50"
+            >
+              <Trash2 className="h-4 w-4" /> {removeBusy ? 'Removing…' : 'Remove batch'}
+            </button>
+          </div>
+        </Modal>
+      )}
+      {toast.node}
+
+      {showNew && <CreateBatchModal onClose={() => setShowNew(false)} onDone={(id) => navigate(`/admin/batches/${id}`)} />}
+    </div>
+  );
+};

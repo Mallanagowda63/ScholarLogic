@@ -2,7 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { api } from '../../services/api';
 import { Badge } from '../../components/Badge';
-import { FileCheck, HelpCircle, PlusCircle, Award, CheckCircle2, TrendingUp, BarChart3, ShieldCheck, Camera, Mic, Maximize2, Layers, ArrowRight } from 'lucide-react';
+import { FileCheck, HelpCircle, PlusCircle, Award, CheckCircle2, TrendingUp, BarChart3, ShieldCheck, Camera, Mic, Maximize2, Layers, ArrowRight, FileSpreadsheet, Link2, ExternalLink, Trash2 } from 'lucide-react';
+import { ExcelMcqTestModal, LinkTestModal } from './QuickTestModals';
+import { Modal, secondaryBtn, useToast } from '../admin/tracking/shared';
 
 export const TrainerAssessments: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -32,6 +34,33 @@ export const TrainerAssessments: React.FC = () => {
   const [autoSubmitOnViolations, setAutoSubmitOnViolations] = useState(true);
   const [maxViolations, setMaxViolations] = useState(3);
   const [questionRandomization, setQuestionRandomization] = useState(true);
+
+  // Quick tests: MCQ from an Excel sheet, or a technical test given as a link
+  const [quick, setQuick] = useState<'' | 'excel' | 'link'>('');
+  const quickDone = (message: string) => {
+    setQuick('');
+    toast.show(message);
+    fetchExams();
+  };
+
+  // Delete: our own confirmation pop-up, then a short message at the bottom
+  const toast = useToast();
+  const [deleting, setDeleting] = useState<any | null>(null);
+  const [deleteBusy, setDeleteBusy] = useState(false);
+  const confirmDelete = async () => {
+    if (!deleting) return;
+    setDeleteBusy(true);
+    try {
+      const res: any = await api.delete(`/exams/${deleting._id}`);
+      setExams((list) => list.filter((e) => e._id !== deleting._id));
+      setDeleting(null);
+      toast.show(res.message);
+    } catch (err: any) {
+      toast.show(err.message || 'Could not delete the test');
+    } finally {
+      setDeleteBusy(false);
+    }
+  };
 
   // Selected Question IDs from Question Bank
   const [selectedQuestionIds, setSelectedQuestionIds] = useState<string[]>([]);
@@ -127,7 +156,19 @@ export const TrainerAssessments: React.FC = () => {
           <p className="text-xs text-slate-500">Configure online exams, question randomization, proctoring security rules, and audit results</p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            onClick={() => setQuick('excel')}
+            className="px-4 py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-xs hover:bg-emerald-700 transition-colors flex items-center gap-2 shadow-md"
+          >
+            <FileSpreadsheet className="h-4 w-4" /> MCQ test from Excel
+          </button>
+          <button
+            onClick={() => setQuick('link')}
+            className="px-4 py-2.5 rounded-xl bg-violet-600 text-white font-bold text-xs hover:bg-violet-700 transition-colors flex items-center gap-2 shadow-md"
+          >
+            <Link2 className="h-4 w-4" /> Technical test (link)
+          </button>
           <Link
             to="/trainer/question-bank"
             className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center gap-2"
@@ -155,7 +196,7 @@ export const TrainerAssessments: React.FC = () => {
             <div key={exam._id} className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 shadow-sm space-y-4">
               <div className="flex items-center justify-between">
                 <Badge variant="purple">{exam.durationMinutes} Mins</Badge>
-                <Badge variant="green">PUBLISHED</Badge>
+                {exam.kind === 'LINK' ? <Badge variant="amber">TECHNICAL • LINK</Badge> : <Badge variant="green">PUBLISHED</Badge>}
               </div>
 
               <div>
@@ -182,22 +223,70 @@ export const TrainerAssessments: React.FC = () => {
                 </div>
                 <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800/60">
                   <span className="text-[10px] text-slate-400 block font-bold">Questions</span>
-                  <span className="font-extrabold text-brand-600">{exam.questionIds?.length || 10}</span>
+                  <span className="font-extrabold text-brand-600">{exam.kind === 'LINK' ? '—' : exam.questionIds?.length || 0}</span>
                 </div>
               </div>
 
-              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDeleting(exam)}
+                  aria-label={`Delete ${exam.title}`}
+                  className="inline-flex shrink-0 items-center gap-1.5 px-3.5 py-2 rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-300 ring-1 ring-rose-200 dark:ring-rose-900 font-bold text-xs hover:bg-rose-600 hover:text-white transition-colors"
+                >
+                  <Trash2 className="h-3.5 w-3.5" /> Delete
+                </button>
+                {exam.kind === 'LINK' ? (
+                  <a
+                    href={exam.testLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex max-w-full items-center gap-1.5 px-3.5 py-2 rounded-xl bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 font-bold text-xs"
+                  >
+                    <ExternalLink className="h-3.5 w-3.5 shrink-0" /> <span className="truncate">{exam.testLink}</span>
+                  </a>
+                ) : (
                 <Link
                   to={`/trainer/exams/${exam._id}/results`}
                   className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-brand-600 hover:text-white text-slate-700 dark:text-slate-300 font-bold text-xs transition-colors"
                 >
                   View Student Results & Violation Audit <ArrowRight className="h-3.5 w-3.5" />
                 </Link>
+                )}
               </div>
             </div>
           ))}
         </div>
       )}
+
+      {deleting && (
+        <Modal title={`Delete "${deleting.title}"?`} subtitle="This cannot be undone" onClose={() => !deleteBusy && setDeleting(null)}>
+          <div className="flex items-start gap-3 rounded-xl bg-rose-50 p-4 text-sm text-rose-800 dark:bg-rose-950/40 dark:text-rose-200">
+            <Trash2 className="mt-0.5 h-5 w-5 shrink-0" />
+            <p>
+              Students will no longer see this test. Its{' '}
+              {deleting.kind === 'LINK' ? 'link' : <b>{deleting.questionIds?.length || 0} questions</b>} and all student attempts and results are removed.
+            </p>
+          </div>
+          <div className="flex justify-end gap-2 pt-4">
+            <button type="button" className={secondaryBtn} disabled={deleteBusy} onClick={() => setDeleting(null)}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={deleteBusy}
+              onClick={confirmDelete}
+              className="inline-flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+            >
+              <Trash2 className="h-4 w-4" /> {deleteBusy ? 'Deleting…' : 'Delete test'}
+            </button>
+          </div>
+        </Modal>
+      )}
+      {toast.node}
+
+      {quick === 'excel' && <ExcelMcqTestModal onClose={() => setQuick('')} onDone={quickDone} />}
+      {quick === 'link' && <LinkTestModal onClose={() => setQuick('')} onDone={quickDone} />}
 
       {/* Modal: Create Exam with Security Rules */}
       {showCreateModal && (

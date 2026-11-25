@@ -8,6 +8,9 @@ import { errorHandler } from './middleware/errorHandler';
 import { tenantMiddleware } from './middleware/tenantMiddleware';
 
 // Import Routes
+import codingRoutes from './routes/codingRoutes';
+import offlineTestRoutes from './routes/offlineTestRoutes';
+import formPhotoRoutes from './routes/formPhotoRoutes';
 import authRoutes from './routes/authRoutes';
 import studentRoutes from './routes/studentRoutes';
 import courseRoutes from './routes/courseRoutes';
@@ -18,7 +21,19 @@ import certificateRoutes from './routes/certificateRoutes';
 import notificationRoutes from './routes/notificationRoutes';
 import adminRoutes from './routes/adminRoutes';
 import trainerRoutes from './routes/trainerRoutes';
+import trackingRoutes from './routes/trackingRoutes';
+import bannerRoutes from './routes/bannerRoutes';
+import staffRoutes from './routes/staffRoutes';
+import studentLoginRoutes from './routes/studentLoginRoutes';
+import idCardFormRoutes from './routes/idCardFormRoutes';
+import zohoRoutes from './routes/zohoRoutes';
+import esslAgentRoutes from './routes/esslAgentRoutes';
+import onlineAttendanceRoutes from './routes/onlineAttendanceRoutes';
+import placementReferralRoutes from './routes/placementReferralRoutes';
+import integrationRoutes from './routes/integrationRoutes';
 import mockInterviewRoutes from './routes/mockInterviewRoutes';
+import attendanceRoutes from './routes/attendanceRoutes';
+import admsRoutes from './routes/admsRoutes';
 
 const app = express();
 
@@ -79,6 +94,9 @@ const corsOptions: cors.CorsOptions = {
   optionsSuccessStatus: 200,
 };
 
+// eSSL biometric machine push (ADMS). Mounted before the JSON/urlencoded parsers: the body is raw text
+app.use('/iclock', admsRoutes);
+
 // Enable CORS and Preflight OPTIONS Requests Across All Routes
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
@@ -116,10 +134,12 @@ const examSubmitLimiter = rateLimit({
 
 // Apply Granular Rate Limiters
 app.use('/api/auth/login', authLimiter);
-app.use('/api/auth/register', authLimiter);
 app.use('/api/auth/refresh', authLimiter);
 app.use('/api/resumes/analyze', aiLimiter);
 app.use('/api/exams/attempts/*/submit', examSubmitLimiter);
+
+// Campus eSSL helper: secret-protected, with its own larger body limit, so it goes before the 2 MB parser
+app.use('/api/integrations/essl-agent', esslAgentRoutes);
 
 // Payload Size Restrictions (Protects against 10MB DoS payloads)
 app.use(express.json({ limit: '2mb' }));
@@ -129,6 +149,9 @@ app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 app.use('/uploads', express.static(path.resolve(env.STORAGE_PATH)));
 
 // API Routes
+app.use('/api/form-photos', formPhotoRoutes);
+app.use('/api/offline-tests', offlineTestRoutes);
+app.use('/api/coding', codingRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/students', studentRoutes);
 app.use('/api/courses', courseRoutes);
@@ -137,9 +160,20 @@ app.use('/api/resumes', resumeRoutes);
 app.use('/api/placements', placementRoutes);
 app.use('/api/certificates', certificateRoutes);
 app.use('/api/notifications', notificationRoutes);
+// Before /api/admin so its routes aren't shadowed
+app.use('/api/admin/staff', staffRoutes);
+app.use('/api/admin/student-logins', studentLoginRoutes);
+app.use('/api/admin/id-card-form', idCardFormRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/trainer', trainerRoutes);
+app.use('/api/tracking', trackingRoutes);
+app.use('/api/integrations/zoho', zohoRoutes);
+app.use('/api/integrations', integrationRoutes);
 app.use('/api/ai/mock-interview', mockInterviewRoutes);
+app.use('/api/attendance', attendanceRoutes);
+app.use('/api/banners', bannerRoutes);
+app.use('/api/placement-referrals', placementReferralRoutes);
+app.use('/api/online-attendance', onlineAttendanceRoutes);
 
 // Health check endpoint
 app.get('/api/health', (_req, res) => {

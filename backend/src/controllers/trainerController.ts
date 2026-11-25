@@ -12,6 +12,8 @@ import { Question } from '../models/Question';
 import { ExamAttempt } from '../models/ExamAttempt';
 import { Result } from '../models/Result';
 import { Student } from '../models/Student';
+import { User } from '../models/User';
+import { trainerStudentIds, assertTrainerCanSee } from '../services/trainerScope';
 import { Attendance } from '../models/Attendance';
 import { Announcement } from '../models/Announcement';
 import { Message } from '../models/Message';
@@ -20,6 +22,9 @@ import { Notification } from '../models/Notification';
 import { supabaseStorageService } from '../services/storage/SupabaseStorageService';
 import { zohoMeetingService } from '../services/zohoMeetingService';
 import { AppError } from '../middleware/errorHandler';
+import { Batch } from '../models/tracking/Batch';
+import { StudentBatchAllocation, ACTIVE_ALLOCATION_STATUSES } from '../models/tracking/StudentBatchAllocation';
+import mongoose from 'mongoose';
 
 // Helper to fetch course IDs assigned to trainer
 async function getAssignedCourseIds(trainerUserId: string): Promise<any[]> {
@@ -34,102 +39,54 @@ export const getTrainerDashboard = async (req: AuthRequest, res: Response): Prom
     throw new AppError('Forbidden. Trainer access required.', 403, 'FORBIDDEN');
   }
 
+  // Real numbers only: nothing is made up when there is no data yet
   const trainerUserId = req.user.userId;
   const courseIds = await getAssignedCourseIds(trainerUserId);
+  const myBatches = await Batch.find({ trainerId: trainerUserId, status: { $nin: ['COMPLETED', 'CANCELLED'] } })
+    .select('batchCode subjectId timing mode status recordingsLink startDate')
+    .populate('subjectId', 'name')
+    .sort({ timing: 1 })
+    .lean();
+  const myStudentIds = await StudentBatchAllocation.distinct('studentId', {
+    batchId: { $in: myBatches.map((b) => b._id) },
+    status: { $in: ACTIVE_ALLOCATION_STATUSES },
+  });
 
-  // Real Database Queries
-  const activeCoursesCount = courseIds.length || (await Course.countDocuments({ status: 'PUBLISHED' }));
+  const [videosCount, notesCount, pendingAssignmentsCount, upcomingExamsCount, myResults] = await Promise.all([
+    Lesson.countDocuments({ courseId: { $in: courseIds }, type: 'VIDEO' }),
+    Lesson.countDocuments({ courseId: { $in: courseIds }, type: 'NOTES' }),
+    Submission.countDocuments({ status: 'SUBMITTED' }),
+    Exam.countDocuments({ isPublished: true, status: { $ne: 'ARCHIVED' }, createdById: trainerUserId }),
+    Result.find({ studentId: { $in: myStudentIds } }).select('percentage').limit(500).lean(),
+  ]);
+  const avgStudentScore = myResults.length ? Math.round(myResults.reduce((acc, r: any) => acc + (r.percentage || 0), 0) / myResults.length) : null;
 
-  const totalStudentsCount = await Student.countDocuments();
-  const pendingAssignmentsCount = await Submission.countDocuments({ status: 'SUBMITTED' });
-  const upcomingExamsCount = await Exam.countDocuments({ isPublished: true });
-
-  // Average score from Results
-  const results = await Result.find({}).limit(50);
-  const avgStudentScore = results.length > 0
-    ? Math.round(results.reduce((acc, r) => acc + r.percentage, 0) / results.length)
-    : 84;
-
-  const completedVideosCount = await VideoProgress.countDocuments({ completed: true });
-  const courseCompletionRate = Math.min(100, Math.round((completedVideosCount / Math.max(1, totalStudentsCount * 5)) * 100)) || 76;
-  const completedAssessmentsCount = results.length || 12;
-
-  // At Risk Students Query (progress < 50 or average score < 50)
-  const students = await Student.find().populate('userId', 'fullName email avatarUrl').limit(20);
-  const atRiskStudentsList = students
-    .filter((st) => st.cgpa < 7.0 || st.skills.length < 3)
-    .map((st) => ({
-      _id: st._id,
-      studentId: st.studentId,
-      fullName: (st.userId as any)?.fullName || 'Student Candidate',
-      avatarUrl: (st.userId as any)?.avatarUrl,
-      reason: st.cgpa < 7.0 ? 'Low academic CGPA (< 7.0)' : 'Course completion below 50%',
-      lastActivity: '3 days ago',
-      progress: Math.floor(Math.random() * 30) + 20,
-      avgScore: Math.floor(Math.random() * 25) + 40,
-    }));
-
-  const atRiskStudentsCount = atRiskStudentsList.length;
-
-  // Today's schedule
+  // Today: the trainer's running batches, plus any sessions they scheduled for today
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
   const todayEnd = new Date();
   todayEnd.setHours(23, 59, 59, 999);
-
-  let todaysSchedule = await Session.find({
-    trainerId: trainerUserId,
-    startTime: { $gte: todayStart, $lte: todayEnd },
-  }).populate('courseId', 'title');
-
-  if (todaysSchedule.length === 0) {
-    // Generate standard schedule entries if DB has no sessions scheduled today
-    todaysSchedule = [
-      {
-        _id: 'sess-01' as any,
-        title: 'Python Full Stack — Object Oriented Programming',
-        type: 'LECTURE',
-        startTime: new Date(Date.now() + 2 * 60 * 60 * 1000),
-        endTime: new Date(Date.now() + 3 * 60 * 60 * 1000),
-        meetingLink: 'https://meet.google.com/abc-defg-hij',
-        courseId: { title: 'Python Full Stack Development' } as any,
-      } as any,
-      {
-        _id: 'sess-02' as any,
-        title: 'AWS Cloud Architecture — Doubt Clearing Session',
-        type: 'DOUBT_CLEARING',
-        startTime: new Date(Date.now() + 5 * 60 * 60 * 1000),
-        endTime: new Date(Date.now() + 6 * 60 * 60 * 1000),
-        meetingLink: 'https://meet.google.com/xyz-uvwx-rst',
-        courseId: { title: 'AWS / Cloud Architecture & Operations' } as any,
-      } as any,
-    ];
-  }
-
-  // Recent activity log
-  const recentActivity = [
-    { id: '1', time: '10 mins ago', text: 'Alex Morgan (SL-2026-00001) submitted Python OOP Practice Assignment' },
-    { id: '2', time: '1 hour ago', text: 'New student enrolled in Python Full Stack Development' },
-    { id: '3', time: '3 hours ago', text: 'Evaluation complete for Python Assessment Exam' },
-    { id: '4', time: 'Yesterday', text: 'You published Module 2 notes for AWS Cloud Architecture' },
-  ];
+  const todaysSchedule = await Session.find({ trainerId: trainerUserId, startTime: { $gte: todayStart, $lte: todayEnd } }).populate('courseId', 'title');
+  const todaysBatches = myBatches
+    .filter((b) => new Date(b.startDate).getTime() <= todayEnd.getTime())
+    .map((b: any) => ({ _id: b._id, batchCode: b.batchCode, subject: b.subjectId?.name || '', timing: b.timing, mode: b.mode, recordingsLink: b.recordingsLink || '' }));
 
   res.json({
     success: true,
     data: {
       metrics: {
-        assignedStudentsCount: totalStudentsCount,
-        activeCoursesCount,
+        activeCoursesCount: courseIds.length,
+        activeBatchesCount: myBatches.length,
+        assignedStudentsCount: myStudentIds.length,
+        videosCount,
+        notesCount,
         pendingAssignmentsCount,
         upcomingExamsCount,
         avgStudentScore,
-        courseCompletionRate,
-        atRiskStudentsCount,
-        completedAssessmentsCount,
+        completedAssessmentsCount: myResults.length,
       },
       todaysSchedule,
-      atRiskStudentsList,
-      recentActivity,
+      todaysBatches,
     },
   });
 };
@@ -144,6 +101,33 @@ export const getTrainerCourses = async (req: AuthRequest, res: Response): Promis
     success: true,
     data: { courses },
   });
+};
+
+// Trainer typed a course name: reuse the course with that name (and assign them to it) or create it
+export const findOrCreateTrainerCourse = async (req: AuthRequest, res: Response): Promise<void> => {
+  const title = String(req.body?.title || '').replace(/\s+/g, ' ').trim();
+  if (!title) throw new AppError('Write the course name', 400, 'MISSING_FIELDS');
+  if (title.length > 120) throw new AppError('The course name is too long', 400, 'INVALID_TITLE');
+  const trainerUserId = req.user!.userId;
+  const escaped = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  let course = await Course.findOne({ title: { $regex: `^${escaped}$`, $options: 'i' } });
+  let created = false;
+  if (course) {
+    await Course.updateOne({ _id: course._id }, { $addToSet: { assignedTrainerIds: trainerUserId } });
+  } else {
+    const slug = `${title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '') || 'course'}-${Date.now().toString().slice(-5)}`;
+    course = await Course.create({
+      title,
+      slug,
+      description: title,
+      category: 'Training',
+      status: 'PUBLISHED',
+      createdById: trainerUserId,
+      assignedTrainerIds: [trainerUserId],
+    });
+    created = true;
+  }
+  res.status(created ? 201 : 200).json({ success: true, message: created ? `Course "${title}" added` : `Using course "${course.title}"`, data: { course, created } });
 };
 
 export const createTrainerModule = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -189,10 +173,26 @@ export const createTrainerLesson = async (req: AuthRequest, res: Response): Prom
 
 export const uploadLessonMedia = async (req: AuthRequest, res: Response): Promise<void> => {
   const { lessonId } = req.params;
-  const { type, fileBuffer, fileName, mimeType, courseSlug } = req.body;
+  const { type, fileBuffer, fileName, mimeType, courseSlug, batchIds } = req.body;
 
   const lesson = await Lesson.findById(lessonId);
   if (!lesson) throw new AppError('Lesson not found', 404, 'NOT_FOUND');
+
+  // Which batches receive these notes. Omitted = keep the current choice; [] = everyone in the course
+  let targetBatchIds: mongoose.Types.ObjectId[] | undefined;
+  if (type !== 'VIDEO' && batchIds !== undefined) {
+    if (!Array.isArray(batchIds) || batchIds.some((id) => !mongoose.isValidObjectId(id))) {
+      throw new AppError('batchIds must be a list of batch IDs', 400, 'INVALID_BATCHES');
+    }
+    const unique = [...new Set(batchIds.map(String))];
+    const batches = await Batch.find({ _id: { $in: unique } }).select('trainerId batchCode').lean();
+    if (batches.length !== unique.length) throw new AppError('One or more batches were not found', 404, 'NOT_FOUND');
+    const notMine = req.user!.role === 'TRAINER' ? batches.filter((b) => String(b.trainerId) !== String(req.user!.userId)) : [];
+    if (notMine.length) {
+      throw new AppError(`You can only send notes to your own batches (${notMine.map((b) => b.batchCode).join(', ')})`, 403, 'FORBIDDEN');
+    }
+    targetBatchIds = unique.map((id) => new mongoose.Types.ObjectId(id));
+  }
 
   const bucket = type === 'VIDEO' ? 'course-videos' : 'course-notes';
   const filePath = `${courseSlug || 'course'}/mod-${lesson.moduleId}/file-${Date.now()}-${fileName}`;
@@ -207,6 +207,7 @@ export const uploadLessonMedia = async (req: AuthRequest, res: Response): Promis
     lesson.notesFileUrl = uploadResult.publicUrl || `https://scholarlogic.edu/notes/${filePath}`;
     lesson.notesFileType = mimeType?.includes('pdf') ? 'PDF' : 'DOCX';
     lesson.type = 'NOTES';
+    if (targetBatchIds) lesson.batchIds = targetBatchIds;
   }
 
   await lesson.save();
@@ -226,6 +227,12 @@ export const getTrainerStudents = async (req: AuthRequest, res: Response): Promi
 
   const query: any = {};
   if (batch) query.batch = batch;
+  // A trainer sees only the students in their own batches
+  if (req.user?.role === 'TRAINER') query._id = { $in: await trainerStudentIds(String(req.user.userId)) };
+  if (search) {
+    const users = await User.find({ role: 'STUDENT', fullName: new RegExp(String(search).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') }).select('_id').lean();
+    query.userId = { $in: users.map((u) => u._id) };
+  }
 
   const skip = (Number(page) - 1) * Number(limit);
 
@@ -249,9 +256,6 @@ export const getTrainerStudents = async (req: AuthRequest, res: Response): Promi
     cgpa: st.cgpa,
     skills: st.skills,
     batch: st.batch,
-    courseProgressPct: Math.floor(Math.random() * 40) + 60,
-    avgExamScore: Math.floor(Math.random() * 20) + 75,
-    pendingAssignments: Math.floor(Math.random() * 2),
     status: 'ACTIVE',
   }));
 
@@ -271,8 +275,10 @@ export const getTrainerStudents = async (req: AuthRequest, res: Response): Promi
 export const getStudentDetailForTrainer = async (req: AuthRequest, res: Response): Promise<void> => {
   const { id } = req.params;
 
+  if (!mongoose.isValidObjectId(id)) throw new AppError('Student profile not found', 404, 'NOT_FOUND');
   const student = await Student.findById(id).populate('userId', 'fullName email avatarUrl');
   if (!student) throw new AppError('Student profile not found', 404, 'NOT_FOUND');
+  await assertTrainerCanSee(req.user, student._id);
 
   const results = await Result.find({ studentId: student._id }).populate('examId', 'title totalMarks');
   const submissions = await Submission.find({ studentId: student._id }).populate('assignmentId', 'title maxMarks');
@@ -504,8 +510,10 @@ export const getCourseVideoAnalytics = async (req: AuthRequest, res: Response): 
   const { courseId } = req.params;
 
   const lessons = await Lesson.find({ courseId }).select('_id title durationMinutes');
-  const totalStudents = await Student.countDocuments();
-  const videoProgressRecords = await VideoProgress.find({ courseId }).populate('lessonId', 'title');
+  // Trainers see numbers for their own students only
+  const mine = req.user?.role === 'TRAINER' ? await trainerStudentIds(String(req.user.userId)) : null;
+  const totalStudents = mine ? mine.length : await Student.countDocuments();
+  const videoProgressRecords = await VideoProgress.find({ courseId, ...(mine ? { studentId: { $in: mine } } : {}) }).populate('lessonId', 'title');
 
   const lessonAnalytics = lessons.map((l) => {
     const records = videoProgressRecords.filter((r) => r.lessonId && (r.lessonId as any)._id.toString() === l._id.toString());

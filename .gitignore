@@ -4,3 +4,8 @@ dist/
 .env.*
 *.log
 .DS_Store
+playwright-report/
+test-results/
+
+# Separate CRM app (its own git repo: crm-scholarlogic)
+CRM/

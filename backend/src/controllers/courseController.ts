@@ -9,6 +9,7 @@ import { Submission } from '../models/Submission';
 import { Quiz } from '../models/Quiz';
 import { Student } from '../models/Student';
 import { AppError } from '../middleware/errorHandler';
+import { batchIdsForStudentUser, filterLessonsForBatches } from '../services/lessonVisibility';
 
 export const getCourses = async (req: AuthRequest, res: Response): Promise<void> => {
   const { search, category, level, status = 'PUBLISHED' } = req.query;
@@ -24,12 +25,31 @@ export const getCourses = async (req: AuthRequest, res: Response): Promise<void>
     ];
   }
 
-  const courses = await Course.find(query).sort({ createdAt: -1 });
+  let courses = await Course.find(query).sort({ createdAt: -1 });
+
+  // A signed-in student sees only the LMS course(s) of the course they joined (not every course)
+  if (req.user?.role === 'STUDENT') {
+    const student: any = await Student.findOne({ userId: req.user.userId }).select('enrollment.courseId').populate('enrollment.courseId', 'code name').lean();
+    const track: any = student?.enrollment?.courseId;
+    const match = track ? LMS_FOR_COURSE[String(track.code || '').toUpperCase()] || new RegExp(String(track.name || '').split(/\s+/)[0] || '^$', 'i') : null;
+    courses = match ? courses.filter((c: any) => match.test(`${c.title} ${c.category || ''}`)) : [];
+  }
 
   res.json({
     success: true,
     data: { courses },
   });
+};
+
+// Which LMS course(s) belong to each course a student joins (matched on the LMS course title / category)
+const LMS_FOR_COURSE: Record<string, RegExp> = {
+  DA: /data analytics|power bi/i,
+  DS: /data analytics|data science|machine learning/i,
+  PFS: /python/i,
+  JFS: /java/i,
+  CC: /aws|cloud|devops/i,
+  DEVOPS: /devops/i,
+  DM: /digital marketing/i,
 };
 
 export const getCourseById = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -43,7 +63,11 @@ export const getCourseById = async (req: AuthRequest, res: Response): Promise<vo
   const modules = await Module.find({ courseId: course._id }).sort({ order: 1 });
   const moduleIds = modules.map((m) => m._id);
 
-  const lessons = await Lesson.find({ moduleId: { $in: moduleIds }, isPublished: true }).sort({ order: 1 });
+  let lessons = await Lesson.find({ moduleId: { $in: moduleIds }, isPublished: true }).sort({ order: 1 });
+  // Students see batch-targeted notes only for their own batches; signed-out visitors see none of them
+  if (!req.user || req.user.role === 'STUDENT') {
+    lessons = filterLessonsForBatches(lessons, req.user ? await batchIdsForStudentUser(req.user.userId) : new Set());
+  }
 
   let progressMap: Record<string, any> = {};
   if (req.user && req.user.role === 'STUDENT') {
