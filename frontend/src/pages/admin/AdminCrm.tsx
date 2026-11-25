@@ -3,7 +3,7 @@ import { ExternalLink, Handshake, Loader2 } from 'lucide-react';
 
 // Admin → CRM: the separate ScholarLogic CRM app (leads, follow-ups, admissions, fees), shown inside the admin
 // portal. It has its own sign-in. Served at scholarlogiclms.in/crm (VITE_CRM_URL can change it).
-const CRM_URL = (import.meta.env.VITE_CRM_URL as string | undefined)?.trim() || '/crm/';
+const CRM_URL = (import.meta.env.VITE_CRM_URL as string | undefined)?.trim() || '/crm';
 
 export const AdminCrm: React.FC = () => {
   const [loaded, setLoaded] = useState(false);
