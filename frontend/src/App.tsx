@@ -125,6 +125,7 @@ const TrainerAnalytics = lazyPage(() => import('./pages/trainer/TrainerAnalytics
 const StaffProfile = lazyPage(() => import('./pages/shared/StaffProfile'), 'StaffProfile');
 const OfflineMarks = lazyPage(() => import('./pages/shared/OfflineMarks'), 'OfflineMarks');
 const CodingBank = lazyPage(() => import('./pages/shared/CodingBank'), 'CodingBank');
+const AdminCrm = lazyPage(() => import('./pages/admin/AdminCrm'), 'AdminCrm');
 const StudentCoding = lazyPage(() => import('./pages/student/StudentCoding'), 'StudentCoding');
 const StudentCodingFolder = lazyPage(() => import('./pages/student/StudentCoding'), 'StudentCodingFolder');
 const CodingTestPage = lazyPage(() => import('./pages/student/CodingTestPage'), 'CodingTestPage');
@@ -256,6 +257,7 @@ export const App: React.FC = () => {
                 <Route path="/admin/exams" element={<StudentExams />} />
                 <Route path="/admin/offline-marks" element={<OfflineMarks />} />
                 <Route path="/admin/coding" element={<CodingBank />} />
+                <Route path="/admin/crm" element={<AdminCrm />} />
                 <Route path="/admin/audit-logs" element={<AdminDashboard />} />
               </Route>
             </Route>
