@@ -69,8 +69,8 @@ export const AdminSidebar: React.FC = () => {
 
   // Existing platform modules stay available
   const platformLinks = [
-    { name: 'LMS Content', path: '/admin/lms', icon: PlaySquare },
     { name: 'CRM', path: '/admin/crm', icon: Handshake },
+    { name: 'LMS Content', path: '/admin/lms', icon: PlaySquare },
     { name: 'Exams', path: '/admin/exams', icon: FileCheck },
     { name: 'Offline Test Marks', path: '/admin/offline-marks', icon: ClipboardList },
     { name: 'Technical Practice', path: '/admin/coding', icon: Code2 },
