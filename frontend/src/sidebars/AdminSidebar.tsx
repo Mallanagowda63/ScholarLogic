@@ -25,7 +25,7 @@ import {
   Fingerprint,
   IdCard,
   ScanLine,
-  FileSpreadsheet, ClipboardList, Code2, Handshake } from 'lucide-react';
+  FileSpreadsheet, ClipboardList, Code2, Handshake, ExternalLink } from 'lucide-react';
 
 export const AdminSidebar: React.FC = () => {
   const { user } = useAuth();
@@ -109,6 +109,22 @@ export const AdminSidebar: React.FC = () => {
             const Icon = item.icon;
             // "Courses" and "Subjects" share a route; highlight by tab
             const isSubjects = item.path.includes('tab=subjects');
+            // CRM is a separate app: open it in its own browser tab, not inside the admin page
+            if (item.path === '/admin/crm') {
+              return (
+                <a
+                  key={item.path}
+                  href="/crm"
+                  target="_blank"
+                  rel="noopener"
+                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                >
+                  <Icon className="h-4 w-4" />
+                  {item.name}
+                  <ExternalLink className="ml-auto h-3.5 w-3.5 opacity-60" />
+                </a>
+              );
+            }
             return (
               <NavLink
                 key={item.path}
